@@ -89,8 +89,19 @@ In practice this means a mechanism reports rather than skips:
 - A registry that cannot recognize its own identifiers cannot be `closed` — it raises rather
   than returning an empty list, because an empty list of violations reads exactly like
   compliance.
+- **A registry that loads cleanly but yields no entries raises.** Every part of the
+  declaration can be individually valid — the module exists, it parses, the kind is known —
+  and the registry still holds nothing the adapter recognizes. This project shipped exactly
+  that against its own source for six commits: `python-constants` pointed at three modules
+  that contain no module-level string constants, so the projection was empty and the gate
+  exited 0 the entire time. The wrong adapter reads precisely like a clean tree.
 - Suppression is reported, never silent. When the scan drops an antipattern that matches more
   sites than the threshold allows, it says so.
+
+Note what the exception in each case is not: a warning. A warning on a green run is read as
+green. The escape hatch for the empty-registry rule is `allow_empty = true`, declared per
+registry in the config, because an exemption someone chose and can see is a different object
+from one the tool took quietly.
 
 The corollary is uncomfortable: **you cannot tell that a check still checks by reading it.**
 The only way to know is to break something on purpose and confirm the check notices.
@@ -232,7 +243,8 @@ The one mechanism this project ships, as a worked example:
 | §1 reminder or catch | `ids` and `review` are reminders; `check` is a catch, and only in CI with branch protection |
 | §1 one source | `review` and `check` run identical analysis; only the exit code differs |
 | §2 spend test | duplication scores yes/no/no — cheap to commit, invisible in a diff, silent on landing |
-| §3 refuse | bad configuration raises; a registry that cannot detect its identifiers refuses to be `closed`; suppression is reported |
+| §3 refuse | bad configuration raises; an empty registry raises; a registry that cannot detect its identifiers refuses to be `closed`; suppression is reported |
+| §3 break it on purpose | the self-check's five entries were each verified by injecting the bypass and watching the gate fail |
 | §6 validation | labeled history from two real codebases, with the failing component labeled as failing |
 
 And where it does not reach, stated plainly because §6 requires it: everything here detects

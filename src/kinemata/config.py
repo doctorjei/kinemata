@@ -173,7 +173,24 @@ def load(path: str | Path) -> Settings:
                 f"registry {spec.get('name', '?')!r}: unknown kind {kind!r} "
                 f"(known: {', '.join(sorted(BUILDERS))})"
             )
-        registries.append(builder(spec, root))
+        registry = builder(spec, root)
+        # Every declaration above can be individually valid and still produce a
+        # registry with nothing in it -- the modules exist and parse, they just
+        # hold nothing this adapter recognizes. That check passes, reports
+        # nothing, and reads exactly like compliance.
+        #
+        # Found by dogfooding: this project declared `python-constants` over
+        # three of its own modules for six commits. It has no module-level
+        # string constants at all, so the projection was empty and `check`
+        # exited 0 the whole time. The wrong adapter, not a clean tree.
+        if not spec.get("allow_empty", False) and not any(True for _ in registry.entries()):
+            raise ConfigError(
+                f"registry {spec.get('name', '?')!r}: kind {kind!r} produced no "
+                "entries, so it would scan for nothing and pass. Point it at a "
+                "source it can read, or set allow_empty = true if it is "
+                "deliberately empty while being bootstrapped."
+            )
+        registries.append(registry)
 
     return Settings(
         root=root,

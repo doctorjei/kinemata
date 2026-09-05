@@ -159,6 +159,54 @@ def test_a_missing_module_is_refused_not_skipped(tmp_path):
         load(tmp_path / "kinemata.toml")
 
 
+def test_a_registry_that_yields_no_entries_is_refused(tmp_path):
+    """The wrong adapter looks exactly like a clean tree.
+
+    Every part of this declaration is individually valid: the module exists, it
+    parses, the kind is known. It just holds nothing ``python-constants``
+    recognizes, so the registry is empty and every check over it passes.
+
+    This is not hypothetical -- it is what this project's own config did for six
+    commits, over three of its own modules, because the codebase has no
+    module-level string constants.
+    """
+    write(tmp_path, "src/consts.py", "TIMEOUT = 30\nlowercase = 'box.yaml'\n")
+    write(
+        tmp_path,
+        "kinemata.toml",
+        """
+        [[registry]]
+        name = "constants"
+        kind = "python-constants"
+        modules = ["src/consts.py"]
+        """,
+    )
+    with pytest.raises(ConfigError, match="no entries"):
+        load(tmp_path / "kinemata.toml")
+
+
+def test_allow_empty_permits_a_deliberately_empty_registry(tmp_path):
+    """The escape hatch, so the guard does not block bootstrapping.
+
+    Declared per registry and visible in the config, which is the difference
+    between an exemption someone chose and one the tool took silently.
+    """
+    write(tmp_path, "src/consts.py", "TIMEOUT = 30\n")
+    write(
+        tmp_path,
+        "kinemata.toml",
+        """
+        [[registry]]
+        name = "constants"
+        kind = "python-constants"
+        modules = ["src/consts.py"]
+        allow_empty = true
+        """,
+    )
+    (reg,) = load(tmp_path / "kinemata.toml").registries
+    assert list(reg.entries()) == []
+
+
 def test_an_unknown_kind_is_refused(tmp_path):
     write(
         tmp_path,

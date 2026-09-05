@@ -125,6 +125,11 @@ kinemata review    # advisory. Always exits 0. Run in-box, during the work.
 kinemata check     # the gate. Exits 1 on a strong finding. Run in CI.
 ```
 
+A registry that produces **no entries is refused, not accepted quietly** — a missing
+module, an unknown kind, or an adapter that recognizes nothing in the source you
+pointed it at. All three look identical to a clean tree from the outside. Set
+`allow_empty = true` on a registry you are deliberately bootstrapping.
+
 See `examples/ci-github-actions.yml` — including why a workflow file alone is
 still a reminder, and what promotes it to a catch.
 
