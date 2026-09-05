@@ -271,13 +271,16 @@ anything.
 ## Known gaps
 
 - `review` and `check` detect only **re-derivation of something already
-  declared**. `undeclared` reaches one share of the rest. Two shares stay out
-  of reach, both measured rather than assumed: **duplicated code blocks** (a
-  clone detector scored 0 on a labeled incident at any usable precision — the
-  copies worth finding are the ones that have drifted, and drift is what
-  removes the signal) and **two implementations of one rule that share no
-  text**, which nothing syntactic can see. Both are stated here rather than
-  papered over.
+  declared**. Against 37 attributable commits from a six-repository corpus,
+  duplication with nothing declared appeared **13 times**, and `undeclared`
+  reaches **4 of them**. The other nine are duplicated code blocks (a clone
+  detector scored 0 on a labeled incident at any usable precision — the copies
+  worth finding are the ones that have drifted, and drift removes the signal)
+  and two implementations of one rule sharing no text, which nothing syntactic
+  can see.
+- **31% coverage of that gap, not the 62% a partial sample suggested.** The
+  first 13 commits classified were the ones that looked most promising, and
+  finishing the other 34 halved the figure.
 - A CI workflow lives in the repo, so an agent can edit it. Branch protection
   with the job as a *required status check* is what makes it a catch.
 - Validated on two codebases by one author. The categories held across both;

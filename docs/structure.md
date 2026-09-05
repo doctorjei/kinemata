@@ -206,6 +206,12 @@ lets a reader calibrate the rest.
 
 Two habits follow from the same discipline:
 
+**Finish the sample.** Numbers taken from the part of a list you read first inherit whatever
+made you read there. Classifying 13 of 47 consolidation commits put the reachable share of a
+gap at ~62%; classifying the remaining 34 put it at 31%. The build order those numbers informed
+survived, but the coverage claim did not, and it would have stayed wrong indefinitely — nothing
+about the partial number looks partial once it is written down.
+
 **Measure before cutting.** In a context-budget review, 46% of the target document turned out
 to be HTML comments that the loader strips — the apparent 28 KB was really 13 KB. Most of the
 apparent bloat was never loaded at all. Separately, projecting a codebase's public functions
@@ -253,11 +259,23 @@ The gap was that everything above needs the thing to be **declared first**. Meas
 against 196 consolidation commits turned that single gap into three, with very different
 reach:
 
-| Shape | Reachable |
-|---|---|
-| A value or message spelled in several places, declared nowhere | **yes** — shipped as `undeclared` |
-| Two copies of a code block, drifted apart | no, on measurement — see below |
-| Two implementations of one rule that share no text | **no** |
+| Shape | Instances | Reachable |
+|---|---|---|
+| A value or message spelled in several places, declared nowhere | 5 | **4** — shipped as `undeclared` |
+| Two copies of a code block, drifted apart | 4 | 0 — on measurement, see below |
+| Two implementations of one rule that share no text | 4 | 0 — out of reach by nature |
+
+Thirteen instances in 37 attributable commits, from a sample of 47 drawn from 196. **Four of
+the thirteen are reachable today.**
+
+That fraction is worth stating because an earlier version of it was wrong in this document's
+own favor. The first 13 commits classified gave 8 gap instances and about 5 reachable — 62%.
+But those 13 were the ones whose subjects looked most promising, read first, and finishing the
+sample cut the reachable share to **31%**. Nothing changed except that the unexamined
+two-thirds got examined.
+
+> **A proportion taken from the interesting end of a list is not a measurement.** The bias runs
+> toward whatever made you start reading there, which is usually the thing you hoped to find.
 
 The third is the one that recurs most in that corpus: two modules enforcing the same refusal
 in different words, two code paths answering "what is effective" differently. Nothing
