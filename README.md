@@ -2,7 +2,7 @@
 
 Keeping agent-run software projects from going astray.
 
-Agents on a codebase fail in recognisable ways: they get **overwhelmed with
+Agents on a codebase fail in recognizable ways: they get **overwhelmed with
 context**, they **miss issues**, and they **duplicate code that already exists**.
 This is scaffolding against those failures — declare a fact in one place, then
 give agents a way to find it and a way to be caught re-deriving it.
@@ -170,10 +170,12 @@ anything.
 - Validated on two codebases by one author. The categories held across both;
   they have not been tested against an unrelated project.
 
-## Design
+## Documentation
 
-`docs/design.md` — the registry contract, the reminder/catch split, and the
-reasoning behind both.
+- `docs/structure.md` — the method: how to decide what mechanism to build, how
+  to keep it from quietly rotting, and how to know whether it works. Applies
+  beyond the mechanism shipped here.
+- `docs/design.md` — the registry contract in full.
 
 ## License
 
