@@ -27,6 +27,7 @@ import sys
 from pathlib import Path
 
 from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
+from .literals import clusters
 from .projection import project
 from .report import DEFAULT_MAX_SITES, review
 
@@ -120,6 +121,46 @@ def cmd_review(args: argparse.Namespace) -> int:
     return 0  # advisory, always
 
 
+def cmd_undeclared(args: argparse.Namespace) -> int:
+    """The opposite question to ``review``: what wants a declaration.
+
+    Advisory, and it stays advisory. ``review`` and ``check`` answer whether a
+    *declared* thing was re-derived, which is a violation. This answers whether
+    text repeats with no declared home, which is a judgment -- the same text in
+    two places may be two ideas that happen to coincide. It reports the fork and
+    lets a reader take it.
+    """
+    settings = _settings(args)
+    known: set[str] = set()
+    for registry in settings.registries:
+        for entry in registry.entries():
+            known.add(entry.id)
+            value = entry.extra.get("value")
+            if isinstance(value, str):
+                known.add(value)
+
+    found = clusters(
+        _target(args, settings),
+        suffixes=settings.suffixes,
+        exclude=settings.exclude,
+        declared=known,
+    )
+    body = found.text(verbose=args.verbose)
+    total = len(found.composed) + len(found.strong)
+    if not body.strip():
+        if not args.quiet:
+            print("No repeated text without a declared home.")
+        return 0
+    print(body)
+    if not args.quiet:
+        print()
+        print(
+            f"{total} piece(s) of text repeat with nothing declaring them. "
+            f"Declare one, or leave them apart on purpose."
+        )
+    return 0  # advisory, always
+
+
 def cmd_check(args: argparse.Namespace) -> int:
     strong, _ = _run_review(args)
     if strong:
@@ -165,6 +206,11 @@ def build_parser() -> argparse.ArgumentParser:
                          help="advisory: what this code re-derives")
     rev.add_argument("path", nargs="?", help="limit the scan to this path")
     rev.set_defaults(func=cmd_review)
+
+    und = sub.add_parser("undeclared", parents=[common],
+                         help="advisory: repeated text with no declared home")
+    und.add_argument("path", nargs="?", help="limit the scan to this path")
+    und.set_defaults(func=cmd_undeclared)
 
     chk = sub.add_parser("check", parents=[common],
                          help="gate: fail on a strong bypass")

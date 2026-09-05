@@ -185,9 +185,95 @@ def python_string_literals(source: str) -> list[tuple[int, str, str]]:
     return found
 
 
+def python_message_skeletons(source: str) -> list[tuple[int, str, str]]:
+    """Every f-string as ``(line, skeleton, full_line)``, interpolations as ``{}``.
+
+    ``python_string_literals`` cannot see f-strings at all: it resolves a token
+    with ``literal_eval``, which refuses them. That is correct for bypass
+    detection, where the question is whether a *value* was respelled -- but it
+    hides almost every user-facing message in modern Python, and duplicated
+    messages are a large share of the undeclared-literal failure.
+
+    Evidence: kento-core ``e84b9504`` harmonized three resolver messages that
+    were each ``f"Error: no {thing} named '{name}'"``. Compared as raw tokens
+    they share nothing useful; compared as skeletons they are near-identical.
+
+    Deliberately a separate function rather than a change to
+    ``python_string_literals``, whose behavior the validated bypass scan depends
+    on. A blind spot in a new check is cheaper than a regression in a measured
+    one.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+    lines = source.splitlines()
+
+    found: list[tuple[int, str, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.JoinedStr):
+            continue
+        parts: list[str] = []
+        for piece in node.values:
+            if isinstance(piece, ast.Constant) and isinstance(piece.value, str):
+                parts.append(piece.value)
+            else:
+                parts.append("{}")
+        skeleton = "".join(parts)
+        row = node.lineno
+        line_text = lines[row - 1] if 0 < row <= len(lines) else ""
+        found.append((row, skeleton, line_text))
+    return found
+
+
+def python_annotation_strings(source: str) -> set[str]:
+    """String literals used as type annotations, by AST position not by shape.
+
+    A forward reference is quoted code, not a value: ``"Path | None"`` in six
+    modules is six modules importing the same type, and reporting it as repeated
+    text is noise on a scale that hides the real findings. Measured on
+    kanibako-cli, annotations were the largest single source of false clusters.
+
+    Recognized structurally, the way docstrings are, because the shape test
+    ("looks like a type") also matches real messages -- and a filter that guesses
+    is a filter that eventually drops something that mattered.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return set()
+
+    found: set[str] = set()
+
+    def collect(node: ast.AST | None) -> None:
+        if node is None:
+            return
+        for child in ast.walk(node):
+            if isinstance(child, ast.Constant) and isinstance(child.value, str):
+                found.add(child.value)
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            collect(node.returns)
+            args = node.args
+            for arg in (*args.posonlyargs, *args.args, *args.kwonlyargs,
+                        args.vararg, args.kwarg):
+                if arg is not None:
+                    collect(arg.annotation)
+        elif isinstance(node, ast.AnnAssign):
+            collect(node.annotation)
+    return found
+
+
 #: Filters by file suffix. A language with no filter is scanned raw, which
 #: over-reports rather than under-reports -- the safe direction for a catch.
 FILTERS = {".py": python_code_only}
+
+#: Literals that are quoted *code* rather than values, by suffix.
+ANNOTATION_STRINGS = {".py": python_annotation_strings}
+
+#: f-string skeletons, for comparing messages rather than values.
+MESSAGE_SKELETONS = {".py": python_message_skeletons}
 
 #: Literal extractors by suffix, used for strong/weak classification.
 LITERAL_EXTRACTORS = {".py": python_string_literals}

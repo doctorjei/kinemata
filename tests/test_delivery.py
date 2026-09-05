@@ -250,6 +250,26 @@ def test_review_advises_and_always_exits_zero(project, capsys):
     assert "BOX_META_FILE" in capsys.readouterr().out
 
 
+def test_undeclared_reports_repeated_text_and_stays_advisory(project, capsys):
+    """The opposite question to review, and it never gates.
+
+    Repeated text with no declared home is a judgment, not a violation -- two
+    places may mean two ideas that coincide. It reports the fork, exit 0.
+    """
+    write(project, "src/one.py", 'msg = "could not reach the daemon"\n')
+    write(project, "src/two.py", 'note = "could not reach the daemon"\n')
+    code = main(["undeclared", "-c", str(project / "kinemata.toml")])
+    assert code == 0
+    assert "could not reach the daemon" in capsys.readouterr().out
+
+
+def test_undeclared_does_not_repeat_what_the_registry_declares(project, capsys):
+    """box.yaml is declared, so it is the bypass scan's finding, not this one."""
+    write(project, "src/three.py", 'p = other / "box.yaml"\n')
+    assert main(["undeclared", "-c", str(project / "kinemata.toml")]) == 0
+    assert "box.yaml" not in capsys.readouterr().out
+
+
 def test_check_gates_on_the_same_finding(project, capsys):
     assert main(["check", "-c", str(project / "kinemata.toml")]) == 1
     assert "FAIL" in capsys.readouterr().err

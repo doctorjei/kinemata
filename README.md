@@ -120,9 +120,10 @@ kind = "code-patterns"
 Then:
 
 ```bash
-kinemata ids       # the projection: what already exists. Budgeted, loadable.
-kinemata review    # advisory. Always exits 0. Run in-box, during the work.
-kinemata check     # the gate. Exits 1 on a strong finding. Run in CI.
+kinemata ids         # the projection: what already exists. Budgeted, loadable.
+kinemata review      # advisory. Always exits 0. Run in-box, during the work.
+kinemata undeclared  # advisory. Repeated text with no declared home.
+kinemata check       # the gate. Exits 1 on a strong finding. Run in CI.
 ```
 
 A registry that produces **no entries is refused, not accepted quietly** — a missing
@@ -147,6 +148,26 @@ domain words account for 1,054 of them. Two filters, both forced by measurement:
   **Reported, never silent** — a check that quietly stops checking is worse than
   no check.
 
+## Text with no declared home
+
+Everything above needs the thing to be declared first. `undeclared` asks the
+opposite question: what repeats with nothing declaring it? Three tiers, most
+precise first — on a 65k-line codebase they report **6**, **111** and **222**.
+
+- **composed** — a path built by spelling out a shorter path that also appears
+  on its own: `Path("/etc/pkg/config.yaml")` here, `Path("/etc/pkg") / NAME`
+  there. Equality would miss it; those two strings are not equal.
+- **same text, several files** — byte-identical, and not something a registry
+  already declares.
+- **near-identical, already drifted** — compared as *skeletons*, so
+  `f"Error: No {kind} named '{name}'"` and `f"Error: no instance named
+  '{name}'"` land together. Two spellings of one message have already drifted,
+  which is why this tier alone does not require two files.
+
+**It never gates, by design.** Re-deriving a declared thing is a violation;
+text repeating with no declared home is a *judgment* — the same words in two
+places may be two ideas that coincide. So it reports the fork and leaves it.
+
 ## What it was validated against
 
 Not synthetic fixtures. Labeled incidents from real project history, where a
@@ -158,6 +179,15 @@ commit message names the sites a human found by hand:
   diagnosing a missing adapter rather than a broken mechanism. With
   `code-patterns` it finds 6 live bypasses there.
 
+`undeclared` was measured the same way, against two more labeled commits — and
+its **first implementation scored 0/4**, because it compared literals for
+equality and the incident's sites were composed paths that are not equal. A
+second miss followed: the other incident's messages were f-strings, invisible
+to a literal extractor, sitting in one file rather than two. Both misses were
+found by running against history rather than fixtures, and both are now
+regression tests. With the composed and skeleton tiers it scores **4/4** and
+finds the message pair exactly.
+
 And a failure worth publishing: `unused()` **failed** its validation, 0/3
 against an incident recording three declared keys with "no reader at all". It
 detects *mention*, not *use* — and every declared entry is mentioned somewhere,
@@ -167,9 +197,13 @@ anything.
 
 ## Known gaps
 
-- Everything here detects **re-derivation of something already declared**.
-  Nothing detects **two new things duplicating each other, neither declared** —
-  probably the more common case in greenfield work.
+- `review` and `check` detect only **re-derivation of something already
+  declared**. `undeclared` reaches part of the rest — see below — but the
+  hardest share is out of reach: **two implementations of one rule that share
+  no text**. Two modules enforcing the same refusal in different words is
+  invisible to anything syntactic, and it is the shape that recurs most in the
+  corpus this was measured against. That gap is real and stated rather than
+  papered over.
 - A CI workflow lives in the repo, so an agent can edit it. Branch protection
   with the job as a *required status check* is what makes it a catch.
 - Validated on two codebases by one author. The categories held across both;

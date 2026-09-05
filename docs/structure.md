@@ -247,11 +247,30 @@ The one mechanism this project ships, as a worked example:
 | §3 break it on purpose | the self-check's five entries were each verified by injecting the bypass and watching the gate fail |
 | §6 validation | labeled history from two real codebases, with the failing component labeled as failing |
 
-And where it does not reach, stated plainly because §6 requires it: everything here detects
-**re-derivation of something already declared**. Nothing detects **two new things duplicating
-each other, neither declared** — probably the more common case in greenfield work. There is
-no mechanical answer to that yet, and asserting one would be the overreach this document
-exists to prevent.
+And where it does not reach, stated plainly because §6 requires it.
+
+The gap was that everything above needs the thing to be **declared first**. Measuring it
+against 196 consolidation commits turned that single gap into three, with very different
+reach:
+
+| Shape | Reachable |
+|---|---|
+| A value or message spelled in several places, declared nowhere | yes — and it is the largest reachable share |
+| Two copies of a code block, drifted apart | yes, by clone detection |
+| **Two implementations of one rule that share no text** | **no** |
+
+The third is the one that recurs most in that corpus: two modules enforcing the same refusal
+in different words, two code paths answering "what is effective" differently. Nothing
+syntactic can see it, and a mechanism claiming to would be the overreach §1 exists to prevent.
+By this document's own test it is a **reminder** problem — an agent that can find what exists
+does not write it twice — and the honest answer is to say so rather than ship a detector that
+appears to cover it.
+
+Worth recording how the first two were reached: the mechanism for them scored **0/4** on its
+first validation, because it compared text for equality while the incident's sites were
+*composed* — `Path("/etc/pkg/config.yaml")` against `Path("/etc/pkg") / NAME`. Equality was
+the wrong relation, and only a labeled incident could have said so. Fixtures would have
+agreed with the author.
 
 ---
 
