@@ -1,0 +1,50 @@
+# Example: gating a project on this checker.
+# Copy to .github/workflows/registry-check.yml in the project you want gated.
+#
+# ⚠ READ THIS BEFORE TRUSTING IT AS A CATCH.
+#
+# A workflow file lives in the repo, so an agent with write access can edit or
+# delete it. On its own this is therefore still a *reminder* -- by the test this
+# project uses, "could a rogue agent disable this?" answers yes.
+#
+# Three things turn it into a real catch, in order of strength:
+#
+#   1. Branch protection with this job as a REQUIRED status check. A deleted or
+#      renamed job then blocks the merge instead of passing it, because the
+#      required check never reports. This is the one that matters.
+#   2. CODEOWNERS on .github/ so edits to the gate need a human review.
+#   3. Better still, a reusable workflow called from a repo the agent cannot
+#      write to, so the check's body is not in the checked repo at all.
+#
+# Without at least (1), this file is a reminder that looks like a gate -- the
+# exact confusion the design is meant to prevent, so it is called out here
+# rather than left implicit.
+
+name: registry-check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  bypasses:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install the checker
+        run: pip install "registry[yaml] @ git+https://github.com/doctorjei/traceface@main"
+
+      # Advisory first, so the log always shows the full picture -- including
+      # weak signals and suppressed antipatterns -- even when the gate passes.
+      - name: Report (advisory)
+        run: registry review --verbose
+
+      # Then the gate. Strong signals only; weak ones never fail a build.
+      - name: Gate on strong bypasses
+        run: registry check

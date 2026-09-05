@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Test corpora: cloned repositories, analysed but never vendored.
+# tests/test_corpus_validation.py skips when this is absent.
+corpus/
+
+# Material belonging to other projects, kept here as examples while working.
+# Not this project's to carry.
+canon-files/
+keyspace-manifest.yaml
+settings-keyspace-1.8.0.md
+system-design-1.8.0.md
+clause-traceability-*.md
