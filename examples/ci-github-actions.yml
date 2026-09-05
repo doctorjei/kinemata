@@ -38,13 +38,13 @@ jobs:
           python-version: "3.13"
 
       - name: Install the checker
-        run: pip install "registry[yaml] @ git+https://github.com/doctorjei/traceface@main"
+        run: pip install "kinemata[yaml] @ git+https://github.com/doctorjei/kinemata@main"
 
       # Advisory first, so the log always shows the full picture -- including
       # weak signals and suppressed antipatterns -- even when the gate passes.
       - name: Report (advisory)
-        run: registry review --verbose
+        run: kinemata review --verbose
 
       # Then the gate. Strong signals only; weak ones never fail a build.
       - name: Gate on strong bypasses
-        run: registry check
+        run: kinemata check

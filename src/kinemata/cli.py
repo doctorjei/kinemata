@@ -2,15 +2,15 @@
 
 One scan, two consumers -- the split this project is organised around:
 
-``registry ids``
+``kinemata ids``
     The standing reminder. What already exists, small enough to load.
 
-``registry review``
+``kinemata review``
     The targeted reminder. What you are about to duplicate. **Exit 0 always**:
     it advises, and an agent may act on it or not. Meant to run in-box, before
     or during the work.
 
-``registry check``
+``kinemata check``
     The catch. Same scan, non-zero exit on a strong finding. Meant to run
     host-side or in CI, **where an agent cannot edit or skip it**. A check the
     agent controls is a reminder wearing a catch's clothes.
@@ -35,7 +35,7 @@ def _settings(args: argparse.Namespace) -> Settings:
     path = Path(args.config) if args.config else find_config()
     if path is None:
         raise ConfigError(
-            "no registry.toml found (searched upward from the current directory)"
+            "no kinemata.toml found (searched upward from the current directory)"
         )
     return load(path)
 
@@ -44,7 +44,7 @@ def _target(args: argparse.Namespace, settings: Settings) -> Path:
     """Where to scan.
 
     A relative path resolves against the **project root**, not the working
-    directory. Otherwise ``registry check src`` run from a parent directory
+    directory. Otherwise ``kinemata check src`` run from a parent directory
     silently scans a different tree and reports a clean or bogus result -- which
     it did, on the first run of this command.
     """
@@ -131,11 +131,11 @@ def cmd_check(args: argparse.Namespace) -> int:
 def _common() -> argparse.ArgumentParser:
     """Flags accepted both before and after the subcommand.
 
-    Without this, ``registry ids -r keys`` fails while ``registry -r keys ids``
+    Without this, ``kinemata ids -r keys`` fails while ``kinemata -r keys ids``
     works -- an ordering rule nobody remembers and every user gets wrong.
     """
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("-c", "--config", help="path to registry.toml")
+    common.add_argument("-c", "--config", help="path to kinemata.toml")
     common.add_argument("-r", "--registry", help="limit to one registry by name")
     common.add_argument("-q", "--quiet", action="store_true")
     common.add_argument("-v", "--verbose", action="store_true",
@@ -149,7 +149,7 @@ def _common() -> argparse.ArgumentParser:
 def build_parser() -> argparse.ArgumentParser:
     common = _common()
     parser = argparse.ArgumentParser(
-        prog="registry",
+        prog="kinemata",
         parents=[common],
         description="One declared place per fact. Find what re-derives it.",
     )

@@ -18,8 +18,8 @@ from pathlib import Path
 
 import pytest
 
-from registry import Entry, scan
-from registry.contract import BaseRegistry
+from kinemata import Entry, scan
+from kinemata.contract import BaseRegistry
 
 CORPUS = Path(__file__).resolve().parents[1] / "corpus" / "kanibako-cli"
 COMMIT = "42ece129"

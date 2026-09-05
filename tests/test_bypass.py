@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import textwrap
 
-from registry import Entry, scan, unused
-from registry.contract import BaseRegistry
-from registry.prose import python_code_only, python_strings_only
+from kinemata import Entry, scan, unused
+from kinemata.contract import BaseRegistry
+from kinemata.prose import python_code_only, python_strings_only
 
 
 class Constants(BaseRegistry):

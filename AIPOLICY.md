@@ -1,4 +1,4 @@
-# Traceface Project Policy on Use of Generative AI Tools
+# Kinemata Project Policy on Use of Generative AI Tools
 *Derived from [Guidance Regarding Use of Generative AI Tools for Open Source Software Development](https://www.linuxfoundation.org/legal/generative-ai)*
 *Linux Foundation, on 2026/02/26.*
 

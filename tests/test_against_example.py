@@ -16,8 +16,8 @@ import pytest
 
 yaml = pytest.importorskip("yaml")
 
-from registry import project, undeclared  # noqa: E402
-from registry.adapters.mapping import MappingRegistry  # noqa: E402
+from kinemata import project, undeclared  # noqa: E402
+from kinemata.adapters.mapping import MappingRegistry  # noqa: E402
 
 MANIFEST = Path(__file__).resolve().parents[1] / "keyspace-manifest.yaml"
 pytestmark = pytest.mark.skipif(

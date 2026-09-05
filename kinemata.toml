@@ -7,4 +7,4 @@ exclude = ["tests/", "corpus/", ".venv/", "deliverables/"]
 [[registry]]
 name = "constants"
 kind = "python-constants"
-modules = ["src/registry/contract.py", "src/registry/report.py", "src/registry/prose.py"]
+modules = ["src/kinemata/contract.py", "src/kinemata/report.py", "src/kinemata/prose.py"]

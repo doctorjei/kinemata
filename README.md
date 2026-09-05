@@ -1,4 +1,4 @@
-# traceface
+# kinemata
 
 Keeping agent-run software projects from going astray.
 
@@ -93,7 +93,7 @@ the only question that matters — did this need to exist?
 pip install -e ".[dev]"
 ```
 
-Declare your registries in `registry.toml`:
+Declare your registries in `kinemata.toml`:
 
 ```toml
 [project]
@@ -120,9 +120,9 @@ kind = "code-patterns"
 Then:
 
 ```bash
-registry ids       # the projection: what already exists. Budgeted, loadable.
-registry review    # advisory. Always exits 0. Run in-box, during the work.
-registry check     # the gate. Exits 1 on a strong finding. Run in CI.
+kinemata ids       # the projection: what already exists. Budgeted, loadable.
+kinemata review    # advisory. Always exits 0. Run in-box, during the work.
+kinemata check     # the gate. Exits 1 on a strong finding. Run in CI.
 ```
 
 See `examples/ci-github-actions.yml` — including why a workflow file alone is

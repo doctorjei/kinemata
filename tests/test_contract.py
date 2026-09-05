@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from registry import BaseRegistry, Entry, project, undeclared
-from registry.adapters.mapping import MappingRegistry
+from kinemata import BaseRegistry, Entry, project, undeclared
+from kinemata.adapters.mapping import MappingRegistry
 
 
 class Tiny(BaseRegistry):

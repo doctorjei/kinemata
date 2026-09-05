@@ -1,6 +1,6 @@
 """Declaring registries without writing Python.
 
-A mechanism nobody can turn on is not a mechanism. This reads a ``registry.toml``
+A mechanism nobody can turn on is not a mechanism. This reads a ``kinemata.toml``
 so adopting the tool is a config file, not a subclass.
 
 TOML because ``tomllib`` is stdlib: the core takes no dependency. A registry
@@ -39,7 +39,7 @@ from .adapters.mapping import MappingRegistry
 from .adapters.patterns import CodePatterns
 from .contract import BaseRegistry
 
-CONFIG_NAMES = ("registry.toml", ".registry.toml")
+CONFIG_NAMES = ("kinemata.toml", ".kinemata.toml")
 
 
 class ConfigError(Exception):
@@ -150,7 +150,7 @@ BUILDERS = {
 
 
 def load(path: str | Path) -> Settings:
-    """Read a ``registry.toml`` into ready-to-use registries."""
+    """Read a ``kinemata.toml`` into ready-to-use registries."""
     path = Path(path)
     try:
         raw = tomllib.loads(path.read_text())

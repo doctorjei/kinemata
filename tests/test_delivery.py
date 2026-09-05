@@ -6,12 +6,12 @@ import textwrap
 
 import pytest
 
-from registry.adapters.constants import PythonConstants
-from registry.bypass import scan, unused
-from registry.cli import main
-from registry.config import ConfigError, load
-from registry.contract import BaseRegistry, Entry
-from registry.report import review
+from kinemata.adapters.constants import PythonConstants
+from kinemata.bypass import scan, unused
+from kinemata.cli import main
+from kinemata.config import ConfigError, load
+from kinemata.contract import BaseRegistry, Entry
+from kinemata.report import review
 
 
 def write(tmp_path, rel, body):
@@ -126,7 +126,7 @@ def test_config_builds_a_working_registry(tmp_path):
     write(tmp_path, "src/app.py", 'p = root / "box.yaml"\n')
     write(
         tmp_path,
-        "registry.toml",
+        "kinemata.toml",
         """
         [project]
         root = "."
@@ -137,7 +137,7 @@ def test_config_builds_a_working_registry(tmp_path):
         modules = ["src/consts.py"]
         """,
     )
-    settings = load(tmp_path / "registry.toml")
+    settings = load(tmp_path / "kinemata.toml")
     (reg,) = settings.registries
     assert reg.name == "constants"
     assert len(review(reg, settings.root).strong) == 1
@@ -147,7 +147,7 @@ def test_a_missing_module_is_refused_not_skipped(tmp_path):
     """A registry that silently scans nothing is the inert-signal failure."""
     write(
         tmp_path,
-        "registry.toml",
+        "kinemata.toml",
         """
         [[registry]]
         name = "constants"
@@ -156,13 +156,13 @@ def test_a_missing_module_is_refused_not_skipped(tmp_path):
         """,
     )
     with pytest.raises(ConfigError, match="not found"):
-        load(tmp_path / "registry.toml")
+        load(tmp_path / "kinemata.toml")
 
 
 def test_an_unknown_kind_is_refused(tmp_path):
     write(
         tmp_path,
-        "registry.toml",
+        "kinemata.toml",
         """
         [[registry]]
         name = "x"
@@ -170,7 +170,7 @@ def test_an_unknown_kind_is_refused(tmp_path):
         """,
     )
     with pytest.raises(ConfigError, match="unknown kind"):
-        load(tmp_path / "registry.toml")
+        load(tmp_path / "kinemata.toml")
 
 
 # -- CLI: same analysis, two consequences -------------------------------------
@@ -182,7 +182,7 @@ def project(tmp_path):
     write(tmp_path, "src/app.py", 'p = root / "box.yaml"\n')
     write(
         tmp_path,
-        "registry.toml",
+        "kinemata.toml",
         """
         [project]
         root = "."
@@ -197,13 +197,13 @@ def project(tmp_path):
 
 
 def test_review_advises_and_always_exits_zero(project, capsys):
-    code = main(["review", "-c", str(project / "registry.toml")])
+    code = main(["review", "-c", str(project / "kinemata.toml")])
     assert code == 0
     assert "BOX_META_FILE" in capsys.readouterr().out
 
 
 def test_check_gates_on_the_same_finding(project, capsys):
-    assert main(["check", "-c", str(project / "registry.toml")]) == 1
+    assert main(["check", "-c", str(project / "kinemata.toml")]) == 1
     assert "FAIL" in capsys.readouterr().err
 
 
@@ -212,7 +212,7 @@ def test_check_passes_when_nothing_is_re_derived(tmp_path, capsys):
     write(tmp_path, "src/app.py", "from consts import BOX_META_FILE\n")
     write(
         tmp_path,
-        "registry.toml",
+        "kinemata.toml",
         """
         [[registry]]
         name = "constants"
@@ -220,22 +220,22 @@ def test_check_passes_when_nothing_is_re_derived(tmp_path, capsys):
         modules = ["src/consts.py"]
         """,
     )
-    assert main(["check", "-c", str(tmp_path / "registry.toml")]) == 0
+    assert main(["check", "-c", str(tmp_path / "kinemata.toml")]) == 0
 
 
 def test_ids_prints_the_projection(project, capsys):
-    assert main(["ids", "-c", str(project / "registry.toml")]) == 0
+    assert main(["ids", "-c", str(project / "kinemata.toml")]) == 0
     assert capsys.readouterr().out.strip() == "BOX_META_FILE"
 
 
 def test_flags_work_after_the_subcommand(project):
-    # `registry ids -c X` must work, not only `registry -c X ids`.
-    assert main(["ids", "-c", str(project / "registry.toml"), "-q"]) == 0
+    # `kinemata ids -c X` must work, not only `kinemata -c X ids`.
+    assert main(["ids", "-c", str(project / "kinemata.toml"), "-q"]) == 0
 
 
 def test_a_relative_path_resolves_against_the_project_root(project, capsys):
     """Regression: it resolved against the CWD and scanned a different tree."""
-    assert main(["check", "-c", str(project / "registry.toml"), "src"]) == 1
+    assert main(["check", "-c", str(project / "kinemata.toml"), "src"]) == 1
     assert "app.py" in capsys.readouterr().out
 
 
@@ -251,7 +251,7 @@ def test_code_patterns_matches_a_code_shape_not_a_literal(tmp_path):
     write(tmp_path, "run.py", "def run_or_die(cmd):\n    pass\n")
     write(tmp_path, "app.py", "subprocess.run(cmd, check=True)\n")
 
-    from registry.adapters.patterns import CodePatterns
+    from kinemata.adapters.patterns import CodePatterns
 
     reg = CodePatterns(
         [{"id": "run_or_die", "antipatterns": [r"check\s*=\s*True"], "home": ["run.py"]}]
@@ -272,7 +272,7 @@ def test_the_registry_chooses_its_own_match_mode(tmp_path):
 
 
 def test_an_entry_with_no_antipattern_is_refused(tmp_path):
-    from registry.adapters.patterns import CodePatterns
+    from kinemata.adapters.patterns import CodePatterns
 
     with pytest.raises(ValueError, match="invisible to every check"):
         CodePatterns([{"id": "orphan"}])
@@ -280,7 +280,7 @@ def test_an_entry_with_no_antipattern_is_refused(tmp_path):
 
 def test_code_patterns_ignores_prose(tmp_path):
     write(tmp_path, "app.py", '"""Do not use check=True here."""\nx = 1\n')
-    from registry.adapters.patterns import CodePatterns
+    from kinemata.adapters.patterns import CodePatterns
 
     reg = CodePatterns([{"id": "run_or_die", "antipatterns": [r"check\s*=\s*True"]}])
     assert scan(reg, tmp_path) == []
@@ -290,7 +290,7 @@ def test_config_builds_code_patterns(tmp_path):
     write(tmp_path, "app.py", "subprocess.run(cmd, check=True)\n")
     write(
         tmp_path,
-        "registry.toml",
+        "kinemata.toml",
         """
         [[registry]]
         name = "helpers"
@@ -301,7 +301,7 @@ def test_config_builds_code_patterns(tmp_path):
           antipatterns = ['check\\s*=\\s*True']
         """,
     )
-    settings = load(tmp_path / "registry.toml")
+    settings = load(tmp_path / "kinemata.toml")
     (reg,) = settings.registries
     assert len(review(reg, settings.root).strong) == 1
 
@@ -309,7 +309,7 @@ def test_config_builds_code_patterns(tmp_path):
 def test_code_patterns_needs_at_least_one_entry(tmp_path):
     write(
         tmp_path,
-        "registry.toml",
+        "kinemata.toml",
         """
         [[registry]]
         name = "helpers"
@@ -317,7 +317,7 @@ def test_code_patterns_needs_at_least_one_entry(tmp_path):
         """,
     )
     with pytest.raises(ConfigError, match="at least"):
-        load(tmp_path / "registry.toml")
+        load(tmp_path / "kinemata.toml")
 
 
 # -- unused: detects mention, not use ----------------------------------------

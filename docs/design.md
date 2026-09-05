@@ -1,6 +1,6 @@
 # Design — The Registry Contract
 
-**Status:** draft, not ratified · **Author:** traceface-claude · **Date:** 2026-09-02
+**Status:** draft, not ratified · **Date:** 2026-09-02
 
 A *registry* is the general form of what kanibako calls a keyspace: one declared place
 holding information used broadly across a project's code, so that the information has a
