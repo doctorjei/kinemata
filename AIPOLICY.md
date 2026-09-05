@@ -11,7 +11,7 @@ that developers should factor into their contributions.
 1. Contributors should ensure that the terms and conditions of the generative AI tool do not place any
 contractual restrictions on how the tool's output can be used that are inconsistent with the project's
 open source [software license](LICENSE.md), the project's intellectual property policies, or the
-[The Traceface Open Source Definition](docs/osd.md).
+[Open Source Definition](https://opensource.org/osd).
 
 2. If any pre-existing copyrighted materials (including pre-existing open source code) authored or owned
 by third parties are included in the AI tool's output, prior to contributing such output to the project,
