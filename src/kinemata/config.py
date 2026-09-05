@@ -37,6 +37,9 @@ from typing import Any
 from .adapters.constants import PythonConstants
 from .adapters.mapping import MappingRegistry
 from .adapters.patterns import CodePatterns
+from .adapters.substitutions import Substitutions
+from .bypass import git_ignored
+from .claims import Counted
 from .contract import BaseRegistry
 
 CONFIG_NAMES = ("kinemata.toml", ".kinemata.toml")
@@ -68,6 +71,13 @@ class Settings:
     #: commits that were real when written; checking it for currency reports
     #: the archive for being an archive.
     historical: tuple[str, ...] = ()
+    #: Sibling trees a documentation claim may resolve against.
+    resolve_in: tuple[str, ...] = ()
+    #: Further repositories whose commits the documentation may cite.
+    commits_in: tuple[str, ...] = ()
+    #: Numbers the documentation states, and the commands that settle them.
+    #: Empty unless declared: no project spawns a process it did not ask for.
+    counts: tuple[Counted, ...] = ()
 
 
 def find_config(start: str | Path = ".") -> Path | None:
@@ -153,10 +163,53 @@ def _build_code_patterns(spec: dict[str, Any], root: Path) -> BaseRegistry:
         raise ConfigError(f"registry {spec.get('name', '?')!r}: {exc}") from exc
 
 
+def _build_substitutions(spec: dict[str, Any], root: Path) -> BaseRegistry:
+    """Forbidden spellings, inline or from their own file.
+
+    A file, because a style convention runs to dozens of pairs and burying them
+    in the project config hides the rest of it. Inline, because a project with
+    three retired names should not need a second file to say so.
+    """
+    words = spec.get("words")
+    source = spec.get("source")
+    if words and source:
+        raise ConfigError(
+            f"registry {spec.get('name', '?')!r}: give 'words' or 'source', not both"
+        )
+    if source:
+        path = root / source
+        if not path.is_file():
+            raise ConfigError(
+                f"registry {spec.get('name', '?')!r}: no such file: {path}"
+            )
+        try:
+            words = tomllib.loads(path.read_text())
+        except (OSError, tomllib.TOMLDecodeError) as exc:
+            raise ConfigError(
+                f"registry {spec.get('name', '?')!r}: cannot read {path}: {exc}"
+            ) from exc
+        words = words.get("words", words)
+    if not words:
+        raise ConfigError(
+            f"registry {spec.get('name', '?')!r}: substitutions needs 'words' "
+            "or a 'source' file holding them"
+        )
+    try:
+        return Substitutions(
+            words,
+            name=spec.get("name", "substitutions"),
+            closed=spec.get("closed", False),
+            case_sensitive=spec.get("case_sensitive", False),
+        )
+    except ValueError as exc:
+        raise ConfigError(f"registry {spec.get('name', '?')!r}: {exc}") from exc
+
+
 BUILDERS = {
     "python-constants": _build_constants,
     "yaml-mapping": _build_yaml_mapping,
     "code-patterns": _build_code_patterns,
+    "substitutions": _build_substitutions,
 }
 
 
@@ -209,12 +262,43 @@ def load(path: str | Path) -> Settings:
         registries.append(registry)
 
     claims = raw.get("claims", {})
+    # What git ignores is not this project's material, and every check here asks
+    # that same question. Answered once, in the one place settings come from.
+    exclude = tuple(project.get("exclude", ())) + git_ignored(root)
     return Settings(
         root=root,
         registries=registries,
-        exclude=tuple(project.get("exclude", ())),
+        exclude=exclude,
         suffixes=tuple(project.get("suffixes", (".py",))),
         max_sites=project.get("max_sites"),
         claim_suffixes=tuple(claims.get("suffixes", DEFAULT_CLAIM_SUFFIXES)),
         historical=tuple(claims.get("historical", ())),
+        resolve_in=tuple(claims.get("resolve_in", ())),
+        commits_in=tuple(claims.get("commits_in", ())),
+        counts=_build_counts(raw.get("count", []), path),
     )
+
+
+def _build_counts(declarations: list[dict[str, Any]], path: Path) -> tuple[Counted, ...]:
+    """``[[count]]`` tables, refused rather than skipped when incomplete.
+
+    A half-declared count is the worst outcome available: it looks configured
+    and settles nothing.
+    """
+    built: list[Counted] = []
+    for index, spec in enumerate(declarations):
+        missing = [key for key in ("pattern", "command", "extract") if not spec.get(key)]
+        if missing:
+            raise ConfigError(
+                f"{path}: [[count]] {index} is missing {', '.join(missing)}"
+            )
+        built.append(
+            Counted(
+                pattern=str(spec["pattern"]),
+                command=tuple(str(part) for part in spec["command"]),
+                extract=str(spec["extract"]),
+                label=str(spec.get("label", "count")),
+                directory=str(spec.get("directory", ".")),
+            )
+        )
+    return tuple(built)

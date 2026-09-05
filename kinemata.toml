@@ -19,6 +19,16 @@ exclude = ["tests/", "corpus/", ".venv/", "deliverables/"]
 suffixes = [".md"]
 historical = ["archives/"]
 
+# A number in prose, and the command that settles it. Opt-in, because settling
+# it means running a command named in a config file -- a trust decision worth
+# making deliberately. Declared here because the failure is real: this project's
+# notes claimed 74 tests while the true number went 76, 88, 103.
+[[count]]
+label = "test count"
+pattern = '\*\*(\d+) tests\*\*|\b(\d+) tests pass\b'
+command = ["{python}", "-m", "pytest", "--collect-only", "-q"]
+extract = '(\d+) tests collected'
+
 [[registry]]
 name = "canonical"
 kind = "code-patterns"
@@ -71,23 +81,25 @@ kind = "code-patterns"
 # argument: a list of forbidden spellings IS a registry, so it should be checked
 # like one rather than kept in a checker's source as a hand-written table.
 #
-# `home` reads as "documents entitled to record this retirement" -- a changelog
-# or a history section legitimately spells the dead name. Keep that list short.
-# It fired on the README the moment it was added, and widening the allowlist to
-# quiet prose is how a check stops checking.
+# Matched as prose: inline code spans are exempt, so a changelog recording the
+# rename can spell the dead name. Fenced blocks are NOT exempt -- this fired on
+# a README example that declared the real retired name inside one, and the
+# example was reworded rather than the exemption widened.
 [[registry]]
 name = "retired"
-kind = "code-patterns"
+kind = "substitutions"
 suffixes = [".md"]
+case_sensitive = true   # identifiers; `Entries()` is a different thing
 
-  [[registry.entry]]
-  id = "kinemata"
-  antipatterns = ['\btraceface\b']
-  home = ["docs/design.md"]
-  note = "the working codename, retired 2026-09-05"
+  [registry.words]
+  traceface = "kinemata"          # the working codename, retired 2026-09-05
+  "enumerate()" = "entries()"     # the contract's required method was renamed
 
-  [[registry.entry]]
-  id = "entries()"
-  antipatterns = ['\benumerate\(\)']
-  home = ["docs/design.md"]
-  note = "the contract's required method was renamed"
+# The project's spelling convention, as data. It lived as a table inside
+# doc-check.py until that table was found to be missing two words that were
+# sitting in live documents while the check reported clean.
+[[registry]]
+name = "spelling"
+kind = "substitutions"
+source = "docs/american-english.toml"
+suffixes = [".md", ".py"]

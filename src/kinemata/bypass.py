@@ -23,12 +23,17 @@ Two properties, both learned from corpus evidence:
 from __future__ import annotations
 
 import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Iterator, Sequence
 
 from .contract import BaseRegistry, Entry
-from .prose import FILTERS, LITERAL_EXTRACTORS, STRING_FILTERS
+from .prose import FILTERS, LITERAL_EXTRACTORS, PROSE_FILTERS, STRING_FILTERS
+
+#: Which filter table each ``match_mode`` selects. A mode is a row here, so
+#: adding one does not mean editing the branch that picks it.
+MODE_FILTERS = {"prose": PROSE_FILTERS, "code": FILTERS, "strings": STRING_FILTERS}
 
 #: Git's directory. Named on its own because two checks must look *for* it to
 #: decide whether the tree is a repository, and a second spelling of it there
@@ -42,6 +47,32 @@ SKIP_DIRS = frozenset(
         ".pytest_cache", ".ruff_cache", "build", "dist", ".tox", ".eggs",
     }
 )
+
+
+def git_ignored(root: str | Path) -> tuple[str, ...]:
+    """Paths git is told to ignore: not this project's material.
+
+    Every scan here asks the same question -- does this file belong to the
+    project being checked? -- and ``.gitignore`` is where a project already
+    answers it. Pointing a registry at prose made the cost visible: the spelling
+    check reported sixteen violations, thirteen of them inside other authors'
+    documents that only sit in the tree as test corpora.
+
+    Empty when git cannot answer, which over-reports rather than under-reports.
+    """
+    root = Path(root)
+    if not (root / GIT_DIR).exists():
+        return ()
+    result = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "--others", "--ignored",
+         "--exclude-standard", "--directory"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        return ()
+    return tuple(
+        line.strip().rstrip("/") for line in result.stdout.splitlines() if line.strip()
+    )
 
 
 @dataclass(frozen=True)
@@ -129,6 +160,10 @@ def scan(
     # overwrite the other -- which it did, making an explicit code_only=False
     # behave as though the registry's mode had been requested.
     mode = getattr(registry, "match_mode", "strings")
+    # ``prose`` blanks inline code spans and nothing else: for an antipattern
+    # that is a *spelling*, a backticked token is a mention. An explicit
+    # argument still wins, so a caller can override the registry's choice.
+    prose_only = mode == "prose" and strings_only is None and code_only is None
     if strings_only is None:
         strings_only = mode == "strings"
     if code_only is None:
@@ -175,7 +210,9 @@ def scan(
                     )
             continue
 
-        table = STRING_FILTERS if strings_only else (FILTERS if code_only else {})
+        table = MODE_FILTERS.get(mode, FILTERS) if prose_only else (
+            STRING_FILTERS if strings_only else (FILTERS if code_only else {})
+        )
         source_filter = table.get(path.suffix)
         if source_filter is not None:
             source = source_filter(source)

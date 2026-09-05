@@ -136,6 +136,78 @@ def test_an_uncheckable_kind_is_named_not_dropped(tmp_path):
     assert result.unavailable == ["commit hashes (not a git repository)"]
 
 
+def test_a_path_names_a_sibling_tree_and_still_resolves(tmp_path):
+    """Notes beside a repository describe it, and call it by name."""
+    (tmp_path / "notes").mkdir()
+    write(tmp_path, "loader/src/app.py", "x = 1\n")
+    write(tmp_path, "notes/doc.md", "The loader is `loader/src/app.py`.\n")
+    assert verify(tmp_path / "notes").broken  # nothing to resolve against
+    assert verify(tmp_path / "notes", resolve_in=["../loader"]).broken == []
+
+
+def test_negation_may_follow_the_claim(tmp_path):
+    write(tmp_path, "doc.md", "The file `src/old.py` is gone.\n")
+    assert verify(tmp_path).broken == []
+
+
+def test_a_claim_does_not_negate_itself(tmp_path):
+    """The lookahead starts after the claim.
+
+    Starting at it let `src/gone.py` match "gone" against its own text and
+    report itself exempt -- an exemption the check hands out to exactly the
+    paths most likely to be dead.
+    """
+    write(tmp_path, "doc.md", "The loader is `src/gone.py` today.\n")
+    assert broken(verify(tmp_path)) == {("path", "src/gone.py")}
+
+
+def test_a_count_is_settled_by_the_command_that_knows(tmp_path):
+    from kinemata.claims import Counted
+
+    write(tmp_path, "doc.md", "The suite has **4 tests**.\n")
+    spec = Counted(
+        pattern=r"\*\*(\d+) tests\*\*",
+        command=("{python}", "-c", "print('7 tests collected')"),
+        extract=r"(\d+) tests collected",
+        label="test count",
+    )
+    result = verify(tmp_path, counts=[spec])
+    assert [claim.kind for claim in result.broken] == ["test count"]
+    assert "actually 7" in result.broken[0].text
+
+
+def test_a_declared_oracle_that_cannot_run_is_a_failure(tmp_path):
+    """Not a note. In CI, "printed a warning and exited 0" is a pass."""
+    from kinemata.claims import Counted
+
+    write(tmp_path, "doc.md", "The suite has **4 tests**.\n")
+    spec = Counted(
+        pattern=r"\*\*(\d+) tests\*\*",
+        command=("definitely-not-a-command-here",),
+        extract=r"(\d+)",
+    )
+    result = verify(tmp_path, counts=[spec])
+    assert result.broken == []
+    assert result.blocked and result.failed
+
+
+def test_a_count_pattern_may_use_alternation(tmp_path):
+    """The first *matching* group, not group 1.
+
+    "103 tests pass" and "**103 tests**" are one claim written two ways, and
+    reading group 1 blindly crashes on the second phrasing.
+    """
+    from kinemata.claims import Counted
+
+    write(tmp_path, "doc.md", "The suite has 7 tests pass here.\n")
+    spec = Counted(
+        pattern=r"\*\*(\d+) tests\*\*|\b(\d+) tests pass\b",
+        command=("{python}", "-c", "print('7 tests collected')"),
+        extract=r"(\d+) tests collected",
+    )
+    assert verify(tmp_path, counts=[spec]).broken == []
+
+
 def test_kinds_are_a_table_not_a_hardcoded_sequence():
     """Adding a kind is a row, and the loop never learns their names."""
     assert {kind.name for kind in CLAIM_KINDS} == {"path", "link", "commit"}

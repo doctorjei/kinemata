@@ -177,16 +177,18 @@ def cmd_claims(args: argparse.Namespace) -> int:
         suffixes=settings.claim_suffixes,
         exclude=settings.exclude,
         historical=settings.historical,
+        counts=settings.counts,
+        resolve_in=settings.resolve_in,
+        commits_in=settings.commits_in,
     )
     body = found.text()
     if body.strip():
         print(body)
-    if found.broken:
-        print(
-            f"\nFAIL: {len(found.broken)} of {found.checked} documentation "
-            f"claim(s) do not resolve.",
-            file=sys.stderr,
-        )
+    if found.failed:
+        detail = f"{len(found.broken)} of {found.checked} claim(s) do not resolve"
+        if found.blocked:
+            detail += f"; {len(found.blocked)} declared check(s) could not run"
+        print(f"\nFAIL: {detail}.", file=sys.stderr)
         return 1
     if not args.quiet:
         print(f"{found.checked} documentation claim(s) checked, all resolve.")

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import ast
 import io
+import re
 import tokenize
 
 
@@ -269,8 +270,40 @@ def python_annotation_strings(source: str) -> set[str]:
 #: over-reports rather than under-reports -- the safe direction for a catch.
 FILTERS = {".py": python_code_only}
 
+#: An inline code span, with the run of backticks that opens it matched by an
+#: equal run closing it. A single-backtick pattern reads ``x`` as two empty
+#: spans and leaves the word between them exposed -- which it did, on this
+#: module's own docstrings, in reST where the double form is the normal one.
+#:
+#: Bounded to one line, so a fenced block is not read as one enormous span.
+#: Fences stay checked on purpose: a spelling inside an example is still the
+#: project's prose, and an exemption that grows to cover examples covers most
+#: documents.
+CODE_SPAN = re.compile(r"(`+)[^`\n]*\1")
+
+
+def outside_code_spans(source: str) -> str:
+    """Return ``source`` with inline ``code spans`` blanked.
+
+    Mention versus use, for a registry whose antipatterns are *spellings*. A
+    note recording that ``recognisable`` was corrected has to spell the word to
+    say what was corrected, and reading that as a violation makes the record of
+    a fix indistinguishable from the fix's absence.
+
+    Backticks are the marker because a word genuinely misspelled in prose is not
+    in a code span -- so the exemption cannot swallow the case the check exists
+    for. Fenced blocks are deliberately still checked: a spelling inside an
+    example is still the project's prose.
+    """
+    return CODE_SPAN.sub(lambda match: " " * len(match.group(0)), source)
+
+
 #: Literals that are quoted *code* rather than values, by suffix.
 ANNOTATION_STRINGS = {".py": python_annotation_strings}
+
+#: Filters for antipatterns that are *spellings*. Language-independent: a
+#: backticked token is a mention in markdown and in a docstring alike.
+PROSE_FILTERS = {".md": outside_code_spans, ".py": outside_code_spans}
 
 #: f-string skeletons, for comparing messages rather than values.
 MESSAGE_SKELETONS = {".py": python_message_skeletons}

@@ -7,9 +7,10 @@ context**, they **miss issues**, and they **duplicate code that already exists**
 This is scaffolding against those failures — declare a fact in one place, then
 give agents a way to find it and a way to be caught re-deriving it.
 
-**Status: early.** The registry layer described below is built, tested, and
-validated against real duplication incidents from real project history. The
-wider structure it belongs to is designed but not built.
+**Status: early.** Everything below is built, tested, and validated against
+labeled incidents from real project history rather than fixtures — including
+the parts that failed validation, which are named as such. The method the whole
+thing follows is `docs/structure.md`.
 
 ---
 
@@ -170,20 +171,43 @@ A claim it cannot settle is **named, not skipped** — run outside a git
 repository, it reports that commit hashes went unchecked rather than passing
 quietly.
 
-**Retired names are a registry, not a special case.** A rename is finished only
-when nothing spells the old name, so point a registry at prose and declare
-them:
+A number in prose can be settled too, by a command you name. Opt-in, because
+that means running something from a config file:
+
+```toml
+[[count]]
+pattern = '\*\*(\d+) tests\*\*'
+command = ["{python}", "-m", "pytest", "--collect-only", "-q"]
+extract = '(\d+) tests collected'
+```
+
+A declared oracle that cannot run **fails**, rather than printing a note and
+passing — in CI those are the same thing.
+
+**Retired names and spelling conventions are registries, not special cases.**
+Both are one shape: forbidden spellings with a preferred replacement. Kept in a
+checker's source they go unmaintained; kept as data they are checked like
+anything else.
 
 ```toml
 [[registry]]
 name = "retired"
-kind = "code-patterns"
+kind = "substitutions"
 suffixes = [".md"]           # per registry, so value registries stay off prose
 
-  [[registry.entry]]
-  id = "entries()"
-  antipatterns = ['\benumerate\(\)']
+  [registry.words]
+  "oldName()" = "newName()"
+
+[[registry]]
+name = "spelling"
+kind = "substitutions"
+source = "docs/american-english.toml"   # dozens of pairs belong in a file
+suffixes = [".md", ".py"]
 ```
+
+These match as **prose**: comments and docstrings are exactly where a spelling
+matters, so they are not stripped. Inline code spans are, because a document
+recording that a word was corrected has to spell the word.
 
 That is the ordinary machinery aimed at documentation. This project's own
 design doc went on naming a method the code had already renamed, for three
