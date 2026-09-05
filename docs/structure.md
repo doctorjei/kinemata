@@ -255,9 +255,9 @@ reach:
 
 | Shape | Reachable |
 |---|---|
-| A value or message spelled in several places, declared nowhere | yes — and it is the largest reachable share |
-| Two copies of a code block, drifted apart | yes, by clone detection |
-| **Two implementations of one rule that share no text** | **no** |
+| A value or message spelled in several places, declared nowhere | **yes** — shipped as `undeclared` |
+| Two copies of a code block, drifted apart | no, on measurement — see below |
+| Two implementations of one rule that share no text | **no** |
 
 The third is the one that recurs most in that corpus: two modules enforcing the same refusal
 in different words, two code paths answering "what is effective" differently. Nothing
@@ -266,11 +266,25 @@ By this document's own test it is a **reminder** problem — an agent that can f
 does not write it twice — and the honest answer is to say so rather than ship a detector that
 appears to cover it.
 
-Worth recording how the first two were reached: the mechanism for them scored **0/4** on its
-first validation, because it compared text for equality while the incident's sites were
-*composed* — `Path("/etc/pkg/config.yaml")` against `Path("/etc/pkg") / NAME`. Equality was
-the wrong relation, and only a labeled incident could have said so. Fixtures would have
-agreed with the author.
+Worth recording how the first was reached: the mechanism for it scored **0/4** on its first
+validation, because it compared text for equality while the incident's sites were *composed*
+— `Path("/etc/pkg/config.yaml")` against `Path("/etc/pkg") / NAME`. Equality was the wrong
+relation, and only a labeled incident could have said so. Fixtures would have agreed with the
+author.
+
+The second row was expected to be reachable and **was not**, which is worth more than the row
+that worked. A clone detector over normalized syntax trees found the labeled incident **0
+times** at a precision usable as a list (187 findings on a 65k-line tree); the windows small
+enough to appear to find it produced 647 to 2,673 findings, and those apparent hits turned
+out to be artifacts of unreliable line attribution. The reason is structural:
+
+> **A clone detector is sharpest on copies that have not yet diverged — exactly the copies
+> that have not yet hurt anyone.** The incident's three copies were worth finding *because*
+> one of them had lost a path split the others kept. That drift is what made them the same
+> idea in different shapes, and it is what removed the signal.
+
+So the mechanism was built, measured, and **not shipped**. §6 asks for failures to be
+published; this is one, and the alternative it lost to covers more for a fraction of the cost.
 
 ---
 

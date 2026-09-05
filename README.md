@@ -198,11 +198,12 @@ anything.
 ## Known gaps
 
 - `review` and `check` detect only **re-derivation of something already
-  declared**. `undeclared` reaches part of the rest — see below — but the
-  hardest share is out of reach: **two implementations of one rule that share
-  no text**. Two modules enforcing the same refusal in different words is
-  invisible to anything syntactic, and it is the shape that recurs most in the
-  corpus this was measured against. That gap is real and stated rather than
+  declared**. `undeclared` reaches one share of the rest. Two shares stay out
+  of reach, both measured rather than assumed: **duplicated code blocks** (a
+  clone detector scored 0 on a labeled incident at any usable precision — the
+  copies worth finding are the ones that have drifted, and drift is what
+  removes the signal) and **two implementations of one rule that share no
+  text**, which nothing syntactic can see. Both are stated here rather than
   papered over.
 - A CI workflow lives in the repo, so an agent can edit it. Branch protection
   with the job as a *required status check* is what makes it a catch.
