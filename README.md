@@ -174,3 +174,9 @@ anything.
 
 `docs/design.md` — the registry contract, the reminder/catch split, and the
 reasoning behind both.
+
+## License
+
+GPL-3.0-only. See `LICENSE.md`.
+
+Contributions involving generative AI tools: see `AIPOLICY.md`.

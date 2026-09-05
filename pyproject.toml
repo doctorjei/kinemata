@@ -8,7 +8,7 @@ version = "0.1.0.dev0"
 description = "One declared place per fact; find the code that re-derives it."
 requires-python = ">=3.11"          # tomllib
 dependencies = []                    # core takes none, deliberately
-license = { text = "MIT" }
+license = "GPL-3.0-only"
 
 [project.optional-dependencies]
 yaml = ["PyYAML>=6"]                 # only for kind = "yaml-mapping"
