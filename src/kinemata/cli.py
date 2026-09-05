@@ -27,6 +27,7 @@ import sys
 from pathlib import Path
 
 from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
+from .claims import verify
 from .literals import clusters
 from .projection import project
 from .report import DEFAULT_MAX_SITES, review
@@ -90,7 +91,7 @@ def _run_review(args: argparse.Namespace) -> tuple[int, int]:
         report = review(
             registry,
             _target(args, settings),
-            suffixes=settings.suffixes,
+            suffixes=registry.suffixes or settings.suffixes,
             exclude=settings.exclude,
             max_sites=_max_sites(args, settings),
         )
@@ -161,6 +162,37 @@ def cmd_undeclared(args: argparse.Namespace) -> int:
     return 0  # advisory, always
 
 
+def cmd_claims(args: argparse.Namespace) -> int:
+    """Falsify what the documentation asserts about the tree.
+
+    Gates, unlike ``undeclared``. A missing file is a fact, not a judgment.
+
+    Prints the number of claims checked even when everything resolves, because
+    "all resolve" and "nothing was looked at" read identically otherwise -- and
+    this project has already shipped one check that passed by examining nothing.
+    """
+    settings = _settings(args)
+    found = verify(
+        _target(args, settings),
+        suffixes=settings.claim_suffixes,
+        exclude=settings.exclude,
+        historical=settings.historical,
+    )
+    body = found.text()
+    if body.strip():
+        print(body)
+    if found.broken:
+        print(
+            f"\nFAIL: {len(found.broken)} of {found.checked} documentation "
+            f"claim(s) do not resolve.",
+            file=sys.stderr,
+        )
+        return 1
+    if not args.quiet:
+        print(f"{found.checked} documentation claim(s) checked, all resolve.")
+    return 0
+
+
 def cmd_check(args: argparse.Namespace) -> int:
     strong, _ = _run_review(args)
     if strong:
@@ -211,6 +243,11 @@ def build_parser() -> argparse.ArgumentParser:
                          help="advisory: repeated text with no declared home")
     und.add_argument("path", nargs="?", help="limit the scan to this path")
     und.set_defaults(func=cmd_undeclared)
+
+    clm = sub.add_parser("claims", parents=[common],
+                         help="gate: fail on a documentation claim that does not resolve")
+    clm.add_argument("path", nargs="?", help="limit the scan to this path")
+    clm.set_defaults(func=cmd_claims)
 
     chk = sub.add_parser("check", parents=[common],
                          help="gate: fail on a strong bypass")

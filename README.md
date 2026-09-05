@@ -124,6 +124,7 @@ kinemata ids         # the projection: what already exists. Budgeted, loadable.
 kinemata review      # advisory. Always exits 0. Run in-box, during the work.
 kinemata undeclared  # advisory. Repeated text with no declared home.
 kinemata check       # the gate. Exits 1 on a strong finding. Run in CI.
+kinemata claims      # the gate, for documentation. Exits 1 on a dead claim.
 ```
 
 A registry that produces **no entries is refused, not accepted quietly** — a missing
@@ -147,6 +148,54 @@ domain words account for 1,054 of them. Two filters, both forced by measurement:
   `max_sites` (default 20) is a domain word, not a duplication signal. 314 → 43.
   **Reported, never silent** — a check that quietly stops checking is worse than
   no check.
+
+## Documentation is a registry of claims
+
+A document asserts facts about the tree it ships with: this file exists, that
+link resolves, this commit made the change. Each has a source of truth
+elsewhere in the repo, which makes it falsifiable — and a falsifiable claim
+nobody falsifies is how documentation rots while reporting itself correct.
+
+```toml
+[claims]
+suffixes = [".md"]
+historical = ["archives/"]   # a record of what was true is not a stale claim
+```
+
+`kinemata claims` gates, unlike `undeclared`: a missing file is a fact, not a
+judgment. It prints the number of claims checked even when everything passes,
+because "all resolve" and "nothing was looked at" otherwise read identically.
+
+A claim it cannot settle is **named, not skipped** — run outside a git
+repository, it reports that commit hashes went unchecked rather than passing
+quietly.
+
+**Retired names are a registry, not a special case.** A rename is finished only
+when nothing spells the old name, so point a registry at prose and declare
+them:
+
+```toml
+[[registry]]
+name = "retired"
+kind = "code-patterns"
+suffixes = [".md"]           # per registry, so value registries stay off prose
+
+  [[registry.entry]]
+  id = "entries()"
+  antipatterns = ['\benumerate\(\)']
+```
+
+That is the ordinary machinery aimed at documentation. This project's own
+design doc went on naming a method the code had already renamed, for three
+commits, and a careful reader did not catch it; with the entry above, CI would
+have failed on the first.
+
+Note what happened when that entry was added: it fired on this README, which
+had spelled the dead name while explaining the incident. Prose that *discusses*
+a retirement is not a stale use of it. Either put the documents entitled to
+record it in the entry's `home`, or say it without the name — but decide
+deliberately, because an allowlist that grows to accommodate prose is how a
+check quietly stops checking.
 
 ## Text with no declared home
 

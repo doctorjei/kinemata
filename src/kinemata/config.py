@@ -50,6 +50,12 @@ class ConfigError(Exception):
     """
 
 
+#: Files whose claims about the tree are worth falsifying, and the fragments
+#: that mark a record as superseded. Defaults rather than requirements: a
+#: project with no ``[claims]`` table still gets its markdown checked.
+DEFAULT_CLAIM_SUFFIXES = (".md",)
+
+
 @dataclass
 class Settings:
     root: Path
@@ -57,6 +63,11 @@ class Settings:
     exclude: tuple[str, ...] = ()
     suffixes: tuple[str, ...] = (".py",)
     max_sites: int | None = None
+    claim_suffixes: tuple[str, ...] = DEFAULT_CLAIM_SUFFIXES
+    #: Path fragments holding superseded records. An archive cites paths and
+    #: commits that were real when written; checking it for currency reports
+    #: the archive for being an archive.
+    historical: tuple[str, ...] = ()
 
 
 def find_config(start: str | Path = ".") -> Path | None:
@@ -174,6 +185,11 @@ def load(path: str | Path) -> Settings:
                 f"(known: {', '.join(sorted(BUILDERS))})"
             )
         registry = builder(spec, root)
+        # Applied here rather than in each builder: every kind of registry can
+        # be pointed at a different file set, and three copies of one line is
+        # the thing this package exists to report.
+        if "suffixes" in spec:
+            registry.suffixes = tuple(spec["suffixes"])
         # Every declaration above can be individually valid and still produce a
         # registry with nothing in it -- the modules exist and parse, they just
         # hold nothing this adapter recognizes. That check passes, reports
@@ -192,10 +208,13 @@ def load(path: str | Path) -> Settings:
             )
         registries.append(registry)
 
+    claims = raw.get("claims", {})
     return Settings(
         root=root,
         registries=registries,
         exclude=tuple(project.get("exclude", ())),
         suffixes=tuple(project.get("suffixes", (".py",))),
         max_sites=project.get("max_sites"),
+        claim_suffixes=tuple(claims.get("suffixes", DEFAULT_CLAIM_SUFFIXES)),
+        historical=tuple(claims.get("historical", ())),
     )

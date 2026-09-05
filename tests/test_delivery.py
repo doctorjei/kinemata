@@ -207,6 +207,39 @@ def test_allow_empty_permits_a_deliberately_empty_registry(tmp_path):
     assert list(reg.entries()) == []
 
 
+def test_a_registry_can_target_its_own_file_types(tmp_path):
+    """A retired name is a registry, and it lives in prose.
+
+    Widening the project's suffix list to reach documentation would point the
+    value registries at it too, and a value registry matching prose is the
+    over-reporting failure. So the override is per registry.
+    """
+    write(tmp_path, "doc.md", "Install traceface today.\n")
+    write(tmp_path, "src/app.py", "name = 'traceface'\n")
+    write(
+        tmp_path,
+        "kinemata.toml",
+        """
+        [project]
+        root = "."
+        suffixes = [".py"]
+
+        [[registry]]
+        name = "retired"
+        kind = "code-patterns"
+        suffixes = [".md"]
+
+          [[registry.entry]]
+          id = "kinemata"
+          antipatterns = ['\\btraceface\\b']
+        """,
+    )
+    (reg,) = load(tmp_path / "kinemata.toml").registries
+    assert reg.suffixes == (".md",)
+    sites = scan(reg, tmp_path, suffixes=reg.suffixes)
+    assert [site.path for site in sites] == ["doc.md"]
+
+
 def test_an_unknown_kind_is_refused(tmp_path):
     write(
         tmp_path,

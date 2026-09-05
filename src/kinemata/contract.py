@@ -98,6 +98,16 @@ class BaseRegistry(ABC):
     #: ``"raw"``      everything, prose included. Rarely right.
     match_mode: str = "strings"
 
+    #: File suffixes this registry applies to, overriding the project's. ``None``
+    #: means the project's own list.
+    #:
+    #: A retired name is a registry like any other -- one declared set of
+    #: spellings that must not appear -- but it lives in *prose*, while the code
+    #: registries live in ``.py``. Without a per-registry override, widening the
+    #: project list to reach documentation points every other registry at it
+    #: too, and a value registry matching prose is the over-reporting failure.
+    suffixes: tuple[str, ...] | None = None
+
     # -- the one required method ------------------------------------------
 
     @abstractmethod

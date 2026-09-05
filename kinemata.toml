@@ -12,6 +12,13 @@
 root = "."
 exclude = ["tests/", "corpus/", ".venv/", "deliverables/"]
 
+# Documentation is a registry of claims about this tree, so it gets checked
+# like one. `historical` names records that cite what was true when written --
+# an archive is not stale, it is an archive.
+[claims]
+suffixes = [".md"]
+historical = ["archives/"]
+
 [[registry]]
 name = "canonical"
 kind = "code-patterns"
@@ -55,3 +62,32 @@ kind = "code-patterns"
   antipatterns = ['\[A-Za-z0-9_\.\\-\]']
   home = ["src/kinemata/contract.py"]
   note = "identifier boundary character class"
+
+# Names this project has retired. A rename is only finished when nothing spells
+# the old name, and "nothing" is a claim worth checking rather than asserting --
+# `enumerate()` outlived the method it named by three commits.
+#
+# This is the same machinery as above pointed at prose, which is the whole
+# argument: a list of forbidden spellings IS a registry, so it should be checked
+# like one rather than kept in a checker's source as a hand-written table.
+#
+# `home` reads as "documents entitled to record this retirement" -- a changelog
+# or a history section legitimately spells the dead name. Keep that list short.
+# It fired on the README the moment it was added, and widening the allowlist to
+# quiet prose is how a check stops checking.
+[[registry]]
+name = "retired"
+kind = "code-patterns"
+suffixes = [".md"]
+
+  [[registry.entry]]
+  id = "kinemata"
+  antipatterns = ['\btraceface\b']
+  home = ["docs/design.md"]
+  note = "the working codename, retired 2026-09-05"
+
+  [[registry.entry]]
+  id = "entries()"
+  antipatterns = ['\benumerate\(\)']
+  home = ["docs/design.md"]
+  note = "the contract's required method was renamed"

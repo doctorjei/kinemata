@@ -30,10 +30,15 @@ from typing import Iterable, Iterator, Sequence
 from .contract import BaseRegistry, Entry
 from .prose import FILTERS, LITERAL_EXTRACTORS, STRING_FILTERS
 
+#: Git's directory. Named on its own because two checks must look *for* it to
+#: decide whether the tree is a repository, and a second spelling of it there
+#: would be exactly the duplication this package exists to catch.
+GIT_DIR = ".git"
+
 #: Directories never worth scanning: not source, or not the project's.
 SKIP_DIRS = frozenset(
     {
-        ".git", ".venv", "venv", "node_modules", "__pycache__", ".mypy_cache",
+        GIT_DIR, ".venv", "venv", "node_modules", "__pycache__", ".mypy_cache",
         ".pytest_cache", ".ruff_cache", "build", "dist", ".tox", ".eggs",
     }
 )

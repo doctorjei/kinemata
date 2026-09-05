@@ -25,8 +25,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # commit claims cannot be settled on a shallow clone
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
       - run: pip install -e .
       - run: kinemata check
+      # Documentation is a registry of claims about this tree.
+      - run: kinemata claims
