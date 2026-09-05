@@ -268,6 +268,13 @@ reach:
 Thirteen instances in 37 attributable commits, from a sample of 47 drawn from 196. **Four of
 the thirteen are reachable today.**
 
+That table sorts by how the duplicates *resemble* each other, which is not the only thing
+deciding reach. One instance in the sample is a value spelled twice — the first row, the class
+the shipped mechanism was built for — and is still out of reach, because both carriers live in
+a config file another tool writes. Nothing here reads outside the source tree. It is one case,
+not a distribution, and the narrow claim is all it supports: **resemblance decides whether a
+mechanism could see it, locus decides whether it gets to look.**
+
 That fraction is worth stating because an earlier version of it was wrong in this document's
 own favor. The first 13 commits classified gave 8 gap instances and about 5 reachable — 62%.
 But those 13 were the ones whose subjects looked most promising, read first, and finishing the
