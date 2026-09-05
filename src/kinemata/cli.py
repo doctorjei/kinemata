@@ -26,7 +26,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from .config import ConfigError, Settings, find_config, load
+from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
 from .projection import project
 from .report import DEFAULT_MAX_SITES, review
 
@@ -35,7 +35,7 @@ def _settings(args: argparse.Namespace) -> Settings:
     path = Path(args.config) if args.config else find_config()
     if path is None:
         raise ConfigError(
-            "no kinemata.toml found (searched upward from the current directory)"
+            f"no {CONFIG_NAMES[0]} found (searched upward from the current directory)"
         )
     return load(path)
 
@@ -135,7 +135,7 @@ def _common() -> argparse.ArgumentParser:
     works -- an ordering rule nobody remembers and every user gets wrong.
     """
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("-c", "--config", help="path to kinemata.toml")
+    common.add_argument("-c", "--config", help=f"path to {CONFIG_NAMES[0]}")
     common.add_argument("-r", "--registry", help="limit to one registry by name")
     common.add_argument("-q", "--quiet", action="store_true")
     common.add_argument("-v", "--verbose", action="store_true",

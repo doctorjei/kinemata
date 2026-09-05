@@ -1,10 +1,57 @@
 # This project checking itself. A duplication checker that duplicates its own
-# constants would be evidence against itself.
+# declarations would be evidence against itself.
+#
+# This file used to declare `python-constants` over three modules and found
+# nothing for six commits -- not because the tree was clean, but because this
+# codebase has no module-level *string* constants. Its canonical things are
+# code shapes and non-string values, so `code-patterns` is the adapter that
+# fits. Same diagnosis the tool reached on kento-core: a missing adapter, not a
+# broken mechanism. `config.py` now refuses an empty registry so the next one
+# announces itself instead of passing.
 [project]
 root = "."
 exclude = ["tests/", "corpus/", ".venv/", "deliverables/"]
 
 [[registry]]
-name = "constants"
-kind = "python-constants"
-modules = ["src/kinemata/contract.py", "src/kinemata/report.py", "src/kinemata/prose.py"]
+name = "canonical"
+kind = "code-patterns"
+
+  # The config filename has one declared home. Help text and error messages
+  # that spell it out again go stale silently when it changes -- which it did,
+  # twice, during the rename from registry.toml to traceface.toml to this.
+  [[registry.entry]]
+  id = "CONFIG_NAMES"
+  antipatterns = ['kinemata\.toml']
+  home = ["src/kinemata/config.py"]
+  note = "the config filename -- interpolate, don't respell"
+
+  # The projection budget. A second copy of the number is how a budget and the
+  # check that enforces it drift apart.
+  [[registry.entry]]
+  id = "DEFAULT_BUDGET"
+  antipatterns = ['\b16384\b', '16\s*\*\s*1024']
+  home = ["src/kinemata/contract.py"]
+  note = "16 KB projection ceiling"
+
+  # The frequency-suppression threshold.
+  [[registry.entry]]
+  id = "DEFAULT_MAX_SITES"
+  antipatterns = ['max_sites\s*=\s*20\b']
+  home = ["src/kinemata/report.py"]
+  note = "suppression threshold"
+
+  # The walk skips these once, in one place. A second inline list is how a
+  # scanner starts reading .venv in one code path and not another.
+  [[registry.entry]]
+  id = "SKIP_DIRS"
+  antipatterns = ['__pycache__', 'node_modules']
+  home = ["src/kinemata/bypass.py"]
+  note = "directories never worth scanning"
+
+  # The identifier-boundary class. Re-rolling it by hand is how two matchers
+  # come to disagree about what counts as a word.
+  [[registry.entry]]
+  id = "_BOUNDARY"
+  antipatterns = ['\[A-Za-z0-9_\.\\-\]']
+  home = ["src/kinemata/contract.py"]
+  note = "identifier boundary character class"
