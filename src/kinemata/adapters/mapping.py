@@ -24,7 +24,7 @@ class MappingRegistry(BaseRegistry):
     :param source: the mapping itself.
     :param name: registry name, used in reports.
     :param clause_field: record field holding governing clause IDs, if any.
-    :param syntax: pattern recognising *anything shaped like* an identifier of
+    :param syntax: pattern recognizing *anything shaped like* an identifier of
         this registry, declared or not. Required to be ``closed`` -- see
         :meth:`BaseRegistry.candidates`.
     """
@@ -53,7 +53,7 @@ class MappingRegistry(BaseRegistry):
         if self.closed and self._syntax is None:
             raise ValueError(
                 f"registry {name!r} is closed but has no identifier syntax; "
-                "closure requires recognising undeclared identifiers"
+                "closure requires recognizing undeclared identifiers"
             )
 
     def entries(self) -> Iterable[Entry]:

@@ -177,7 +177,7 @@ that both branches leave a trace, and skipping both fails CI.
 ## 6. What this deliberately does not require
 
 - **Any particular storage** — YAML, a database, code annotations, a type system. The
-  contract is behavioural.
+  contract is behavioral.
 - **That entries be settings.** The role is "information used broadly across the code."
   Settings are one instance.
 - **One registry per project.** The common case is one; a project may have more. The

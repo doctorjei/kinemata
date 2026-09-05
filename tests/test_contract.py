@@ -1,4 +1,4 @@
-"""Contract behaviour: what a registry must do, and what it must refuse to do."""
+"""Contract behavior: what a registry must do, and what it must refuse to do."""
 
 from __future__ import annotations
 

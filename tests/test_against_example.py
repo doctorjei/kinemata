@@ -87,7 +87,7 @@ def test_heterogeneous_sections_do_not_break_the_adapter(manifest):
 
 def test_not_keys_is_a_registry_too(manifest):
     # The manifest already tracks retired names. Same contract, different
-    # meaning -- evidence the role generalises past "settings keys".
+    # meaning -- evidence the role generalizes past "settings keys".
     not_keys = MappingRegistry(manifest["not_keys"], name="not_keys")
     assert len(list(not_keys.entries())) == len(manifest["not_keys"])
 

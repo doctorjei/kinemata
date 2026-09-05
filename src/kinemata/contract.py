@@ -156,9 +156,9 @@ class BaseRegistry(ABC):
 
         Distinct from :meth:`detect`, which only ever finds declared entries and
         so can never notice an undeclared one. Closure needs this: to say "that
-        is not a key" you must first recognise it as trying to be one.
+        is not a key" you must first recognize it as trying to be one.
 
-        A registry that cannot recognise its own identifier syntax **cannot be
+        A registry that cannot recognize its own identifier syntax **cannot be
         closed**; it can still report on what is declared. Raises rather than
         guessing, because a silent empty list would look like a clean check.
         """

@@ -36,7 +36,7 @@ will.
 ## When *not* to build a mechanism
 
 Mechanism costs code, CI time, and rigidity. Spending it where a written norm
-already works is waste, and a structure that over-mechanises becomes brittle —
+already works is waste, and a structure that over-mechanizes becomes brittle —
 its own way of going astray.
 
 Three factors decide:
@@ -144,7 +144,7 @@ domain words account for 1,054 of them. Two filters, both forced by measurement:
 
 ## What it was validated against
 
-Not synthetic fixtures. Labelled incidents from real project history, where a
+Not synthetic fixtures. Labeled incidents from real project history, where a
 commit message names the sites a human found by hand:
 
 - **9/9 recall** reconstructing the tree before a documented cleanup commit.
@@ -156,7 +156,7 @@ commit message names the sites a human found by hand:
 And a failure worth publishing: `unused()` **failed** its validation, 0/3
 against an incident recording three declared keys with "no reader at all". It
 detects *mention*, not *use* — and every declared entry is mentioned somewhere,
-because that is what declaring is. It is labelled known-weak in its own
+because that is what declaring is. It is labeled known-weak in its own
 docstring and requires excluding a project's declaring machinery to mean
 anything.
 

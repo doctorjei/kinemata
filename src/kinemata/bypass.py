@@ -203,7 +203,7 @@ def unused(
 
     ⚠ **This detects mention, not use, and the difference matters.**
 
-    Validated against a labelled incident and it failed. kanibako-cli commit
+    Validated against a labeled incident and it failed. kanibako-cli commit
     ``d8037cf5`` records that three declared keys "had no reader at all -- a set
     was accepted, persisted and read back, and nothing moved". This function
     missed all three, because each appears in the project's own declaring
@@ -219,7 +219,7 @@ def unused(
         three declaring modules excluded, the incident above is found.
 
     Finding a real *reader* means tracing a value from resolution into
-    behaviour. That is dataflow analysis and deliberately out of scope here: a
+    behavior. That is dataflow analysis and deliberately out of scope here: a
     mechanism that claimed to do it syntactically would be lying about its reach.
 
     Why it survives as a review list rather than a gate: an entry can be real and

@@ -1,6 +1,6 @@
 """Command line: the same finding, delivered two ways.
 
-One scan, two consumers -- the split this project is organised around:
+One scan, two consumers -- the split this project is organized around:
 
 ``kinemata ids``
     The standing reminder. What already exists, small enough to load.

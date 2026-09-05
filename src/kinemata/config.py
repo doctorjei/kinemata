@@ -43,7 +43,7 @@ CONFIG_NAMES = ("kinemata.toml", ".kinemata.toml")
 
 
 class ConfigError(Exception):
-    """A registry declaration that cannot be honoured.
+    """A registry declaration that cannot be honored.
 
     Raised rather than skipped. A misconfigured registry that silently scans
     nothing is the inert-signal failure: green, and checking nothing.

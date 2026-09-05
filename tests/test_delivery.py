@@ -324,7 +324,7 @@ def test_code_patterns_needs_at_least_one_entry(tmp_path):
 
 
 def test_unused_is_vacuous_without_excluding_the_declaring_machinery(tmp_path):
-    """The failure found by validating against a labelled incident.
+    """The failure found by validating against a labeled incident.
 
     kanibako-cli ``d8037cf5`` records three declared keys with "no reader at
     all". This check missed all three, because each appears in the project's own
