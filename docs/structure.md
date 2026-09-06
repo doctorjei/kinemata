@@ -2,9 +2,10 @@
 
 **How to build scaffolding for an agent-run project that actually holds.**
 
-`kinemata` ships one mechanism: the registry layer, described in `README.md` and specified
-in `docs/design.md`. This document is the other half — the method that produced it, stated
-generally enough to apply to mechanisms this project does not ship.
+`kinemata` ships a handful of mechanisms — the registry layer specified in `docs/design.md`,
+plus the checks over undeclared text and documentation claims described in `README.md`. This
+document is the other half: the method that produced them, stated generally enough to apply to
+mechanisms this project does not ship, and to ones it built, measured, and threw away.
 
 Every principle below was forced by a specific failure, and each one names the failure that
 forced it. That is the point of the format, not decoration. A principle with no incident
@@ -45,7 +46,8 @@ missed eight sites in six other modules. A check that only looks where you alrea
 confirms the fix you already made.
 
 **The reminder and the catch should read one source.** `kinemata review` and `kinemata check`
-run identical analysis and differ only in exit code and where they run. Two mechanisms that
+run identical analysis and differ only in exit code and where they run — one scan, two
+consequences. Two mechanisms that
 can disagree eventually will, and the disagreement always surfaces at the worst moment.
 
 ---
@@ -242,16 +244,17 @@ third instance appears would violate §2.
 
 ## 8. The registry layer, read against these principles
 
-The one mechanism this project ships, as a worked example:
+What this project ships, read back against its own rules:
 
 | Principle | How the registry layer answers it |
 |---|---|
-| §1 reminder or catch | `ids` and `review` are reminders; `check` is a catch, and only in CI with branch protection |
+| §1 reminder or catch | `ids`, `review` and `undeclared` are reminders; `check` and `claims` are catches, and only in CI with branch protection |
 | §1 one source | `review` and `check` run identical analysis; only the exit code differs |
 | §2 spend test | duplication scores yes/no/no — cheap to commit, invisible in a diff, silent on landing |
 | §3 refuse | bad configuration raises; an empty registry raises; a registry that cannot detect its identifiers refuses to be `closed`; suppression is reported |
 | §3 break it on purpose | the self-check's five entries were each verified by injecting the bypass and watching the gate fail |
-| §6 validation | labeled history from two real codebases, with the failing component labeled as failing |
+| §6 validation | labeled history from real repositories, with the components that failed labeled as failing |
+| §4 classify first | `undeclared` reports; `check` and `claims` gate. A missing file is a fact; text repeating with no declared home is a judgment |
 
 And where it does not reach, stated plainly because §6 requires it.
 

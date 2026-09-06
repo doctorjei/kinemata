@@ -25,7 +25,7 @@ historical = ["archives/"]
 # notes claimed 74 tests while the true number went 76, 88, 103.
 [[count]]
 label = "test count"
-pattern = '\*\*(\d+) tests\*\*|\b(\d+) tests pass\b'
+pattern = '\*\*(\d+) tests?\*\*|\b(\d+) tests? pass\b|\*\*Tests:\*\* (\d+) pass\b|\b(\d+) tests? collected\b'
 command = ["{python}", "-m", "pytest", "--collect-only", "-q"]
 extract = '(\d+) tests collected'
 
