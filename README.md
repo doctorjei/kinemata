@@ -126,6 +126,7 @@ kinemata review      # advisory. Always exits 0. Run in-box, during the work.
 kinemata undeclared  # advisory. Repeated text with no declared home.
 kinemata check       # the gate. Exits 1 on a strong finding. Run in CI.
 kinemata claims      # the gate, for documentation. Exits 1 on a dead claim.
+kinemata baseline    # what the gate already accepts. --record to change it.
 ```
 
 A registry that produces **no entries is refused, not accepted quietly** — a missing
@@ -135,6 +136,70 @@ pointed it at. All three look identical to a clean tree from the outside. Set
 
 See `examples/ci-github-actions.yml` — including why a workflow file alone is
 still a reminder, and what promotes it to a catch.
+
+## Adopting it on a codebase that already fails
+
+A gate that only works on an empty tree is a gate almost nobody can turn on. A
+mature codebase declaring its constants for the first time gets a wall of
+findings for code nobody is touching, and the rational response is to switch the
+gate off. Measured: pointing `check` at one 65k-line project's settings package
+produces **42 strong findings** on the first run.
+
+So record them and fail on *increase*:
+
+```bash
+kinemata baseline --record   # accept today's findings; commit the file
+kinemata check               # green, and still red for anything new
+```
+
+`check` then reports only findings the baseline does not cover, and prints the
+size of the exemption list **on every run, including clean ones**. `review` is
+deliberately unaffected — the ratchet governs the gate, not the advice.
+
+**A baseline is an allowlist, and allowlists rot.** Three properties exist
+against that, each one because the vaguer alternative fails quietly:
+
+- **Fingerprints, not a total.** A recorded count of 42 is satisfied by any 42
+  findings, so fixing one and adding another nets to silence.
+- **Multiplicity is recorded.** Three identical sites in a file are three
+  exemptions; the fourth is an increase.
+- **Readable records.** Entry, antipattern, path and matched text — not opaque
+  digests. A reviewer who cannot see what is exempted cannot catch a baseline
+  absorbing real findings.
+
+Findings that disappear become *stale* rather than errors — removing a bypass
+must never fail a build — and `kinemata baseline --prune` drops them, which is
+the half of a ratchet that is easy to forget.
+
+**What identifies a finding across commits** is entry, antipattern, path and the
+matched text, with whitespace collapsed. The line number is deliberately
+excluded: every edit above a finding shifts it, and churn reported as
+regressions trains people to re-record, which absorbs whatever else arrived in
+that commit. The path is deliberately included: a bypass in a new file is a new
+site, and this project's founding incident was a tripwire that watched one
+module while eight sites sat in six others.
+
+That choice was measured, not argued, on 200 commits of real history — a
+baseline recorded at one commit, `check` run at four later ones:
+
+| window | commits | files changed | reported new | attributable to keying on text |
+|---|---|---|---|---|
+| 50 commits | 50 | 159 | 0 | 0 |
+| 100 commits | 100 | 217 | 3 | 0 |
+| 150 commits | 150 | 302 | 4 | 0 |
+| 200 commits | 200 | 344 | 8 | **1** |
+
+The last column is the difference against a text-free fingerprint, which is what
+keying on the matched text costs: **one report in 200 commits**, against a
+57-finding baseline. Inspected, that one is a constant renamed in place — the
+line really had changed, and the coarser fingerprint would have absorbed it
+silently. The other reports are sites that did not exist before.
+
+**Honest reach.** An agent can silence a real finding by re-recording the
+baseline. What makes that survivable is that it is a committed file change,
+visible in the diff and routed to review — the same status as any other declared
+exemption. This is a catch with an escape hatch, and claiming otherwise would be
+claiming reach it does not have.
 
 ## Precision
 

@@ -15,6 +15,13 @@ One scan, two consumers -- the split this project is organized around:
     host-side or in CI, **where an agent cannot edit or skip it**. A check the
     agent controls is a reminder wearing a catch's clothes.
 
+``kinemata baseline``
+    The ratchet's control surface: what a project has accepted, and the one
+    command that changes it. ``check`` reads the baseline; nothing else does.
+    ``review`` deliberately ignores it -- the ratchet governs the gate, not the
+    advice, and an advisory scan that hid known problems would be lying about
+    the tree.
+
 The difference between the last two is the exit code and where they run, not
 the analysis. That is deliberate: two mechanisms that could disagree eventually
 will.
@@ -26,11 +33,13 @@ import argparse
 import sys
 from pathlib import Path
 
+from .baseline import Baseline, BaselineError, record
+from .bypass import Bypass
 from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
 from .claims import verify
 from .literals import clusters
 from .projection import project
-from .report import DEFAULT_MAX_SITES, review
+from .report import DEFAULT_MAX_SITES, Report, review
 
 
 def _settings(args: argparse.Namespace) -> Settings:
@@ -80,35 +89,58 @@ def cmd_ids(args: argparse.Namespace) -> int:
     return 1 if (over_budget and args.strict) else 0
 
 
-def _run_review(args: argparse.Namespace) -> tuple[int, int]:
-    """Shared body of review and check. Returns (strong, weak) counts."""
+def _run_review(args: argparse.Namespace) -> tuple[Settings, list[tuple[str, Report]]]:
+    """Shared body of review, check and baseline: one scan per registry.
+
+    Returns the reports rather than printing them, because ``check`` has to put
+    the findings through the baseline before deciding what is worth showing.
+    """
     settings = _settings(args)
-    strong = weak = 0
+    reports: list[tuple[str, Report]] = []
 
     for registry in settings.registries:
         if args.registry and registry.name != args.registry:
             continue
-        report = review(
-            registry,
-            _target(args, settings),
-            suffixes=registry.suffixes or settings.suffixes,
-            exclude=settings.exclude,
-            max_sites=_max_sites(args, settings),
-        )
-        strong += len(report.strong)
-        weak += len(report.weak)
+        reports.append((
+            registry.name,
+            review(
+                registry,
+                _target(args, settings),
+                suffixes=registry.suffixes or settings.suffixes,
+                exclude=settings.exclude,
+                max_sites=_max_sites(args, settings),
+            ),
+        ))
 
-        body = report.text(verbose=args.verbose)
+    return settings, reports
+
+
+def _print_reports(
+    settings: Settings, reports: list[tuple[str, Report]], *, verbose: bool
+) -> None:
+    for name, report in reports:
+        body = report.text(verbose=verbose)
         if body.strip():
             if len(settings.registries) > 1:
-                print(f"# {registry.name}")
+                print(f"# {name}")
             print(body)
 
-    return strong, weak
+
+def _strong(reports: list[tuple[str, Report]]) -> list[tuple[str, Bypass]]:
+    """Every gating finding, tagged with the registry that produced it.
+
+    The registry name travels with the finding because a baseline record has to
+    say which registry accepted it -- two registries can declare the same entry
+    id, and a reviewer reading the file needs to know which one is exempted.
+    """
+    return [(name, hit) for name, report in reports for hit in report.strong]
 
 
 def cmd_review(args: argparse.Namespace) -> int:
-    strong, weak = _run_review(args)
+    settings, reports = _run_review(args)
+    _print_reports(settings, reports, verbose=args.verbose)
+    strong = sum(len(report.strong) for _, report in reports)
+    weak = sum(len(report.weak) for _, report in reports)
     if not strong and not weak:
         if not args.quiet:
             print("Nothing already declared looks re-derived here.")
@@ -195,11 +227,140 @@ def cmd_claims(args: argparse.Namespace) -> int:
     return 0
 
 
+def _narrowed(args: argparse.Namespace) -> str | None:
+    """Why this scan does not cover the whole project, if it does not.
+
+    A baseline describes the project. Rewriting it from a scan of one registry
+    or one directory would silently drop every record the scan could not have
+    produced -- the exemption list would shrink, `check` would go red on code
+    nobody touched, and the fix would look like re-recording again.
+    """
+    if args.registry:
+        return f"--registry {args.registry}"
+    if args.path:
+        return f"a path argument ({args.path})"
+    return None
+
+
 def cmd_check(args: argparse.Namespace) -> int:
-    strong, _ = _run_review(args)
-    if strong:
-        print(f"\nFAIL: {strong} bypass(es) of declared things.", file=sys.stderr)
+    """The gate, ratcheted: fail on findings the baseline does not cover.
+
+    On a codebase with no baseline this is what it always was. On one with a
+    baseline it fails on *increase*, which is the only way the gate can be
+    adopted by a project that is already failing it -- kanibako-cli starts at
+    111 strong findings, and a wall of red on day one gets the gate switched off.
+    """
+    settings, reports = _run_review(args)
+    baseline = Baseline.load(settings.baseline)
+    split = baseline.split(_strong(reports))
+
+    new_by_registry: dict[str, list[Bypass]] = {}
+    for name, hit in split.new:
+        new_by_registry.setdefault(name, []).append(hit)
+
+    # Weak signals ride along unfiltered: they never gated, so the baseline has
+    # no business hiding them.
+    filtered = [
+        (name, Report(
+            bypasses=tuple(new_by_registry.get(name, ())) + report.weak,
+            suppressed=report.suppressed,
+            scanned=report.scanned,
+            entries=report.entries,
+        ))
+        for name, report in reports
+    ]
+    _print_reports(settings, filtered, verbose=args.verbose)
+
+    # Printed on every run that has a baseline at all, and **not suppressed by
+    # --quiet**: an exemption list nobody reads the size of is how an allowlist
+    # rots. The number is the point of printing it.
+    if baseline.exists:
+        note = f"\nbaseline: {baseline.size} accepted finding(s) in {baseline.path.name}"
+        # Under a narrowed scan the unscanned records are simply absent from the
+        # findings, which is indistinguishable from fixed. Saying nothing beats
+        # reporting a project's whole baseline as stale.
+        if split.stale and not _narrowed(args):
+            gone = sum(item.count for item in split.stale)
+            note += (
+                f"; {gone} no longer present "
+                f"(`kinemata baseline --prune` drops them)"
+            )
+        print(note)
+
+    if split.new:
+        label = "new bypass(es)" if baseline.exists else "bypass(es)"
+        print(f"\nFAIL: {len(split.new)} {label} of declared things.", file=sys.stderr)
         return 1
+    return 0
+
+
+def cmd_baseline(args: argparse.Namespace) -> int:
+    """Show what is accepted; ``--record`` and ``--prune`` change it.
+
+    Showing is the default because recording is how the gate goes quiet. A
+    command that silences findings should never be the thing that happens when
+    somebody types the noun to see what it means.
+    """
+    if args.record and args.prune:
+        print("error: --record and --prune do different things; pick one",
+              file=sys.stderr)
+        return 2
+
+    scope = _narrowed(args)
+    if scope and (args.record or args.prune):
+        print(
+            f"error: refusing to rewrite the baseline from a scan limited by "
+            f"{scope}. Every record the scan could not produce would be dropped.",
+            file=sys.stderr,
+        )
+        return 2
+
+    settings, reports = _run_review(args)
+    findings = _strong(reports)
+    baseline = Baseline.load(settings.baseline)
+    split = baseline.split(findings)
+
+    if args.record:
+        fresh = record(settings.baseline, findings)
+        delta = fresh.size - baseline.size
+        fresh.save()
+        change = f" ({delta:+d} against the previous baseline)" if baseline.exists else ""
+        print(f"Recorded {fresh.size} accepted finding(s){change} in {settings.baseline}.")
+        if delta > 0:
+            # Growth is the failure mode. Say so at the moment it happens, since
+            # the alternative is noticing it in a diff nobody reads closely.
+            print(f"{delta} finding(s) newly accepted. Every one is now exempt "
+                  f"from `check` until it is fixed and the baseline re-recorded.")
+        return 0
+
+    if args.prune:
+        kept = record(settings.baseline, split.accepted)
+        dropped = baseline.size - kept.size
+        kept.save()
+        print(f"Dropped {dropped} record(s) no longer present; "
+              f"{kept.size} accepted finding(s) remain.")
+        return 0
+
+    if not baseline.exists:
+        print(f"No baseline recorded ({settings.baseline} does not exist).")
+        print(f"`kinemata baseline --record` would accept {len(findings)} finding(s).")
+        return 0
+
+    print(f"{baseline.path}: {baseline.size} accepted finding(s).")
+    if split.new:
+        print(f"{len(split.new)} finding(s) not accepted -- `check` fails on these.")
+    if scope:
+        print(f"Scan limited by {scope}; nothing here is a statement about the rest.")
+    elif split.stale:
+        dropped = sum(item.count for item in split.stale)
+        print(f"{dropped} accepted finding(s) no longer present "
+              f"-- `--prune` drops them.")
+        if args.verbose:
+            for item in split.stale:
+                print(f"    {item}")
+    if args.verbose:
+        for item in sorted(baseline.accepted, key=lambda r: r.key):
+            print(f"    {item}")
     return 0
 
 
@@ -252,9 +413,19 @@ def build_parser() -> argparse.ArgumentParser:
     clm.set_defaults(func=cmd_claims)
 
     chk = sub.add_parser("check", parents=[common],
-                         help="gate: fail on a strong bypass")
+                         help="gate: fail on a strong bypass the baseline does "
+                              "not already accept")
     chk.add_argument("path", nargs="?", help="limit the scan to this path")
     chk.set_defaults(func=cmd_check)
+
+    base = sub.add_parser("baseline", parents=[common],
+                          help="the ratchet: findings accepted as pre-existing")
+    base.add_argument("path", nargs="?", help="limit the scan to this path")
+    base.add_argument("--record", action="store_true",
+                      help="accept every current finding, replacing the baseline")
+    base.add_argument("--prune", action="store_true",
+                      help="drop records whose finding is no longer present")
+    base.set_defaults(func=cmd_baseline)
 
     return parser
 
@@ -262,12 +433,12 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    for attr in ("path", "strict"):
+    for attr in ("path", "strict", "record", "prune"):
         if not hasattr(args, attr):
             setattr(args, attr, None)
     try:
         return args.func(args)
-    except ConfigError as exc:
+    except (ConfigError, BaselineError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 

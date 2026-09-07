@@ -38,6 +38,7 @@ from .adapters.constants import PythonConstants
 from .adapters.mapping import MappingRegistry
 from .adapters.patterns import CodePatterns
 from .adapters.substitutions import Substitutions
+from .baseline import BASELINE_NAME
 from .bypass import git_ignored
 from .claims import Counted
 from .contract import BaseRegistry
@@ -78,6 +79,10 @@ class Settings:
     #: Numbers the documentation states, and the commands that settle them.
     #: Empty unless declared: no project spawns a process it did not ask for.
     counts: tuple[Counted, ...] = ()
+    #: Where accepted findings are recorded. Always a path, even when no file is
+    #: there yet -- ``baseline --record`` has to know where to write the first
+    #: one, and a project that has never recorded is the normal starting state.
+    baseline: Path = field(default_factory=lambda: Path(BASELINE_NAME))
 
 
 def find_config(start: str | Path = ".") -> Path | None:
@@ -276,6 +281,7 @@ def load(path: str | Path) -> Settings:
         resolve_in=tuple(claims.get("resolve_in", ())),
         commits_in=tuple(claims.get("commits_in", ())),
         counts=_build_counts(raw.get("count", []), path),
+        baseline=root / project.get("baseline", BASELINE_NAME),
     )
 
 

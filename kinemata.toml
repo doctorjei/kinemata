@@ -42,6 +42,15 @@ kind = "code-patterns"
   home = ["src/kinemata/config.py"]
   note = "the config filename -- interpolate, don't respell"
 
+  # The baseline filename, same failure as above and the same fix. A gate that
+  # reads one filename while `--record` writes another is a gate with an
+  # exemption list it never loads.
+  [[registry.entry]]
+  id = "BASELINE_NAME"
+  antipatterns = ['\.kinemata-baseline\.json']
+  home = ["src/kinemata/baseline.py"]
+  note = "the baseline filename -- interpolate, don't respell"
+
   # The projection budget. A second copy of the number is how a budget and the
   # check that enforces it drift apart.
   [[registry.entry]]

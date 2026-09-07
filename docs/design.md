@@ -101,6 +101,23 @@ routes undeclared identifiers to a **review list** rather than a failure. Closin
 ratchet: record the baseline, fail on any increase, drive it down on a separate schedule
 that does not block feature work.
 
+The ratchet is built — `baseline.py`, `kinemata baseline`, read by `check`. Two
+decisions the specification above left open, both settled by measurement rather than
+argument:
+
+- **What identifies a finding across commits** is entry, antipattern, path and matched
+  text, with whitespace collapsed; never the line number, which every edit above the
+  finding changes. Measured over 200 commits of real history, keying on the text costs
+  one spurious report; keying on the line number would have reported most of the file.
+- **Multiplicity is recorded**, so a record covering three identical sites does not
+  exempt a fourth. A baseline that cannot count is a baseline that absorbs.
+
+The honest limit, stated because the alternative is implying reach this does not have:
+an agent can re-record the baseline and silence a real finding. That act is a committed
+file change, which puts it in exactly the category §5's **Catch B** describes — a new
+declaration, visible in the diff, routed to review. The mechanism makes the exemption
+list *visible and countable*; it does not make it unreachable.
+
 **`budget`** — the projection must stay loadable or it stops being a reminder. A byte
 budget, not a token count: tokenizers differ, bytes do not. **The budget is itself a
 catch** — CI fails when the projection exceeds it. This is the one mechanism in this

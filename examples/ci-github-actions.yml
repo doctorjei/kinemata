@@ -19,6 +19,18 @@
 # Without at least (1), this file is a reminder that looks like a gate -- the
 # exact confusion the design is meant to prevent, so it is called out here
 # rather than left implicit.
+#
+# ADOPTING THIS ON A CODEBASE THAT ALREADY FAILS:
+#
+#   kinemata baseline --record   # once, locally; commit the file it writes
+#
+# `check` then fails only on findings the baseline does not already accept, and
+# prints the size of that list on every run.
+#
+# ⚠ Never run `baseline --record` from CI. It would accept whatever the branch
+# introduced and report success -- a gate that rewrites its own pass condition.
+# Recording belongs in a commit a human reviews, which is the only thing keeping
+# the exemption list honest.
 
 name: registry-check
 

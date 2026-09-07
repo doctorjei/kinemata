@@ -12,14 +12,18 @@ sites are present to be found. Skipped when the corpus is not cloned.
 
 from __future__ import annotations
 
+import ast
 import shutil
 import subprocess
+from collections import Counter
 from pathlib import Path
 
 import pytest
 
 from kinemata import Entry, scan
+from kinemata.baseline import record
 from kinemata.contract import BaseRegistry
+from kinemata.report import review
 
 CORPUS = Path(__file__).resolve().parents[1] / "corpus" / "kanibako-cli"
 COMMIT = "42ece129"
@@ -109,3 +113,89 @@ def test_it_finds_a_bypass_the_manual_fix_missed(pre_fix_tree):
 
     still_there = (CORPUS / "src/kanibako/targets/__init__.py").read_text()
     assert '"box_data"' in still_there
+
+
+# -- the ratchet, against the same tree ---------------------------------------
+#
+# Unit tests pin the fingerprint's boundary with constructed findings. These ask
+# the only question that matters for adoption: on a tree that is genuinely
+# failing the gate, does recording it go quiet, and does the next real bypass
+# still fire? A ratchet that answers no to either is worse than no ratchet.
+
+
+@pytest.fixture
+def scratch(pre_fix_tree, tmp_path):
+    """A writable copy of the pre-fix tree; these tests edit the source."""
+    target = tmp_path / "src"
+    shutil.copytree(pre_fix_tree, target)
+    return target
+
+
+def accepted_findings(tree):
+    """Gating findings, tagged with the registry, as the CLI would collect them."""
+    report = review(Constants(), tree, strings_only=True)
+    return [("constants", hit) for hit in report.strong]
+
+
+def test_recording_silences_a_tree_that_is_genuinely_failing(scratch, tmp_path):
+    """Adoption. This tree holds the nine sites ``42ece129`` names, so the gate
+    is red before the baseline and has to be green after it."""
+    findings = accepted_findings(scratch)
+    assert len(findings) >= 9
+
+    split = record(tmp_path / "b.json", findings).split(accepted_findings(scratch))
+    assert not split.new
+    assert not split.stale
+
+
+def test_a_bypass_added_after_the_baseline_still_fires(scratch, tmp_path):
+    """The half a baseline is capable of destroying."""
+    base = record(tmp_path / "b.json", accepted_findings(scratch))
+    (scratch / "kanibako" / "added_later.py").write_text('META = "workset.yaml"\n')
+
+    split = base.split(accepted_findings(scratch))
+    assert [hit.path for _, hit in split.new] == ["kanibako/added_later.py"]
+
+
+def test_shifting_every_accepted_finding_down_its_file_changes_nothing(scratch, tmp_path):
+    """Real churn on a real tree: 40 lines inserted at the top of every file
+    holding an accepted finding. Line numbers all move; the gate stays quiet."""
+    findings = accepted_findings(scratch)
+    base = record(tmp_path / "b.json", findings)
+
+    for path in {hit.path for _, hit in findings}:
+        source = scratch / path
+        source.write_text("\n" * 40 + source.read_text())
+
+    split = base.split(accepted_findings(scratch))
+    assert not split.new
+    assert not split.stale
+
+
+def test_moving_an_accepted_bypass_to_another_file_reports_it(scratch, tmp_path):
+    """Scope, on real source. The site is not new to the tree, but it is new to
+    that file -- and a bypass the baseline follows around the tree would
+    reproduce the failure ``42ece129``'s own tripwire made."""
+    findings = accepted_findings(scratch)
+    base = record(tmp_path / "b.json", findings)
+
+    per_file = Counter(hit.path for _, hit in findings)
+    for _, hit in findings:
+        if per_file[hit.path] != 1:
+            continue
+        lines = (scratch / hit.path).read_text().splitlines(keepends=True)
+        moved = lines[hit.line - 1].strip()
+        try:
+            ast.parse(moved)          # it has to be a statement on its own
+        except SyntaxError:
+            continue
+        del lines[hit.line - 1]
+        (scratch / hit.path).write_text("".join(lines))
+        (scratch / "kanibako" / "moved_here.py").write_text(moved + "\n")
+        break
+    else:
+        pytest.skip("no single-line finding transplants cleanly")
+
+    split = base.split(accepted_findings(scratch))
+    assert [hit.path for _, hit in split.new] == ["kanibako/moved_here.py"]
+    assert len(split.stale) == 1

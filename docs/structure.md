@@ -248,13 +248,38 @@ What this project ships, read back against its own rules:
 
 | Principle | How the registry layer answers it |
 |---|---|
-| §1 reminder or catch | `ids`, `review` and `undeclared` are reminders; `check` and `claims` are catches, and only in CI with branch protection |
+| §1 reminder or catch | `ids`, `review` and `undeclared` are reminders; `check` and `claims` are catches, and only in CI with branch protection; `baseline` is a catch with an escape hatch, below |
 | §1 one source | `review` and `check` run identical analysis; only the exit code differs |
 | §2 spend test | duplication scores yes/no/no — cheap to commit, invisible in a diff, silent on landing |
 | §3 refuse | bad configuration raises; an empty registry raises; a registry that cannot detect its identifiers refuses to be `closed`; suppression is reported |
 | §3 break it on purpose | the self-check's five entries were each verified by injecting the bypass and watching the gate fail |
 | §6 validation | labeled history from real repositories, with the components that failed labeled as failing |
 | §4 classify first | `undeclared` reports; `check` and `claims` gate. A missing file is a fact; text repeating with no declared home is a judgment |
+
+One of those rows was added late, and the reason generalizes past this project. Every
+mechanism above was built and validated on the question *does it find the thing?* — and all
+of them answered yes while remaining unusable on any codebase older than the mechanism,
+because a first run on a mature tree reports dozens of findings for code nobody is touching.
+
+> **A gate that cannot be adopted incrementally is a gate that gets switched off.** Finding
+> the problem and being adoptable are separate properties, and passing the first says nothing
+> about the second.
+
+The answer is a ratchet: record what exists, fail only on increase, drive the recorded set
+down on a schedule that does not block feature work. It is the same shape as `closed` in
+`design.md` §4.3 — a property a legacy project cannot satisfy on day one and can converge to.
+
+A ratchet is an allowlist, though, and allowlists rot silently, which puts it squarely in §3's
+territory. Three properties keep the rot visible: the accepted set is stored as individual
+fingerprints rather than a total (a count of 42 is satisfied by any 42 findings); repetitions
+are counted, so identical sites cannot hide behind one another; and the size is printed on
+**every** run, including clean ones, because an exemption list nobody reads the size of is the
+inert signal all over again.
+
+And by §1's own test it is not a pure catch: an agent can silence a real finding by
+re-recording the baseline. What is true is narrower and worth stating in those terms — the
+escape is a committed file change, visible in the diff. **The mechanism makes the exemption
+list visible and countable; it does not make it unreachable.**
 
 And where it does not reach, stated plainly because §6 requires it.
 

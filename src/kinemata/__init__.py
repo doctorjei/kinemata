@@ -16,3 +16,7 @@ __all__ = [
 from .bypass import Bypass, scan, unused  # noqa: E402
 
 __all__ += ["Bypass", "scan", "unused"]
+
+from .baseline import Accepted, Baseline, BaselineError, record  # noqa: E402
+
+__all__ += ["Accepted", "Baseline", "BaselineError", "record"]
