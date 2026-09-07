@@ -22,4 +22,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
-testpaths = ["tests"]
+# The kanibako branch carries an integration suite as well; without naming it
+# here a bare `pytest` would collect only `tests/` and report green while the
+# integration test never ran.
+testpaths = ["tests", "integrations"]

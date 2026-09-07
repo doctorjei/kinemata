@@ -1,0 +1,113 @@
+# Canon checked with the tool this box is building.
+#
+# The notebook and workbook are documentation like any other: they assert paths,
+# cite commits, state test counts, and use the project's spellings. Those are
+# claims about a tree, so they get falsified rather than proofread. This config
+# replaces `doc-check.py`, whose every check now has an equivalent here.
+#
+# `bible` and `handbook` are excluded because they are not ours to edit.
+
+[project]
+root = "."
+exclude = ["bible/", "handbook/", "temp/"]
+
+[claims]
+suffixes = [".md"]
+# Archives cite what was true when they were written. An archive is not stale.
+historical = ["archives/"]
+# These notes describe the repository next door, so its tree resolves them.
+resolve_in = ["../workspace"]
+# Review notes cite the corpora they were written against. Those commits are
+# real; they just live in somebody else's repository.
+commits_in = [
+  "../workspace/corpus/kanibako-cli",
+  "../workspace/corpus/kento-core",
+  "../workspace/corpus/kento-cli",
+  "../workspace/corpus/canvasser",
+  "../workspace/corpus/persona-grata",
+]
+
+# The suite lives in the repository next door, so the oracle runs there while
+# the claims being checked are here.
+[[count]]
+label = "test count"
+pattern = '\*\*(\d+) tests?\*\*|\b(\d+) tests? pass\b|\*\*Tests:\*\* (\d+) pass\b|\b(\d+) tests? collected\b'
+command = ["{python}", "-m", "pytest", "--collect-only", "-q"]
+extract = '(\d+) tests collected'
+directory = "../workspace"
+
+# What a session actually loads. Kanibako flattens these into the instruction
+# file the harness reads every session and leaves it on disk for review; older
+# session-start records of the same text show 12,973 B on 09-02, 21,357 B on
+# 09-05, 22,800 B on 09-06. Seventy-six percent in four days, while this box was
+# building mechanisms against context overwhelm, and nothing noticed. Those older
+# records are a sample, not a census -- not every session left one.
+#
+# Globs, not filenames: a document added to a loaded directory has to be counted
+# without anybody remembering to list it.
+#
+# The compiled canon is graph traversal PLUS comment stripping, over only the
+# canon considered critical. Both halves matter, and the set is the half that is
+# easy to get wrong: `procedures/` is deferred by design and is NOT compiled in,
+# and each tome's `*_CONTENTS.md` is replaced by the compiler's own table. An
+# earlier version of these globs swept whole tomes and counted 2,122 B that never
+# reaches a session, while missing `COLLECTION.md`, which does.
+#
+# Verified against the compiled file by probing each source file's own lines for
+# presence in it: the seven that are compiled in, plus COLLECTION.md, come to
+# 23,281 B against a 23,786 B artifact. The 505 B difference (2.1%) is the
+# compiler's generated scaffolding -- its title, table and section numbering.
+#
+# Ceiling is that measurement rounded up, so this is a ratchet: growth fails, and
+# lowering it is a visible edit. It tracks *criticality as canon defines it*, so
+# if the compiler's notion of critical changes, re-derive rather than assume.
+[context]
+include = [
+  "COLLECTION.md",
+  "bible/**/directives/**/*.md",
+  "handbook/**/directives/**/*.md",
+  "notebook/MY_CONTENTS.md",
+  "notebook/directives/**/*.md",
+]
+budget = 24064
+strip = ["html-comments"]
+
+# Canon has no CI, so these gates are run by hand and `where` points at the
+# document that says to run them. Be clear about what that is worth: it catches
+# the *instruction* being deleted in a trim, not the gates going unrun. A
+# reminder about a reminder. It is declared anyway because the instruction has
+# real work to do -- it is the only thing keeping canon's own documentation
+# honest -- and because losing it would be silent otherwise.
+[[gate]]
+command = "kinemata check"
+where = ["notebook/directives/CONVENTIONS.md"]
+note = "canon's spellings and retired names"
+
+[[gate]]
+command = "kinemata claims"
+where = ["notebook/directives/CONVENTIONS.md"]
+note = "canon's documentation claims"
+
+[[gate]]
+command = "kinemata context"
+where = ["notebook/directives/CONVENTIONS.md"]
+note = "the ceiling on what a session loads"
+
+# One carrier for the spelling list: the copy in the repository. A second copy
+# here would be the duplication this whole project is about.
+[[registry]]
+name = "spelling"
+kind = "substitutions"
+source = "../workspace/docs/american-english.toml"
+suffixes = [".md"]
+
+# Names retired during this project, which the notes must not quietly revive.
+[[registry]]
+name = "retired"
+kind = "substitutions"
+suffixes = [".md"]
+case_sensitive = true
+
+  [registry.words]
+  "registry.toml" = "kinemata.toml"
+  "registry-contract.md" = "docs/design.md"
