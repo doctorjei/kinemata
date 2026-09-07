@@ -29,6 +29,29 @@ pattern = '\*\*(\d+) tests?\*\*|\b(\d+) tests? pass\b|\*\*Tests:\*\* (\d+) pass\
 command = ["{python}", "-m", "pytest", "--collect-only", "-q"]
 extract = '(\d+) tests collected'
 
+# The checks that must run, and the workflow that must run them. Deleting a
+# step from CI now fails this gate instead of quietly passing; the only way to
+# make it pass again is to delete the declaration too, which is a visible edit.
+#
+# Declared because the alternative has failed here three times: a registry over
+# the wrong adapter that scanned nothing for six commits, `doc-check`'s
+# exclusions growing until it reported clean, and two numbers in prose that no
+# oracle covered. Green and inert read identically from outside.
+#
+# A reminder, not a catch -- an agent can edit both files in one commit. Branch
+# protection with these jobs as required status checks is what makes them real.
+[[gate]]
+command = "pytest -q"
+note = "the suite itself"
+
+[[gate]]
+command = "kinemata check"
+note = "the tool against its own source"
+
+[[gate]]
+command = "kinemata claims"
+note = "documentation, and this inventory"
+
 [[registry]]
 name = "canonical"
 kind = "code-patterns"

@@ -99,6 +99,11 @@ In practice this means a mechanism reports rather than skips:
   exited 0 the entire time. The wrong adapter reads precisely like a clean tree.
 - Suppression is reported, never silent. When the scan drops an antipattern that matches more
   sites than the threshold allows, it says so.
+- **A check nothing invokes is the same failure one level out**, and the one a project is
+  likeliest to miss, because every mechanism above is still correct — it simply never runs.
+  So the required checks are *declared*, and the declaration is verified against the files
+  meant to run them: a deleted step fails, and so does one commented out to unblock a merge.
+  Making it pass then requires deleting the declaration, which is an edit somebody can see.
 
 Note what the exception in each case is not: a warning. A warning on a green run is read as
 green. The escape hatch for the empty-registry rule is `allow_empty = true`, declared per
@@ -252,6 +257,7 @@ What this project ships, read back against its own rules:
 | §1 one source | `review` and `check` run identical analysis; only the exit code differs |
 | §2 spend test | duplication scores yes/no/no — cheap to commit, invisible in a diff, silent on landing |
 | §3 refuse | bad configuration raises; an empty registry raises; a registry that cannot detect its identifiers refuses to be `closed`; suppression is reported |
+| §3 stay running | the checks a project requires are declared and verified against the files meant to run them, so a deleted or commented-out step fails instead of passing |
 | §3 break it on purpose | the self-check's five entries were each verified by injecting the bypass and watching the gate fail |
 | §6 validation | labeled history from real repositories, with the components that failed labeled as failing |
 | §4 classify first | `undeclared` reports; `check` and `claims` gate. A missing file is a fact; text repeating with no declared home is a judgment |

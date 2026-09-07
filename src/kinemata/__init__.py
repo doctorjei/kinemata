@@ -20,3 +20,7 @@ __all__ += ["Bypass", "scan", "unused"]
 from .baseline import Accepted, Baseline, BaselineError, record  # noqa: E402
 
 __all__ += ["Accepted", "Baseline", "BaselineError", "record"]
+
+from .gates import Gate, Inventory, enforced  # noqa: E402
+
+__all__ += ["Gate", "Inventory", "enforced"]

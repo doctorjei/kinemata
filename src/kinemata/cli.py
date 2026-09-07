@@ -37,6 +37,7 @@ from .baseline import Baseline, BaselineError, record
 from .bypass import Bypass
 from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
 from .claims import verify
+from .gates import enforced
 from .literals import clusters
 from .projection import project
 from .report import DEFAULT_MAX_SITES, Report, review
@@ -195,13 +196,18 @@ def cmd_undeclared(args: argparse.Namespace) -> int:
 
 
 def cmd_claims(args: argparse.Namespace) -> int:
-    """Falsify what the documentation asserts about the tree.
+    """Falsify what the project asserts about itself: in prose, and in CI.
 
     Gates, unlike ``undeclared``. A missing file is a fact, not a judgment.
 
     Prints the number of claims checked even when everything resolves, because
     "all resolve" and "nothing was looked at" read identically otherwise -- and
     this project has already shipped one check that passed by examining nothing.
+
+    The gate inventory rides here rather than in a command of its own. A check
+    that verifies other checks are wired up is worthless if nothing guarantees
+    *it* runs, and adding a fifth command would have created exactly that
+    regress. Folded into an existing gate, it runs wherever that gate does.
     """
     settings = _settings(args)
     found = verify(
@@ -213,14 +219,30 @@ def cmd_claims(args: argparse.Namespace) -> int:
         resolve_in=settings.resolve_in,
         commits_in=settings.commits_in,
     )
-    body = found.text()
+    inventory = enforced(settings.root, settings.gates)
+
+    body = "\n".join(part for part in (found.text(), inventory.text()) if part.strip())
     if body.strip():
         print(body)
-    if found.failed:
-        detail = f"{len(found.broken)} of {found.checked} claim(s) do not resolve"
+
+    # Printed whenever any gate is declared, and not suppressed by --quiet: a
+    # declaration list that shrinks to nothing is the one failure this check
+    # cannot fail on, so the number has to be in front of a reader.
+    if inventory.declared:
+        print(f"gates: {len(inventory.verified)} of {inventory.declared} "
+              f"declared check(s) run in {', '.join(inventory.searched) or 'nothing'}")
+
+    if found.failed or inventory.failed:
+        parts = []
+        if found.broken:
+            parts.append(
+                f"{len(found.broken)} of {found.checked} claim(s) do not resolve"
+            )
         if found.blocked:
-            detail += f"; {len(found.blocked)} declared check(s) could not run"
-        print(f"\nFAIL: {detail}.", file=sys.stderr)
+            parts.append(f"{len(found.blocked)} declared check(s) could not run")
+        if inventory.absent:
+            parts.append(f"{len(inventory.absent)} declared gate(s) do not run")
+        print(f"\nFAIL: {'; '.join(parts)}.", file=sys.stderr)
         return 1
     if not args.quiet:
         print(f"{found.checked} documentation claim(s) checked, all resolve.")

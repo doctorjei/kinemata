@@ -42,6 +42,7 @@ from .baseline import BASELINE_NAME
 from .bypass import git_ignored
 from .claims import Counted
 from .contract import BaseRegistry
+from .gates import Gate
 
 CONFIG_NAMES = ("kinemata.toml", ".kinemata.toml")
 
@@ -83,6 +84,10 @@ class Settings:
     #: there yet -- ``baseline --record`` has to know where to write the first
     #: one, and a project that has never recorded is the normal starting state.
     baseline: Path = field(default_factory=lambda: Path(BASELINE_NAME))
+    #: Checks the project declares must run, verified against the files meant to
+    #: run them. Empty unless declared: a project that has not said which checks
+    #: are required has not made a claim to falsify.
+    gates: tuple[Gate, ...] = ()
 
 
 def find_config(start: str | Path = ".") -> Path | None:
@@ -282,7 +287,30 @@ def load(path: str | Path) -> Settings:
         commits_in=tuple(claims.get("commits_in", ())),
         counts=_build_counts(raw.get("count", []), path),
         baseline=root / project.get("baseline", BASELINE_NAME),
+        gates=_build_gates(raw.get("gate", []), path),
     )
+
+
+def _build_gates(declarations: list[dict[str, Any]], path: Path) -> tuple[Gate, ...]:
+    """``[[gate]]`` tables. A gate with no command declares nothing.
+
+    Refused rather than skipped, for the same reason a half-declared count is:
+    it looks configured and settles nothing, which is the inert signal wearing
+    the shape of a check.
+    """
+    built: list[Gate] = []
+    for index, spec in enumerate(declarations):
+        command = spec.get("command")
+        if not command:
+            raise ConfigError(f"{path}: [[gate]] {index} is missing 'command'")
+        built.append(
+            Gate(
+                command=str(command),
+                where=tuple(str(item) for item in spec.get("where", ())),
+                note=str(spec.get("note", "")),
+            )
+        )
+    return tuple(built)
 
 
 def _build_counts(declarations: list[dict[str, Any]], path: Path) -> tuple[Counted, ...]:

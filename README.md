@@ -201,6 +201,55 @@ visible in the diff and routed to review — the same status as any other declar
 exemption. This is a catch with an escape hatch, and claiming otherwise would be
 claiming reach it does not have.
 
+## Declaring which checks must run
+
+Every mechanism here dies the same way: not by failing, but by quietly ceasing
+to run. This project has watched it happen three times — a registry over the
+wrong adapter that scanned for nothing and exited 0 for six commits, a
+predecessor checker whose exclusion list grew until it called a dirty tree
+clean, and two numbers stated in prose that no oracle covered and that were both
+wrong when finally measured. **Green and inert are indistinguishable from
+outside.**
+
+So declare the checks that must run, and let the tool verify the files meant to
+run them:
+
+```toml
+[[gate]]
+command = "kinemata check"
+note = "the tool against its own source"
+
+[[gate]]
+command = "pytest -q"
+where = [".github/workflows/checks.yml"]   # default: every workflow
+```
+
+`kinemata claims` then reports `gates: 3 of 3 declared check(s) run in …` and
+fails when one is absent. A step that is deleted fails it; so does a step
+**commented out**, which is how a gate most plausibly dies — someone silences it
+to unblock a merge and never restores it.
+
+It rides on `claims` rather than being a command of its own on purpose. A check
+that verifies other checks are wired up is worthless if nothing guarantees *it*
+runs, and a fifth command would have created exactly that regress.
+
+**What it does not see**, since a checker that overstates its reach is the
+problem it is trying to solve: a step disabled by `if:`, a job nothing triggers,
+or a command that runs and checks nothing. It verifies that the text is present
+and uncommented. It does not parse YAML — the core takes no runtime
+dependencies — and it cannot tell a live step from a decorative one. By the
+test above it is a **reminder**: an agent can edit the declaration and the
+workflow in one commit. What it converts is silent removal into *stated*
+removal, visible in a diff.
+
+`where` accepts any file, not only a workflow, so a project whose checks are run
+by hand can at least declare that the instruction to run them still exists. That
+is a reminder about a reminder, and worth what it sounds like.
+
+The companion guard is a number with an oracle. This suite is **159 tests**, and
+`kinemata claims` settles that figure against `pytest --collect-only`, so a
+suite that silently shrinks fails the gate rather than passing faster.
+
 ## Precision
 
 Naive matching is unusable. On a 65k-line codebase, deriving antipatterns from
