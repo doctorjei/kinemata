@@ -1,6 +1,6 @@
 # Clause Traceability Brief — two design deltas
 
-**Written against v3** (`brief-new.md`, which resolves G1–G4 and both minors).
+**Written against v3**, the revision that resolves G1–G4 and both minors.
 
 **These are not defects.** They are two places where the design meets work done from a
 different angle, and where the brief would gain from a change it has no way to see from
