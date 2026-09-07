@@ -127,6 +127,7 @@ kinemata undeclared  # advisory. Repeated text with no declared home.
 kinemata check       # the gate. Exits 1 on a strong finding. Run in CI.
 kinemata claims      # the gate, for documentation. Exits 1 on a dead claim.
 kinemata baseline    # what the gate already accepts. --record to change it.
+kinemata context     # the gate, for what a session loads. Exits 1 over the ceiling.
 ```
 
 A registry that produces **no entries is refused, not accepted quietly** — a missing
@@ -201,6 +202,89 @@ visible in the diff and routed to review — the same status as any other declar
 exemption. This is a catch with an escape hatch, and claiming otherwise would be
 claiming reach it does not have.
 
+## Budgeting what a session actually loads
+
+`kinemata ids` bounds the registry's own projection, which is the smallest thing
+an agent reads. The instruction layer — the harness file, a project's policy
+documents, the docs a session is told to open — is unbounded, and that is where
+*overwhelmed with context* actually lives.
+
+The incident this was built from was measured, not imagined. One agent harness
+assembles a set of policy documents into the instruction file it loads, on every
+load — a build output, regenerated each session, not a source. Session-start
+records of that output survive, so what was actually loaded is measured rather
+than estimated:
+
+| Date | Loaded |
+|---|---|
+| 2026-09-02 | 12,973 B (four records, identical) |
+| 2026-09-05 | 21,357 B |
+| 2026-09-06 | 22,800 B |
+
+**Seventy-six percent in four days**, on a project that was itself building
+mechanisms against context overwhelm, and nothing noticed. Growth hides because every
+individual addition is defensible; only the total is a problem, and nobody was
+looking at the total.
+
+Those records are a sample, not a census — not every session left one — so the
+series carries a direction and a rate rather than a starting size.
+
+**This measures the sources and models the assembly**, which is the only form
+that works: the assembled file exists only after the harness has run, on a
+machine where it has run, so a check that read it could not run in CI, on a clean
+clone, or before the growth it exists to catch has already landed. The sources
+are what persist and what a commit changes.
+
+```toml
+[context]
+include = ["bible/**/*.md", "handbook/**/*.md", "notebook/directives/*.md"]
+budget = 25600
+strip = ["html-comments"]
+```
+
+`kinemata context` weighs it and fails over the ceiling; `-v` lists the files
+largest-first, which is the part that tells you where to cut.
+
+**Globs, not filenames.** A document added to a loaded directory has to be
+counted without anyone remembering to list it — a filename list is an allowlist
+that silently omits whatever arrives next.
+
+**Set the ceiling by measuring**, not by taste. There is deliberately no default:
+a number nobody chose, enforced as though somebody had, is worse than no ceiling.
+Measure, set it at what you already carry, then drive it down.
+
+**`strip` models the harness's flattening**, because measuring files on disk
+over-reports whatever the assembler removes — in one real corpus, HTML comment
+blocks held the original packaged text of every document, **44%** of its bytes
+and none of it ever loaded. Transforms are a declared table; an unknown one is
+refused rather than ignored.
+
+Three limits, since a checker that overstates its reach is the problem it is
+trying to solve:
+
+- **Bytes are not attention.** This bounds size, never relevance. Twelve
+  kilobytes of irrelevant material is worse than twenty of necessary material,
+  and no byte count can tell them apart.
+- **It measures what you declare is loaded.** If the declaration drifts from what
+  the harness reads, this measures the wrong thing precisely.
+- **Getting the *set* right is the hard half, not the stripping.** One real
+  assembler compiles its instruction file by walking a reference graph **and**
+  stripping comment blocks, over only the documents it treats as critical.
+  Checked against it by probing each source file's own lines for presence in the
+  output: **23,287 B modeled against 23,786 B produced**, the 2.1% residue being
+  the compiler's own title, contents table and section numbering. Note the
+  direction — with the set right this *under*-counts, so a ceiling wants headroom.
+  The first attempt at that figure swept whole directories, counted deferred
+  material that never loads, missed a file that does, and reported the difference
+  as an error rate. **A set you did not verify is not a measurement.**
+- **"What a session loads" is a decision, not a property of the tree** — the
+  sharpest limit here. Documentation worth bounding is usually built for
+  *deferred* loading: an entry point of pointers, detail fetched when a task
+  needs it. Most of a corpus may never reach a session, and which parts do can
+  differ per session and per person. Declaring a set declares an *intent* — this
+  is what we mean to load up front — and the check bounds that intent. It cannot
+  see what an agent actually opened.
+
 ## Declaring which checks must run
 
 Every mechanism here dies the same way: not by failing, but by quietly ceasing
@@ -246,7 +330,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **159 tests**, and
+The companion guard is a number with an oracle. This suite is **175 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 

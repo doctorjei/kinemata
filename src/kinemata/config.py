@@ -41,6 +41,7 @@ from .adapters.substitutions import Substitutions
 from .baseline import BASELINE_NAME
 from .bypass import git_ignored
 from .claims import Counted
+from .context import STRIPPERS
 from .contract import BaseRegistry
 from .gates import Gate
 
@@ -59,6 +60,15 @@ class ConfigError(Exception):
 #: that mark a record as superseded. Defaults rather than requirements: a
 #: project with no ``[claims]`` table still gets its markdown checked.
 DEFAULT_CLAIM_SUFFIXES = (".md",)
+
+
+@dataclass(frozen=True)
+class ContextBudget:
+    """The declared instruction layer and what it may weigh."""
+
+    include: tuple[str, ...]
+    budget: int
+    strip: tuple[str, ...] = ()
 
 
 @dataclass
@@ -88,6 +98,9 @@ class Settings:
     #: run them. Empty unless declared: a project that has not said which checks
     #: are required has not made a claim to falsify.
     gates: tuple[Gate, ...] = ()
+    #: What a session loads, and what it may weigh. ``None`` when the project has
+    #: not declared a ``[context]`` table -- distinct from a ceiling of zero.
+    context: ContextBudget | None = None
 
 
 def find_config(start: str | Path = ".") -> Path | None:
@@ -288,6 +301,40 @@ def load(path: str | Path) -> Settings:
         counts=_build_counts(raw.get("count", []), path),
         baseline=root / project.get("baseline", BASELINE_NAME),
         gates=_build_gates(raw.get("gate", []), path),
+        context=_build_context(raw.get("context"), path),
+    )
+
+
+def _build_context(spec: dict[str, Any] | None, path: Path) -> ContextBudget | None:
+    """The ``[context]`` table, refused rather than half-honored.
+
+    There is deliberately **no default ceiling**. No number is right for every
+    project, and a default would be a number nobody chose being enforced as
+    though somebody had. Measure first, set the ceiling at what you already
+    carry, then drive it down.
+    """
+    if spec is None:
+        return None
+    include = spec.get("include")
+    budget = spec.get("budget")
+    missing = [key for key, value in (("include", include), ("budget", budget))
+               if not value]
+    if missing:
+        raise ConfigError(
+            f"{path}: [context] is missing {', '.join(missing)}. A budget with "
+            "nothing to weigh, or a set with no ceiling, checks nothing."
+        )
+    strip = tuple(str(name) for name in spec.get("strip", ()))
+    unknown = [name for name in strip if name not in STRIPPERS]
+    if unknown:
+        raise ConfigError(
+            f"{path}: [context] strip has unknown transform(s) {unknown} "
+            f"(known: {', '.join(sorted(STRIPPERS))})"
+        )
+    return ContextBudget(
+        include=tuple(str(pattern) for pattern in include),
+        budget=int(budget),
+        strip=strip,
     )
 
 

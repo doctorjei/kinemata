@@ -24,3 +24,7 @@ __all__ += ["Accepted", "Baseline", "BaselineError", "record"]
 from .gates import Gate, Inventory, enforced  # noqa: E402
 
 __all__ += ["Gate", "Inventory", "enforced"]
+
+from .context import Loaded, Measurement, measure  # noqa: E402
+
+__all__ += ["Loaded", "Measurement", "measure"]

@@ -15,6 +15,11 @@ One scan, two consumers -- the split this project is organized around:
     host-side or in CI, **where an agent cannot edit or skip it**. A check the
     agent controls is a reminder wearing a catch's clothes.
 
+``kinemata context``
+    The other budget. ``ids`` bounds the registry's own projection, which is the
+    smallest thing an agent reads; this bounds the instruction layer, which is
+    where context overwhelm actually happens. Gates.
+
 ``kinemata baseline``
     The ratchet's control surface: what a project has accepted, and the one
     command that changes it. ``check`` reads the baseline; nothing else does.
@@ -37,6 +42,7 @@ from .baseline import Baseline, BaselineError, record
 from .bypass import Bypass
 from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
 from .claims import verify
+from .context import measure
 from .gates import enforced
 from .literals import clusters
 from .projection import project
@@ -249,6 +255,36 @@ def cmd_claims(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_context(args: argparse.Namespace) -> int:
+    """Weigh what a session loads against its declared ceiling.
+
+    Gates, because a ceiling exists to be enforced. Running it with nothing
+    declared is a configuration error rather than a pass: a command that
+    measures an empty set and exits 0 is the inert signal again.
+    """
+    settings = _settings(args)
+    if settings.context is None:
+        raise ConfigError(
+            "no [context] declared: nothing says what a session loads. "
+            "Declare include globs and a budget, or do not run this."
+        )
+
+    found = measure(
+        settings.root,
+        settings.context.include,
+        ceiling=settings.context.budget,
+        strip=settings.context.strip,
+    )
+    print(found.text(verbose=args.verbose))
+    if found.failed:
+        print(
+            f"\nFAIL: what a session loads is {found.over} B over its ceiling.",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
 def _narrowed(args: argparse.Namespace) -> str | None:
     """Why this scan does not cover the whole project, if it does not.
 
@@ -439,6 +475,10 @@ def build_parser() -> argparse.ArgumentParser:
                               "not already accept")
     chk.add_argument("path", nargs="?", help="limit the scan to this path")
     chk.set_defaults(func=cmd_check)
+
+    ctx = sub.add_parser("context", parents=[common],
+                         help="gate: what a session loads, against its ceiling")
+    ctx.set_defaults(func=cmd_context)
 
     base = sub.add_parser("baseline", parents=[common],
                           help="the ratchet: findings accepted as pre-existing")

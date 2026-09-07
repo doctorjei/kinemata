@@ -124,6 +124,13 @@ catch** — CI fails when the projection exceeds it. This is the one mechanism i
 document that acts directly on context overwhelm, and it works by making the registry's
 growth visible at the moment it becomes a problem rather than after.
 
+That last claim was too generous to itself. The projection is the *smallest* thing an
+agent loads; the instruction layer around it is where the failure actually happens, and
+this document bounded the part it happened to own. The same policy pointed at the declared
+instruction set is `kinemata context`, built 09-07 after the box running this project was
+found to have grown its own loaded canon 76% in four days without noticing. The budget
+idea generalized; the scope this section gave it did not.
+
 ---
 
 ## 5. First application — duplication
