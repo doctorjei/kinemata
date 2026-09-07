@@ -12,7 +12,7 @@ license = "GPL-3.0-only"
 
 [project.optional-dependencies]
 yaml = ["PyYAML>=6"]                 # only for kind = "yaml-mapping"
-dev = ["pytest>=8", "PyYAML>=6"]
+dev = ["pytest>=8", "PyYAML>=6", "ruff>=0.16,<0.17"]  # bounded: see [tool.ruff.lint]
 
 [project.scripts]
 kinemata = "kinemata.cli:main"
@@ -23,3 +23,18 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+# No `target-version`: `requires-python` above already declares it and ruff
+# reads it from there. Two carriers for one fact is what this tool exists to
+# find.
+[tool.ruff]
+line-length = 100                    # the tree's widest line is 99; a ceiling to drive down
+
+[tool.ruff.lint]
+# Declared explicitly rather than taking the default set, which changes between
+# releases -- a rule set that shifts on upgrade is a check nobody chose. The
+# version bound in the `dev` extra holds the same line from the other side.
+#
+# `E` is not optional here: the `# noqa: E402` directives in `__init__.py` are
+# live only while it is selected, and ruff reports them as unused without it.
+select = ["E", "W", "F", "I", "UP", "B", "RUF", "PLW1510"]

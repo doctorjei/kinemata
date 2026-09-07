@@ -24,9 +24,9 @@ author a narrower pattern by hand.
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass, field
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
 
 from .bypass import Bypass, scan
 from .contract import BaseRegistry

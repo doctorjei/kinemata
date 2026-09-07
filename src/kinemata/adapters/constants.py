@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import ast
 import re
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, Sequence
 
 from ..contract import BaseRegistry, Entry
 

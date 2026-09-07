@@ -75,9 +75,9 @@ whatever arrives next, which is the same rot a baseline has.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterable, Sequence
 
 #: Transforms applied before measuring, declared by name in ``[context] strip``.
 #: A table rather than a branch, so adding one does not mean editing the caller

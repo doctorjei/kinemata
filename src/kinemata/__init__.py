@@ -3,7 +3,10 @@
 from .contract import BaseRegistry, Entry, Registry, undeclared
 from .projection import BudgetViolation, Projection, project
 
-__all__ = [
+# Grouped by source module, mirroring the imports above and the `__all__ +=`
+# blocks below. Sorting only this list would leave one block ordered one way
+# and four the other.
+__all__ = [  # noqa: RUF022
     "BaseRegistry",
     "Entry",
     "Registry",
@@ -13,7 +16,7 @@ __all__ = [
     "project",
 ]
 
-from .bypass import Bypass, scan, unused  # noqa: E402
+from .bypass import Bypass, scan, unused
 
 __all__ += ["Bypass", "scan", "unused"]
 

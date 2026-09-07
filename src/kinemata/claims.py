@@ -35,9 +35,9 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import Callable, Iterable, Iterator, Sequence
 
 from .bypass import GIT_DIR, SKIP_DIRS, _walk, git_ignored
 
@@ -194,7 +194,7 @@ class Verification:
 
 def _git(root: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["git", "-C", str(root), *arguments], capture_output=True, text=True
+        ["git", "-C", str(root), *arguments], capture_output=True, text=True, check=False
     )
 
 
@@ -366,6 +366,7 @@ def actual_count(spec: Counted, root: Path) -> int | None:
     try:
         result = subprocess.run(
             command, cwd=str(root / spec.directory), capture_output=True, text=True,
+            check=False,
         )
     except (OSError, ValueError):
         return None

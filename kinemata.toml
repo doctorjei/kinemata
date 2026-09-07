@@ -52,6 +52,10 @@ note = "the tool against its own source"
 command = "kinemata claims"
 note = "documentation, and this inventory"
 
+[[gate]]
+command = "ruff check"
+note = "lint; the rule set is declared in pyproject.toml"
+
 [[registry]]
 name = "canonical"
 kind = "code-patterns"

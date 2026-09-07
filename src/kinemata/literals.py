@@ -31,9 +31,9 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Sequence
 
 from .bypass import _walk
 from .prose import ANNOTATION_STRINGS, LITERAL_EXTRACTORS, MESSAGE_SKELETONS
@@ -200,7 +200,7 @@ def _near_clusters(
     # A word appearing across a large share of literals is vocabulary, not kinship.
     ceiling = max(3, len(values) // 10)
     candidates: dict[frozenset[int], None] = {}
-    for word, holders in index.items():
+    for holders in index.values():
         if len(holders) > ceiling:
             continue
         for a_pos, a in enumerate(holders):

@@ -40,8 +40,8 @@ from pathlib import Path
 
 from .baseline import Baseline, BaselineError, record
 from .bypass import Bypass
-from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
 from .claims import verify
+from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
 from .context import measure
 from .gates import enforced
 from .literals import clusters

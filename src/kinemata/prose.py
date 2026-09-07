@@ -117,7 +117,7 @@ def python_strings_only(source: str) -> str:
     for token in tokens:
         if token.type not in (tokenize.STRING, getattr(tokenize, "FSTRING_MIDDLE", -1)):
             continue
-        (start_row, start_col), (end_row, _) = token.start, token.end
+        start_row, start_col = token.start
         if start_row in docstring_rows:
             continue
         for offset, piece in enumerate(token.string.splitlines()):

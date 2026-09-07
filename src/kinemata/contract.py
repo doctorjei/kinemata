@@ -16,9 +16,10 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Any, Iterable, Mapping, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 #: Bytes a projection may occupy before it stops being loadable. A byte budget,
 #: not a token count -- tokenizers differ, bytes do not.

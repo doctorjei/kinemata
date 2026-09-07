@@ -308,7 +308,7 @@ command = "pytest -q"
 where = [".github/workflows/checks.yml"]   # default: every workflow
 ```
 
-`kinemata claims` then reports `gates: 3 of 3 declared check(s) run in …` and
+`kinemata claims` then reports `gates: 2 of 2 declared check(s) run in …` and
 fails when one is absent. A step that is deleted fails it; so does a step
 **commented out**, which is how a gate most plausibly dies — someone silences it
 to unblock a merge and never restores it.

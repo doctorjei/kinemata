@@ -13,7 +13,8 @@ live and how to spell an identifier, and gets the rest for free.
 from __future__ import annotations
 
 import re
-from typing import Any, Iterable, Mapping
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 from ..contract import BaseRegistry, Entry
 

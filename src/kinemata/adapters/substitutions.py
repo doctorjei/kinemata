@@ -23,7 +23,7 @@ recording that ``recognisable`` was corrected has to spell the word to say so.
 from __future__ import annotations
 
 import re
-from typing import Iterable, Mapping
+from collections.abc import Iterable, Mapping
 
 from ..contract import BaseRegistry, Entry
 

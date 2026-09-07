@@ -18,7 +18,8 @@ such helpers a project actually has -- a handful, not hundreds.
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any
 
 from ..contract import BaseRegistry, Entry
 

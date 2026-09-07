@@ -19,6 +19,20 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: pytest -q
 
+  lint:
+    # Unused imports and stale suppressions are cheap to commit and invisible in
+    # review, which is where a mechanism earns its keep. Its own job, so a lint
+    # failure never stops the suite from reporting.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      # Installed through the dev extra so the version bound has one carrier.
+      - run: pip install -e ".[dev]"
+      - run: ruff check
+
   self-check:
     # Dogfooding is not decoration here: a duplication checker that duplicates
     # its own constants would be evidence against itself.

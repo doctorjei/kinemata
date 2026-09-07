@@ -24,9 +24,9 @@ from __future__ import annotations
 
 import re
 import subprocess
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Iterable, Iterator, Sequence
 
 from .contract import BaseRegistry, Entry
 from .prose import FILTERS, LITERAL_EXTRACTORS, PROSE_FILTERS, STRING_FILTERS
@@ -66,7 +66,7 @@ def git_ignored(root: str | Path) -> tuple[str, ...]:
     result = subprocess.run(
         ["git", "-C", str(root), "ls-files", "--others", "--ignored",
          "--exclude-standard", "--directory"],
-        capture_output=True, text=True,
+        capture_output=True, text=True, check=False,
     )
     if result.returncode != 0:
         return ()

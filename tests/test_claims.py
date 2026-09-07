@@ -9,8 +9,6 @@ from __future__ import annotations
 import subprocess
 import textwrap
 
-import pytest
-
 from kinemata.claims import CLAIM_KINDS, verify
 
 
