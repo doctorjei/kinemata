@@ -332,7 +332,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **192 tests**, and
+The companion guard is a number with an oracle. This suite is **198 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 
@@ -389,6 +389,26 @@ because "all resolve" and "nothing was looked at" otherwise read identically.
 A claim it cannot settle is **named, not skipped** — run outside a git
 repository, it reports that commit hashes went unchecked rather than passing
 quietly.
+
+**A design document claims things that do not exist yet**, and without somewhere
+to say so it cannot be gated at all: every path describing the work itself is
+false until the work lands, so the gate runs permanently red — which teaches its
+reader to skim it — or the project fabricates a stub that passes by letter. On a
+real design set that was 6 failures out of 52 claims, all of that class.
+
+```toml
+[claims]
+promised = ["out/report.json"]   # declared, not guessed from the prose
+```
+
+A promised path is held open while it is absent, and **fails once it exists** —
+the declaration is now false, and an exemption list nobody prunes is an
+allowlist with a good story. The count prints on every run, `--quiet` included.
+Two properties are deliberate: the list is *declared* rather than inferred from
+future-tense prose, because a heuristic over English is what once made this
+checker silently skip lines carrying real claims; and it matches the exact
+spelling, because a promise of `example/plan.md` that also covered every other
+file with that name would suppress claims nobody chose to defer.
 
 A number in prose can be settled too, by a command you name. Opt-in, because
 that means running something from a config file:

@@ -175,15 +175,27 @@ class Verification:
     #: the inert signal this package exists to prevent -- and in CI, "printed a
     #: note and exited 0" is indistinguishable from "passed".
     blocked: list[str] = field(default_factory=list)
+    #: Claims held open by a declared promise: the document describes something
+    #: the project intends to produce, and it does not exist yet. Reported on
+    #: every run, never a failure -- that is what declaring it bought.
+    deferred: list[Claim] = field(default_factory=list)
+    #: Promises the tree has since kept. A **failure**, and the only kind here
+    #: that fires on something going right: the declaration is now false, and
+    #: an exemption list nobody prunes is an allowlist with a good story.
+    kept: list[str] = field(default_factory=list)
 
     @property
     def failed(self) -> bool:
-        return bool(self.broken or self.blocked)
+        return bool(self.broken or self.blocked or self.kept)
 
     def text(self) -> str:
         out = [f"  {claim}" for claim in self.broken]
         for kind in self.blocked:
             out.append(f"  BLOCKED: {kind}")
+        for promise in self.kept:
+            out.append(
+                f"  KEPT: {promise} exists now -- remove it from `promised`"
+            )
         for kind in self.unavailable:
             out.append(f"  NOT CHECKED: {kind}")
         return "\n".join(out)
@@ -404,6 +416,21 @@ CLAIM_KINDS: tuple[ClaimKind, ...] = (
 )
 
 
+#: Kinds a project may declare as promised. A file can be intended and absent;
+#: a commit cannot -- a hash that does not exist yet cannot be cited honestly,
+#: so allowing it would only buy a way to defer a wrong citation.
+PROMISABLE = frozenset({"path", "link"})
+
+
+def _normalize(text: str) -> str:
+    """One spelling of a claim, so a promise and a claim compare as written.
+
+    Mirrors what resolution already strips: the trailing punctuation prose
+    leaves on a path, and the ``:line`` suffix a citation carries.
+    """
+    return text.split(":", 1)[0].strip().rstrip("/.,;:")
+
+
 def _excluded(rel: str, exclusions: Sequence[str]) -> bool:
     return any(fragment in rel for fragment in exclusions)
 
@@ -442,12 +469,32 @@ def verify(
     counts: Sequence[Counted] = (),
     resolve_in: Iterable[str] = (),
     commits_in: Iterable[str] = (),
+    promised: Iterable[str] = (),
 ) -> Verification:
     """Falsify every claim the prose makes about this tree.
 
     :param historical: path fragments holding superseded records. An archive
         cites paths and commits that were real when written; checking it for
         currency reports the archive for being an archive.
+    :param promised: paths a design says it will produce, spelled as the
+        document spells them. **A design document cannot be gated without
+        this.** Every path it names is a claim, and the ones describing the
+        work itself are false until the work lands, so the gate runs red
+        permanently -- which teaches its reader to skim a red gate -- or the
+        project fabricates a stub that satisfies the check by letter. Measured
+        on a real design set: 6 of 52 claims, all of that class.
+
+        Declared rather than inferred from the prose. A future-tense heuristic
+        over English was the obvious alternative and is the same shape as this
+        module's negation heuristic, which silently skipped whole lines
+        carrying a real claim -- and a suppression that reads clean is the
+        failure this package exists to catch. A declared list is a decision
+        somebody made, in a file a reviewer can read, countable on every run.
+
+        Matched by exact spelling for the same reason: a promise of
+        ``docs/plan.md`` that also silenced every other ``plan.md`` in the tree
+        would suppress claims nobody chose to defer. Two spellings mean two
+        entries.
     :param commits_in: further repositories whose commits may be cited. Notes
         that review another project name its commits, and settling those
         against only this repository reports honest citations as dead.
@@ -460,6 +507,7 @@ def verify(
     archives = tuple(fragment for fragment in historical if fragment)
     exclusions = tuple(fragment.rstrip("/") for fragment in exclude if fragment)
     exclusions += git_ignored(root)
+    promises = tuple(dict.fromkeys(_normalize(one) for one in promised if one))
 
     files, directories = _index(root, git_ignored(root))
     roots = [root]
@@ -513,8 +561,14 @@ def verify(
 
     for kind, text, claim in pending:
         found.checked += 1
-        if not kind.resolve(text, tree, root / claim.path):
-            found.broken.append(claim)
+        if kind.resolve(text, tree, root / claim.path):
+            continue
+        if kind.name in PROMISABLE and _normalize(text) in promises:
+            found.deferred.append(claim)
+            continue
+        found.broken.append(claim)
+
+    found.kept.extend(promise for promise in promises if tree.resolves(promise))
 
     _verify_counts(root, suffixes, exclusions, archives, counts, found)
     found.broken.sort(key=lambda c: (c.path, c.line))

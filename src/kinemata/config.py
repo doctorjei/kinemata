@@ -87,6 +87,9 @@ class Settings:
     resolve_in: tuple[str, ...] = ()
     #: Further repositories whose commits the documentation may cite.
     commits_in: tuple[str, ...] = ()
+    #: Paths a design says it will produce. Held open while absent, and failing
+    #: once they exist, so the list cannot outlive the work it describes.
+    promised: tuple[str, ...] = ()
     #: Numbers the documentation states, and the commands that settle them.
     #: Empty unless declared: no project spawns a process it did not ask for.
     counts: tuple[Counted, ...] = ()
@@ -315,11 +318,34 @@ def load(path: str | Path) -> Settings:
         historical=tuple(claims.get("historical", ())),
         resolve_in=tuple(claims.get("resolve_in", ())),
         commits_in=tuple(claims.get("commits_in", ())),
+        promised=_promised(claims.get("promised", ()), path),
         counts=_build_counts(raw.get("count", []), path),
         baseline=root / project.get("baseline", BASELINE_NAME),
         gates=_build_gates(raw.get("gate", []), path),
         context=_build_context(raw.get("context"), path),
     )
+
+
+def _promised(raw: Any, path: Path) -> tuple[str, ...]:
+    """Paths a design promises, as declared -- or a refusal.
+
+    Every entry here suppresses a claim, so a malformed one suppresses nothing
+    while looking like it does. A bare string is the likely slip: TOML accepts
+    ``promised = "docs/plan.md"`` happily, and iterating it would defer claims
+    about ``d``, ``o``, ``c``.
+    """
+    if isinstance(raw, str) or not isinstance(raw, (list, tuple)):
+        raise ConfigError(
+            f"{path}: [claims] promised must be a list of paths, not "
+            f"{type(raw).__name__}."
+        )
+    for entry in raw:
+        if not isinstance(entry, str) or not entry.strip():
+            raise ConfigError(
+                f"{path}: [claims] promised holds {entry!r}; every entry must "
+                "be a path, spelled as the document spells it."
+            )
+    return tuple(raw)
 
 
 def _build_context(spec: dict[str, Any] | None, path: Path) -> ContextBudget | None:

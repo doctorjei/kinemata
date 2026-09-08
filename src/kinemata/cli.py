@@ -327,6 +327,7 @@ def cmd_claims(args: argparse.Namespace) -> int:
         counts=settings.counts,
         resolve_in=settings.resolve_in,
         commits_in=settings.commits_in,
+        promised=settings.promised,
     )
     inventory = enforced(settings.root, settings.gates)
 
@@ -341,11 +342,23 @@ def cmd_claims(args: argparse.Namespace) -> int:
         print(f"gates: {len(inventory.verified)} of {inventory.declared} "
               f"declared check(s) run in {', '.join(inventory.searched) or 'nothing'}")
 
+    # Same rule as the gate count and the exemption count, for the same reason:
+    # a promise is a claim nobody is checking, so the number of them is not
+    # optional reading. A project that stops noticing its deferrals has an
+    # allowlist.
+    if settings.promised:
+        print(f"promised: {len(settings.promised)} declared, "
+              f"{len(found.deferred)} claim(s) held open")
+
     if found.failed or inventory.failed:
         parts = []
         if found.broken:
             parts.append(
                 f"{len(found.broken)} of {found.checked} claim(s) do not resolve"
+            )
+        if found.kept:
+            parts.append(
+                f"{len(found.kept)} promised path(s) now exist and are still declared"
             )
         if found.blocked:
             parts.append(f"{len(found.blocked)} declared check(s) could not run")

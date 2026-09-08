@@ -522,3 +522,25 @@ def test_a_scan_leaving_the_tree_says_so_even_when_quiet(project, tmp_path, caps
     assert str(outside.resolve()) in captured.err
     # and it is scanned, not merely announced
     assert "linked/app.py" in captured.out
+
+
+def test_a_promised_list_that_is_not_a_list_is_refused(tmp_path):
+    """Every entry suppresses a claim, so a malformed one suppresses nothing
+    while looking like it does. TOML takes a bare string happily, and iterating
+    it would defer claims about `d`, `o`, `c`."""
+    write(tmp_path, "consts.py", 'BOX_META_FILE = "box.yaml"\n')
+    write(
+        tmp_path,
+        "kinemata.toml",
+        """
+        [claims]
+        promised = "docs/plan.md"
+
+        [[registry]]
+        name = "constants"
+        kind = "python-constants"
+        modules = ["consts.py"]
+        """,
+    )
+    with pytest.raises(ConfigError, match="must be a list"):
+        load(tmp_path / "kinemata.toml")

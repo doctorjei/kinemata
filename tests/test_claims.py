@@ -244,3 +244,67 @@ def test_a_path_behind_a_symlink_resolves_however_it_is_anchored(tmp_path):
     result = verify(tmp_path / "tree")
     assert result.checked == 1  # a claim nobody extracted proves nothing
     assert result.broken == []
+
+
+# -- promises: a design describes what does not exist yet ---------------------
+
+
+def test_a_promised_path_is_held_open_rather_than_reported(tmp_path):
+    """A design document is a registry of claims about work not yet done.
+
+    Without this, gating one leaves two bad options: a permanently red gate,
+    which teaches its reader to skim, or a stub that satisfies the check by
+    letter. Measured on a real design set at 6 failures in 52 claims, every one
+    of that class.
+    """
+    write(tmp_path, "design.md", "It writes `out/report.json` when it runs.\n")
+    assert broken(verify(tmp_path)) == {("path", "out/report.json")}
+
+    result = verify(tmp_path, promised=["out/report.json"])
+    assert result.broken == []
+    assert [claim.text for claim in result.deferred] == ["out/report.json"]
+    assert result.checked == 1  # deferred, not dropped from the count
+
+
+def test_a_promise_the_tree_has_kept_fails(tmp_path):
+    """The only failure here that fires on something going right.
+
+    An exemption list nobody prunes is an allowlist with a good story, so the
+    declaration going stale is the thing that gates -- and it costs one line to
+    fix, in the file where somebody chose it.
+    """
+    write(tmp_path, "design.md", "It writes `out/report.json` when it runs.\n")
+    write(tmp_path, "out/report.json", "{}\n")
+
+    result = verify(tmp_path, promised=["out/report.json"])
+    assert result.kept == ["out/report.json"]
+    assert result.failed
+    assert "remove it from `promised`" in result.text()
+
+
+def test_a_promise_does_not_silence_a_path_it_did_not_name(tmp_path):
+    """Matched by exact spelling. A promise that also covered every other
+    `report.json` in the tree would suppress claims nobody chose to defer, and
+    suppression that reads clean is the failure this package exists to catch."""
+    write(
+        tmp_path, "design.md",
+        "Writes `out/report.json`, reads `vendor/report.json`.\n",
+    )
+    result = verify(tmp_path, promised=["out/report.json"])
+    assert broken(result) == {("path", "vendor/report.json")}
+
+
+def test_a_commit_cannot_be_promised(tmp_path):
+    """A file can be intended and absent; a hash cannot. Allowing it would only
+    buy a way to defer a citation that is simply wrong."""
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    for key, value in (("user.email", "t@example.org"), ("user.name", "T")):
+        subprocess.run(["git", "-C", str(tmp_path), "config", key, value], check=True)
+    write(tmp_path, "a.txt", "x\n")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "commit", "-qm", "first"], check=True)
+
+    write(tmp_path, "doc.md", "Fixed in `deadbee1`.\n")
+    result = verify(tmp_path, promised=["deadbee1"])
+    assert broken(result) == {("commit", "deadbee1")}
+    assert result.deferred == []

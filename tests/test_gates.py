@@ -240,3 +240,30 @@ def test_a_project_declaring_no_gates_says_nothing(tmp_path, capsys):
     )
     assert main(["claims", "-c", str(tmp_path / "kinemata.toml")]) == 0
     assert "gates:" not in capsys.readouterr().out
+
+
+def test_the_promise_count_is_printed_even_when_quiet(tmp_path, capsys):
+    """A promise is a claim nobody is checking, so the number of them is not
+    optional reading -- the same rule as the gate count and the exemption
+    count, and for the same reason."""
+    write(tmp_path, "design.md", "It writes `out/report.json` when it runs.\n")
+    write(
+        tmp_path,
+        "kinemata.toml",
+        """
+        [project]
+        root = "."
+
+        [claims]
+        promised = ["out/report.json"]
+
+        [[registry]]
+        name = "constants"
+        kind = "python-constants"
+        modules = ["consts.py"]
+        """,
+    )
+    write(tmp_path, "consts.py", 'BOX_META_FILE = "box.yaml"\n')
+
+    assert main(["claims", "-c", str(tmp_path / "kinemata.toml"), "-q"]) == 0
+    assert "promised: 1 declared, 1 claim(s) held open" in capsys.readouterr().out
