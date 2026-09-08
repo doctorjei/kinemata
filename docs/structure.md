@@ -28,7 +28,7 @@ These are different designs and must not be conflated.
 > **The test, for any mechanism:** *could a rogue agent disable this?*
 > If yes, it is a reminder. File it as one, and do not count it for the rogue case.
 
-Four consequences, each of which has bitten:
+Five consequences, each of which has bitten:
 
 **A mechanism whose kind you have not named is a reminder.** That is the default, because
 cooperation is the default assumption. Naming it costs one line and prevents counting a
@@ -49,6 +49,66 @@ confirms the fix you already made.
 run identical analysis and differ only in exit code and where they run — one scan, two
 consequences. Two mechanisms that
 can disagree eventually will, and the disagreement always surfaces at the worst moment.
+
+**A rule over a store the constrained agent can write is unreachable no matter where the
+check runs.** The four consequences above all ask where the *check* lives. This one asks
+where the *record* lives, and it is the question people skip: an immutability rule over a
+directory the writer owns cannot be a catch, because the agent edits the protected thing and
+the check reads the edit. CI does not fix it. Nothing that runs after the write fixes it.
+
+The incident: a design under review specified a brief directory as immutable, enforced by a
+CI diff — and put it inside a per-box working tree that the same system's design makes
+agent-writable. Both halves were carefully argued, and they contradicted each other across
+two documents that were each internally consistent. It surfaced the moment a reviewer asked
+*who owns this directory?* — a question nothing in the earlier passes had been shaped to ask,
+because they were all asking where the check runs, which is right and not sufficient.
+
+> **The discriminating question:** who can write the thing the rule protects? If the answer
+> includes the agent the rule constrains, you have a reminder, however the check is wired.
+
+This project fails that test in one place, deliberately: the ratchet's baseline lives in the
+repository the agent edits, so an agent can accept its own findings. §8 says what is left when
+a mechanism fails it — not a catch, but an escape that costs a visible file change — and why
+the exemption count is printed on every run.
+
+### A role is a mechanism only in what a permission layer can enforce
+
+The same test applies to *roles*, and it is easy to miss because a role definition is mostly
+prose: what to look for, what to produce, what to leave alone. Three of its properties can be
+enforced by the layer that dispatches the agent, and **those three are the role**:
+
+1. **Write scope** — which paths it may change.
+2. **What it must not read** — the blindness a second-opinion role exists to provide.
+3. **Output vocabulary** — the fixed set of dispositions its report may return, validated on
+   the way back rather than requested in the brief.
+
+Everything else in the definition is a reminder. That is not a criticism of prose; it is a
+statement about what may be counted on when the agent is wrong, tired of the constraint, or
+optimizing for finishing.
+
+**Measured, on a run of a designer / architect / reviewer loop over a real design document:**
+
+- **Tool-level restriction held under pressure.** The architect was dispatched without write
+  tools and its brief mistakenly told it to write its report to a file. It hit the
+  restriction, did not route around it through a shell — which was available — and reported
+  the brief's error instead. That is a catch.
+- **Instruction-level scope was not a constraint at all.** The designer's write scope existed
+  only as a sentence in its brief. Nothing would have stopped it writing anywhere in the
+  tree, and nothing would have reported that it had.
+- **Blindness by arrangement is not blindness.** The blind reviewer's isolation was a matter
+  of layout — the other agents' findings simply sat in a directory it was not pointed at —
+  and the leak was found by review, not by the mechanism: configuration discovery walks
+  *upward*, so a reviewer running the project's own gate would have reached the parent tree
+  and everything in it.
+- **The enforcement layer exists**, which is what makes the first three points actionable
+  rather than a complaint. On the harness measured, the pre-tool hook payload carries the
+  calling subagent's type and identity and omits both for the orchestrator, while the session
+  identifiers are identical for both — so per-role write scope is enforceable without
+  weakening the permission system for everything else.
+
+> **Write the three properties into the role definition and enforce them there.** A role
+> whose constraints live only in its prose is a job description, and a job description does
+> not fail a build.
 
 ---
 
@@ -109,6 +169,19 @@ Note what the exception in each case is not: a warning. A warning on a green run
 green. The escape hatch for the empty-registry rule is `allow_empty = true`, declared per
 registry in the config, because an exemption someone chose and can see is a different object
 from one the tool took quietly.
+
+**A rule that names its mechanism but not its threshold is inert**, and it is the same failure
+wearing prose. "Cap the note length" with no number reads complete, passes review, and cannot
+be implemented: every reader supplies a different value and nothing ever fails. It is worse
+than an open question, because an open question is visibly open.
+
+The converse is already load-bearing here — the context budget ships with **no default
+ceiling**, because a number nobody chose, enforced as though somebody had, is worse than no
+ceiling at all. Both halves reduce to the same rule: **a threshold is a decision somebody
+makes with evidence, and a rule is not finished until that decision exists.** Measure it
+before the rule ships, or ship the rule marked incomplete. This project's own ceiling is the
+positive case: measured at what the instruction layer already carried, declared at that
+number, then driven down deliberately.
 
 The corollary is uncomfortable: **you cannot tell that a check still checks by reading it.**
 The only way to know is to break something on purpose and confirm the check notices.
@@ -255,9 +328,11 @@ What this project ships, read back against its own rules:
 |---|---|
 | §1 reminder or catch | `ids`, `review` and `clusters` are reminders; `check` and `claims` are catches, and only in CI with branch protection; `baseline` is a catch with an escape hatch, below |
 | §1 one source | `review` and `check` run identical analysis; only the exit code differs |
+| §1 carrier | the baseline is stored in the tree the agent writes, so the ratchet cannot be a catch however it is wired — recorded below rather than papered over |
 | §2 spend test | duplication scores yes/no/no — cheap to commit, invisible in a diff, silent on landing |
 | §3 refuse | bad configuration raises; an empty registry raises; a registry that cannot detect its identifiers refuses to be `closed`; suppression is reported |
 | §3 stay running | the checks a project requires are declared and verified against the files meant to run them, so a deleted or commented-out step fails instead of passing |
+| §3 threshold | the context ceiling has no default — a project declares a number it measured, or the command refuses to run |
 | §3 break it on purpose | the self-check's five entries were each verified by injecting the bypass and watching the gate fail |
 | §6 validation | labeled history from real repositories, with the components that failed labeled as failing |
 | §4 classify first | `clusters` reports; `check` and `claims` gate. A missing file is a fact; text repeating with no declared home is a judgment |
