@@ -206,8 +206,9 @@ switched off.
 
 ## 7. Questions this document opened
 
-Three were closed by measurement rather than argument, during corpus analysis. They are
-kept rather than deleted, because the measurement is the answer's whole warrant.
+All four are now closed, and they are kept rather than deleted because the warrant *is* the
+answer. Three were closed by measurement during corpus analysis; the fourth by a review that
+produced the change and then checked the artifact for it.
 
 1. **Where does a capability registry's data come from initially?** **Closed: hand-declared,
    seeded open, ratcheted toward closed.** Bootstrapping from the module surface was
@@ -223,8 +224,18 @@ kept rather than deleted, because the measurement is the answer's whole warrant.
    from three constants whose values are ordinary domain words. Two filters, both forced by
    that measurement, bring it to 43. See `prose.py` and `report.py`.
 
-Still open:
+4. **Interaction with the clause-traceability brief.** **Closed: both changes were made, and
+   checked against the document rather than taken on report.** That brief had assumed one
+   keyspace manifest; its §4 now opens by stating that the manifest *is* a registry, points
+   at §4.1–§4.3 and §6 of this document instead of restating them, and describes the work as
+   a `[[registry]]` declaration rather than a class. Its §6.1 resolves a diff by three
+   signals, of which the second reads `detect()` over changed lines and the third `resolve()`
+   on touched rows — a key set appears nowhere. The changes were written in round 1 of a
+   four-round design review on 2026-09-08 and verified in each round after.
 
-4. **Interaction with the clause-traceability brief.** That brief assumes one keyspace
-   manifest. If this contract is right, its §4 should be re-based onto the registry role
-   and its §6.1 signals 2 and 3 should read `detect()` rather than a key set. To relay.
+   **What that exchange settled about this contract, which is the part worth keeping:** the
+   role held for a data model this project never saw, and the adapter came out as a
+   declaration rather than code. The two ways it can be declared wrong are both refusals
+   rather than quiet passes — a mapping registry handed a whole document instead of a
+   section takes the document's top-level sections as its entries, and `closed` without a
+   `syntax` raises. Both are §4.3 working as specified, found by somebody else's use of it.
