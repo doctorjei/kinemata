@@ -348,7 +348,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **209 tests**, and
+The companion guard is a number with an oracle. This suite is **216 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 
@@ -406,25 +406,64 @@ A claim it cannot settle is **named, not skipped** — run outside a git
 repository, it reports that commit hashes went unchecked rather than passing
 quietly.
 
-**A design document claims things that do not exist yet**, and without somewhere
-to say so it cannot be gated at all: every path describing the work itself is
-false until the work lands, so the gate runs permanently red — which teaches its
-reader to skim it — or the project fabricates a stub that passes by letter. On a
-real design set that was 6 failures out of 52 claims, all of that class.
+### Paths a design has not built yet
+
+Point this at a design document and it prints six errors. It prints them again
+tomorrow, and next month, because the document mentions
+`example/clause-index.json` and nobody will build that file until Phase 1. After the third run you stop reading
+the output. Then somebody mistypes a path in the document, and that error prints
+as a seventh line in a block you have trained yourself to skip.
+
+So write down the names that do not exist yet, and the date each one stops being
+excused:
 
 ```toml
 [claims]
-promised = ["out/report.json"]   # declared, not guessed from the prose
+promised = [{ path = "example/clause-index.json", until = "2026-12-01" }]
 ```
 
-A promised path is held open while it is absent, and **fails once it exists** —
-the declaration is now false, and an exemption list nobody prunes is an
-allowlist with a good story. The count prints on every run, `--quiet` included.
-Two properties are deliberate: the list is *declared* rather than inferred from
-future-tense prose, because a heuristic over English is what once made this
-checker silently skip lines carrying real claims; and it matches the exact
-spelling, because a promise of `example/plan.md` that also covered every other
-file with that name would suppress claims nobody chose to defer.
+Now the run is clean, and the day someone mistypes a path it is the only line on
+the screen. The claim is still counted — held open, not skipped.
+
+**Three things end a promise, and all three fail the gate.** It exists now:
+
+```
+FAIL: 1 promised path(s) now exist and are still declared.
+  KEPT: example/clause-index.json exists now -- remove it from `promised`
+```
+
+Nothing cites it any more — usually a rename, where the new name fails loudly as
+a dead claim while the old entry sits there protecting nothing:
+
+```
+  UNCITED: example/clause-index.json is promised, and no document names it
+```
+
+Or the date has passed:
+
+```
+  LAPSED: example/clause-index.json (deferred until 2026-12-01) -- decide again:
+          extend the date, or drop the promise and let the claim fail
+```
+
+That is the difference between this and an ignore list. You deal with the entry
+because the gate makes you, instead of leaving it there forever.
+
+**`until` is required and nothing means "never".** A deferral that cannot lapse
+is an ignore list with a better name: if the work is canceled, or just never
+starts, the document goes on naming a file nobody will build and nothing is ever
+red again. It is **not a delivery date** — it is when somebody looks at this
+again. If the work is not ripe, move the date; that edit is a decision in a
+commit, which is the entire point.
+
+Two smaller decisions, both to stop the list becoming junk. The names are
+**declared, not guessed from the prose** — reading English for future tense is
+what once made this checker skip whole lines that carried real claims. And a
+name matches **exactly**: a promise of `example/plan.md` that also covered every
+other file of that name would hide claims nobody chose to defer.
+
+(The real figures behind this: one design set, 6 of its 52 claims were this
+class.)
 
 A number in prose can be settled too, by a command you name. Opt-in, because
 that means running something from a config file:

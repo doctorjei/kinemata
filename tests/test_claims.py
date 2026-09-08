@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import subprocess
 import textwrap
+from datetime import date
 
-from kinemata.claims import CLAIM_KINDS, verify
+from kinemata.claims import CLAIM_KINDS, Promise, verify
 
 
 def write(tmp_path, rel, body):
@@ -17,6 +18,10 @@ def write(tmp_path, rel, body):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(textwrap.dedent(body).lstrip())
     return path
+
+
+#: A promise with room left on it, for tests about something other than dates.
+LATER = Promise(path="out/report.json", until=date(2027, 1, 1))
 
 
 def broken(result):
@@ -260,7 +265,7 @@ def test_a_promised_path_is_held_open_rather_than_reported(tmp_path):
     write(tmp_path, "design.md", "It writes `out/report.json` when it runs.\n")
     assert broken(verify(tmp_path)) == {("path", "out/report.json")}
 
-    result = verify(tmp_path, promised=["out/report.json"])
+    result = verify(tmp_path, promised=[LATER], today=date(2026, 9, 8))
     assert result.broken == []
     assert [claim.text for claim in result.deferred] == ["out/report.json"]
     assert result.checked == 1  # deferred, not dropped from the count
@@ -276,7 +281,7 @@ def test_a_promise_the_tree_has_kept_fails(tmp_path):
     write(tmp_path, "design.md", "It writes `out/report.json` when it runs.\n")
     write(tmp_path, "out/report.json", "{}\n")
 
-    result = verify(tmp_path, promised=["out/report.json"])
+    result = verify(tmp_path, promised=[LATER], today=date(2026, 9, 8))
     assert result.kept == ["out/report.json"]
     assert result.failed
     assert "remove it from `promised`" in result.text()
@@ -290,7 +295,7 @@ def test_a_promise_does_not_silence_a_path_it_did_not_name(tmp_path):
         tmp_path, "design.md",
         "Writes `out/report.json`, reads `vendor/report.json`.\n",
     )
-    result = verify(tmp_path, promised=["out/report.json"])
+    result = verify(tmp_path, promised=[LATER], today=date(2026, 9, 8))
     assert broken(result) == {("path", "vendor/report.json")}
 
 
@@ -305,6 +310,47 @@ def test_a_commit_cannot_be_promised(tmp_path):
     subprocess.run(["git", "-C", str(tmp_path), "commit", "-qm", "first"], check=True)
 
     write(tmp_path, "doc.md", "Fixed in `deadbee1`.\n")
-    result = verify(tmp_path, promised=["deadbee1"])
+    result = verify(tmp_path, promised=[Promise("deadbee1", date(2027, 1, 1))],
+                    today=date(2026, 9, 8))
     assert broken(result) == {("commit", "deadbee1")}
     assert result.deferred == []
+
+
+def test_a_promise_past_its_date_fails(tmp_path):
+    """A promise otherwise expires **only by being kept**. If the work is
+    cancelled or never starts, the document goes on citing a file nobody will
+    build and nothing is ever red again -- the document still cites the path, so
+    coverage cannot tell. A date is the only signal available for that case."""
+    write(tmp_path, "design.md", "It writes `out/report.json` when it runs.\n")
+    promise = Promise(path="out/report.json", until=date(2026, 8, 1))
+
+    early = verify(tmp_path, promised=[promise], today=date(2026, 7, 31))
+    assert early.overdue == []
+    assert not early.failed
+
+    late = verify(tmp_path, promised=[promise], today=date(2026, 8, 2))
+    assert late.overdue == ["out/report.json (deferred until 2026-08-01)"]
+    assert late.failed
+
+
+def test_a_promise_no_document_cites_fails(tmp_path):
+    """The rename case. The new name fails loudly as a dead claim while the old
+    entry silently protects nothing -- and a list half full of names nobody will
+    ever create cannot be read by the next person."""
+    write(tmp_path, "design.md", "It writes `out/report.v2.json` when it runs.\n")
+    result = verify(tmp_path, promised=[LATER], today=date(2026, 9, 8))
+
+    assert result.uncovered == ["out/report.json"]
+    assert broken(result) == {("path", "out/report.v2.json")}
+    assert result.failed
+
+
+def test_every_promise_lapses_eventually(tmp_path):
+    """There is no value meaning never, deliberately. A deferral that cannot
+    lapse is an ignore list with a better name: if the work is canceled or never
+    starts, the document goes on naming a file nobody will build and nothing is
+    ever red again."""
+    write(tmp_path, "design.md", "It writes `out/report.json` when it runs.\n")
+    result = verify(tmp_path, promised=[LATER], today=date(2099, 1, 1))
+    assert result.overdue == ["out/report.json (deferred until 2027-01-01)"]
+    assert result.failed

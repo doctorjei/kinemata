@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import tomllib
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -40,7 +41,7 @@ from .adapters.patterns import CodePatterns
 from .adapters.substitutions import Substitutions
 from .baseline import BASELINE_NAME
 from .bypass import git_ignored
-from .claims import Counted
+from .claims import Counted, Promise
 from .context import STRIPPERS
 from .contract import BaseRegistry
 from .gates import Gate
@@ -88,8 +89,9 @@ class Settings:
     #: Further repositories whose commits the documentation may cite.
     commits_in: tuple[str, ...] = ()
     #: Paths a design says it will produce. Held open while absent, and failing
-    #: once they exist, so the list cannot outlive the work it describes.
-    promised: tuple[str, ...] = ()
+    #: once they exist, once nothing cites them, or once their date has passed --
+    #: three ways of noticing that the list has outlived the work it describes.
+    promised: tuple[Promise, ...] = ()
     #: Numbers the documentation states, and the commands that settle them.
     #: Empty unless declared: no project spawns a process it did not ask for.
     counts: tuple[Counted, ...] = ()
@@ -343,7 +345,61 @@ def load(path: str | Path) -> Settings:
     )
 
 
-def _promised(raw: Any, path: Path) -> tuple[str, ...]:
+#: What a promise may say. Anything else is refused rather than ignored: a
+#: misspelled key would drop the date silently and leave a deferral that expires
+#: never, which is the whole failure this field exists to prevent.
+PROMISE_KEYS = frozenset({"path", "until"})
+
+#: How to spell one, quoted in every refusal so the fix is on screen.
+PROMISE_FORM = '{ path = "...", until = "YYYY-MM-DD" }'
+
+
+def _promise(entry: Any, path: Path) -> Promise:
+    """One promised path and the date its deferral lapses.
+
+    **Both fields are required and no value means "never".** A promise that
+    cannot lapse is an ignore list with a better name: the document goes on
+    naming a file nobody will build and nothing is ever red again. If the work
+    has no schedule, the date is still answerable -- it is when somebody looks
+    at this again, not when the work ships.
+    """
+    if isinstance(entry, str) or not isinstance(entry, dict):
+        raise ConfigError(
+            f"{path}: [claims] promised holds {entry!r}. Every promise names "
+            f"the date its deferral lapses: {PROMISE_FORM}."
+        )
+    # Unknown keys first, deliberately: `untl = "2026-12-01"` is missing `until`
+    # *because* of the typo, and "missing until" sends a reader to stare at a
+    # line where they believe they wrote it.
+    unknown = set(entry) - PROMISE_KEYS
+    if unknown:
+        raise ConfigError(
+            f"{path}: [claims] promise {entry.get('path', entry)!r} declares "
+            f"{', '.join(sorted(unknown))}, which means nothing here "
+            f"(known: {', '.join(sorted(PROMISE_KEYS))})."
+        )
+    missing = [key for key in ("path", "until") if not entry.get(key)]
+    if missing:
+        raise ConfigError(
+            f"{path}: [claims] promise {entry!r} is missing "
+            f"{', '.join(missing)}. Write it as {PROMISE_FORM}."
+        )
+    until = entry["until"]
+    # `date`, because TOML parses a bare 2026-12-01 into one; a quoted string is
+    # the likelier spelling and both should work.
+    if isinstance(until, date):
+        return Promise(path=str(entry["path"]), until=until)
+    try:
+        return Promise(path=str(entry["path"]), until=date.fromisoformat(str(until)))
+    except ValueError as exc:
+        raise ConfigError(
+            f"{path}: [claims] promise {entry['path']!r} is deferred until "
+            f"{until!r}, which is not a date. Write it as YYYY-MM-DD -- there "
+            "is no value meaning never."
+        ) from exc
+
+
+def _promised(raw: Any, path: Path) -> tuple[Promise, ...]:
     """Paths a design promises, as declared -- or a refusal.
 
     Every entry here suppresses a claim, so a malformed one suppresses nothing
@@ -356,13 +412,7 @@ def _promised(raw: Any, path: Path) -> tuple[str, ...]:
             f"{path}: [claims] promised must be a list of paths, not "
             f"{type(raw).__name__}."
         )
-    for entry in raw:
-        if not isinstance(entry, str) or not entry.strip():
-            raise ConfigError(
-                f"{path}: [claims] promised holds {entry!r}; every entry must "
-                "be a path, spelled as the document spells it."
-            )
-    return tuple(raw)
+    return tuple(_promise(entry, path) for entry in raw)
 
 
 def _build_context(spec: dict[str, Any] | None, path: Path) -> ContextBudget | None:

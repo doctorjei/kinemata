@@ -37,6 +37,7 @@ import subprocess
 import sys
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path, PurePosixPath
 
 from .bypass import GIT_DIR, _tree, _walk, git_ignored
@@ -183,10 +184,20 @@ class Verification:
     #: that fires on something going right: the declaration is now false, and
     #: an exemption list nobody prunes is an allowlist with a good story.
     kept: list[str] = field(default_factory=list)
+    #: Promises no document cites any more -- the usual cause is a rename, which
+    #: fails loudly as a new dead claim while the old entry silently protects
+    #: nothing. A failure, because the entry is now junk in a list a reader has
+    #: to trust.
+    uncovered: list[str] = field(default_factory=list)
+    #: Promises whose deferral has lapsed. The only signal for work that was
+    #: canceled or never started: the document still cites the path, so coverage
+    #: cannot tell, and nothing else ever goes red.
+    overdue: list[str] = field(default_factory=list)
 
     @property
     def failed(self) -> bool:
-        return bool(self.broken or self.blocked or self.kept)
+        return bool(self.broken or self.blocked or self.kept
+                    or self.uncovered or self.overdue)
 
     def text(self) -> str:
         out = [f"  {claim}" for claim in self.broken]
@@ -195,6 +206,16 @@ class Verification:
         for promise in self.kept:
             out.append(
                 f"  KEPT: {promise} exists now -- remove it from `promised`"
+            )
+        for promise in self.uncovered:
+            out.append(
+                f"  UNCITED: {promise} is promised, and no document names it -- "
+                "renamed, or the entry outlived its claim"
+            )
+        for promise in self.overdue:
+            out.append(
+                f"  LAPSED: {promise} -- decide again: extend the date, or drop "
+                "the promise and let the claim fail"
             )
         for kind in self.unavailable:
             out.append(f"  NOT CHECKED: {kind}")
@@ -416,6 +437,27 @@ CLAIM_KINDS: tuple[ClaimKind, ...] = (
 )
 
 
+@dataclass(frozen=True)
+class Promise:
+    """A path a design says it will produce, and the date the deferral lapses.
+
+    **``until`` is required, and there is no value meaning "never".** A promise
+    otherwise expires only by being kept: if the work is canceled or simply
+    never starts, the document goes on naming a file nobody will build, the
+    entry goes on covering it, and nothing is ever red again. At that point the
+    declaration is an ignore list with a better name.
+
+    ``until`` is **not a delivery date** and nothing here treats it as one. It
+    is the date this deferral stops holding by itself, after which somebody
+    decides again -- extend it, which is a visible edit somebody makes, or drop
+    the promise and let the claim fail until the document changes. The point is
+    the decision recurring, not the estimate being right.
+    """
+
+    path: str
+    until: date
+
+
 #: Kinds a project may declare as promised. A file can be intended and absent;
 #: a commit cannot -- a hash that does not exist yet cannot be cited honestly,
 #: so allowing it would only buy a way to defer a wrong citation.
@@ -469,7 +511,8 @@ def verify(
     counts: Sequence[Counted] = (),
     resolve_in: Iterable[str] = (),
     commits_in: Iterable[str] = (),
-    promised: Iterable[str] = (),
+    promised: Iterable[Promise] = (),
+    today: date | None = None,
 ) -> Verification:
     """Falsify every claim the prose makes about this tree.
 
@@ -507,7 +550,14 @@ def verify(
     archives = tuple(fragment for fragment in historical if fragment)
     exclusions = tuple(fragment.rstrip("/") for fragment in exclude if fragment)
     exclusions += git_ignored(root)
-    promises = tuple(dict.fromkeys(_normalize(one) for one in promised if one))
+    promises: list[tuple[str, Promise]] = []
+    for promise in promised:
+        key = _normalize(promise.path)
+        if key and key not in {seen for seen, _ in promises}:
+            promises.append((key, promise))
+    promised_paths = {key for key, _ in promises}
+
+    covered: set[str] = set()
 
     files, directories = _index(root, git_ignored(root))
     roots = [root]
@@ -563,12 +613,25 @@ def verify(
         found.checked += 1
         if kind.resolve(text, tree, root / claim.path):
             continue
-        if kind.name in PROMISABLE and _normalize(text) in promises:
+        if kind.name in PROMISABLE and _normalize(text) in promised_paths:
             found.deferred.append(claim)
+            covered.add(_normalize(text))
             continue
         found.broken.append(claim)
 
-    found.kept.extend(promise for promise in promises if tree.resolves(promise))
+    # Three ways a promise stops being true, and only the first was checked when
+    # this shipped: the work landed, nothing cites it any more, or the date the
+    # project set has passed. The second and third are the silent ones.
+    when = today or date.today()
+    for key, promise in promises:
+        if tree.resolves(promise.path):
+            found.kept.append(promise.path)
+        elif key not in covered:
+            found.uncovered.append(promise.path)
+        elif promise.until < when:
+            found.overdue.append(
+                f"{promise.path} (deferred until {promise.until.isoformat()})"
+            )
 
     _verify_counts(root, suffixes, exclusions, archives, counts, found)
     found.broken.sort(key=lambda c: (c.path, c.line))

@@ -397,6 +397,12 @@ def cmd_claims(args: argparse.Namespace) -> int:
             parts.append(
                 f"{len(found.kept)} promised path(s) now exist and are still declared"
             )
+        if found.uncovered:
+            parts.append(
+                f"{len(found.uncovered)} promised path(s) no document cites"
+            )
+        if found.overdue:
+            parts.append(f"{len(found.overdue)} promised path(s) past their date")
         if found.blocked:
             parts.append(f"{len(found.blocked)} declared check(s) could not run")
         if inventory.absent:

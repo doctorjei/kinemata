@@ -255,7 +255,7 @@ def test_the_promise_count_is_printed_even_when_quiet(tmp_path, capsys):
         root = "."
 
         [claims]
-        promised = ["out/report.json"]
+        promised = [{ path = "out/report.json", until = "2027-01-01" }]
 
         [[registry]]
         name = "constants"
@@ -372,3 +372,49 @@ def test_a_command_declared_as_a_bare_string_is_refused(tmp_path):
         """)
     with pytest.raises(ConfigError, match="non-empty list of arguments"):
         load(config)
+
+
+def test_a_promise_date_must_be_a_date(tmp_path):
+    """Refused rather than ignored: a misparsed date would leave a deferral that
+    looks bounded and lapses never."""
+    config = _count_config(tmp_path, """
+        [claims]
+        promised = [{ path = "out/report.json", until = "next quarter" }]
+        """)
+    with pytest.raises(ConfigError, match="not a date"):
+        load(config)
+
+
+def test_a_promise_must_name_the_date_it_lapses(tmp_path):
+    """The shorthand this replaced -- a bare path -- said nothing about when the
+    deferral stops holding, so it never did. A promise that cannot lapse is an
+    ignore list with a better name."""
+    config = _count_config(tmp_path, """
+        [claims]
+        promised = ["out/report.json"]
+        """)
+    with pytest.raises(ConfigError, match="date its deferral lapses"):
+        load(config)
+
+
+def test_a_promise_with_an_unknown_key_is_refused(tmp_path):
+    """A misspelled `until` is reported as the typo it is, not as a missing
+    field -- being told `until` is missing sends a reader to stare at a line
+    where they believe they wrote it."""
+    config = _count_config(tmp_path, """
+        [claims]
+        promised = [{ path = "out/report.json", untl = "2026-12-01" }]
+        """)
+    with pytest.raises(ConfigError, match="which means nothing here"):
+        load(config)
+
+
+def test_a_toml_native_date_is_accepted(tmp_path):
+    """TOML parses a bare 2026-12-01 into a date object and a quoted one into a
+    string; both are the same declaration to a reader, so both work."""
+    config = _count_config(tmp_path, """
+        [claims]
+        promised = [{ path = "out/report.json", until = 2026-12-01 }]
+        """)
+    (promise,) = load(config).promised
+    assert promise.until.isoformat() == "2026-12-01"
