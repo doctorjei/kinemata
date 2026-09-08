@@ -251,8 +251,24 @@ def load(path: str | Path) -> Settings:
     root = (path.parent / project.get("root", ".")).resolve()
 
     declarations = raw.get("registry", [])
-    if not declarations:
-        raise ConfigError(f"{path}: no [[registry]] declared")
+    # **A config that asks for no check at all is the error** -- not one that
+    # declares no registry. The rule used to demand a `[[registry]]`, aimed at
+    # the failure where an empty registry reads exactly like a clean tree; but
+    # that failure is an empty registry, not an absent one. A project adopting
+    # `claims` or `context` alone had to invent a registry to satisfy the
+    # loader, and a required fiction is a bad first impression from a tool whose
+    # whole argument is that declarations should be true. Measured on the one
+    # real integration: one `[[registry]]` existed solely to get past this line.
+    #
+    # Commands that need a registry refuse individually instead, which is the
+    # shape `context` and `undeclared` already use.
+    if not any((declarations, raw.get("count"), raw.get("gate"),
+                raw.get("claims") is not None, raw.get("context") is not None)):
+        raise ConfigError(
+            f"{path}: declares no check at all. A config needs at least one of "
+            "[[registry]], [[count]], [[gate]], [claims] or [context] -- "
+            "otherwise every command it configures would pass by doing nothing."
+        )
 
     registries: list[BaseRegistry] = []
     for spec in declarations:
@@ -319,7 +335,8 @@ def load(path: str | Path) -> Settings:
         resolve_in=tuple(claims.get("resolve_in", ())),
         commits_in=tuple(claims.get("commits_in", ())),
         promised=_promised(claims.get("promised", ()), path),
-        counts=_build_counts(raw.get("count", []), path),
+        counts=_build_counts(raw.get("count", []), path,
+                             _commands(raw.get("command"), path)),
         baseline=root / project.get("baseline", BASELINE_NAME),
         gates=_build_gates(raw.get("gate", []), path),
         context=_build_context(raw.get("context"), path),
@@ -403,23 +420,81 @@ def _build_gates(declarations: list[dict[str, Any]], path: Path) -> tuple[Gate, 
     return tuple(built)
 
 
-def _build_counts(declarations: list[dict[str, Any]], path: Path) -> tuple[Counted, ...]:
+def _commands(raw: Any, path: Path) -> dict[str, tuple[str, ...]]:
+    """The ``[command]`` table: an oracle named once, used by several counts.
+
+    **Written because this package's own config format forced the antipattern
+    it exists to catch.** ``[[count]]`` binds one command to one number and TOML
+    cannot share a value, so a real integration ended up with eight inline
+    programs of which only four were distinct -- one 25-line oracle copied three
+    times, differing in the file it was pointed at. ``kinemata check`` cannot
+    see that: a config is not source.
+    """
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ConfigError(
+            f"{path}: [command] must be a table of name = [argv], not "
+            f"{type(raw).__name__}."
+        )
+    declared: dict[str, tuple[str, ...]] = {}
+    for name, argv in raw.items():
+        if isinstance(argv, str) or not isinstance(argv, (list, tuple)) or not argv:
+            raise ConfigError(
+                f"{path}: [command] {name!r} must be a non-empty list of "
+                "arguments, the way a shell would receive them."
+            )
+        declared[name] = tuple(str(part) for part in argv)
+    return declared
+
+
+def _build_counts(
+    declarations: list[dict[str, Any]],
+    path: Path,
+    commands: dict[str, tuple[str, ...]] | None = None,
+) -> tuple[Counted, ...]:
     """``[[count]]`` tables, refused rather than skipped when incomplete.
 
     A half-declared count is the worst outcome available: it looks configured
     and settles nothing.
+
+    A count names its oracle inline with ``command``, or by ``run`` against the
+    ``[command]`` table, and ``args`` appends to either. Naming one that was
+    never declared raises rather than defaulting, for the same reason an unknown
+    ``strip`` transform does: the alternative is a count that silently settles
+    nothing.
     """
+    known = commands or {}
     built: list[Counted] = []
     for index, spec in enumerate(declarations):
-        missing = [key for key in ("pattern", "command", "extract") if not spec.get(key)]
+        if spec.get("command") and spec.get("run"):
+            raise ConfigError(
+                f"{path}: [[count]] {index} declares both 'command' and 'run'; "
+                "one names the oracle inline, the other names a declared one."
+            )
+        if spec.get("run"):
+            name = str(spec["run"])
+            if name not in known:
+                raise ConfigError(
+                    f"{path}: [[count]] {index} runs {name!r}, which no "
+                    f"[command] declares (known: {', '.join(sorted(known)) or 'none'})"
+                )
+            argv: tuple[str, ...] = known[name]
+        else:
+            argv = tuple(str(part) for part in spec.get("command", ()))
+
+        missing = [key for key in ("pattern", "extract") if not spec.get(key)]
+        if not argv:
+            missing.append("command")
         if missing:
             raise ConfigError(
                 f"{path}: [[count]] {index} is missing {', '.join(missing)}"
             )
+        argv += tuple(str(part) for part in spec.get("args", ()))
         built.append(
             Counted(
                 pattern=str(spec["pattern"]),
-                command=tuple(str(part) for part in spec["command"]),
+                command=argv,
                 extract=str(spec["extract"]),
                 label=str(spec.get("label", "count")),
                 directory=str(spec.get("directory", ".")),

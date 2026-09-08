@@ -43,18 +43,35 @@ from .bypass import Bypass, crossings, strays
 from .claims import verify
 from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
 from .context import measure
-from .gates import enforced
+from .gates import WORKFLOW_DIR, enforced
 from .literals import clusters
 from .projection import project
 from .report import DEFAULT_MAX_SITES, Report, review
 
 
 def _settings(args: argparse.Namespace) -> Settings:
+    """The config to run against, announced when it came from somewhere else.
+
+    ``find_config`` walks upward, which is convenience in one place and a
+    blindness leak in another: a role meant to see one subtree, running a gate
+    inside it, silently picks up the parent's config and everything that config
+    points at. Found on a real run, where the workaround was a second config
+    file -- a second carrier of the same declarations.
+
+    The walk is kept, because narrowing it to a repository boundary would have
+    broken the one integration this project has done against a tree that is not
+    a repository. What changes is that an **inherited** config says so. The
+    ordinary case -- a config in this directory, or one named with ``-c`` --
+    stays quiet, so the line means something when it appears.
+    """
     path = Path(args.config) if args.config else find_config()
     if path is None:
         raise ConfigError(
             f"no {CONFIG_NAMES[0]} found (searched upward from the current directory)"
         )
+    if not args.config and path.parent != Path.cwd().resolve():
+        print(f"warning: using config from {path}, above the current directory",
+              file=sys.stderr)
     return load(path)
 
 
@@ -109,8 +126,26 @@ def _max_sites(args: argparse.Namespace, settings: Settings) -> int | None:
     return DEFAULT_MAX_SITES
 
 
+def _needs_registries(settings: Settings, doing: str) -> None:
+    """Refuse a registry-shaped command on a config that declares none.
+
+    The loader accepts such a config now, because a project may want ``claims``
+    or ``context`` alone and inventing a registry to satisfy a loader is a
+    fiction in a tool arguing that declarations should be true. The refusal
+    moves here rather than disappearing: scanning nothing and exiting 0 is the
+    inert signal, and it reads exactly like a clean tree.
+    """
+    if not settings.registries:
+        raise ConfigError(
+            f"no [[registry]] declared, so there is nothing to {doing}. "
+            "Declare one, or run a command that does not need one -- `claims` "
+            "and `context` check a config that declares no registry at all."
+        )
+
+
 def cmd_ids(args: argparse.Namespace) -> int:
     settings = _settings(args)
+    _needs_registries(settings, "project")
     over_budget = False
     for registry in settings.registries:
         if args.registry and registry.name != args.registry:
@@ -132,6 +167,7 @@ def _run_review(args: argparse.Namespace) -> tuple[Settings, list[tuple[str, Rep
     the findings through the baseline before deciding what is worth showing.
     """
     settings = _settings(args)
+    _needs_registries(settings, "scan for")
     reports: list[tuple[str, Report]] = []
 
     for registry in settings.registries:
@@ -257,6 +293,7 @@ def cmd_undeclared(args: argparse.Namespace) -> int:
     question nobody asked -- the inert signal this project exists to catch.
     """
     settings = _settings(args)
+    _needs_registries(settings, "check against")
     target = _target(args, settings)
 
     answered: list[tuple[object, list[object]]] = []
@@ -368,6 +405,137 @@ def cmd_claims(args: argparse.Namespace) -> int:
         return 1
     if not args.quiet:
         print(f"{found.checked} documentation claim(s) checked, all resolve.")
+    return 0
+
+
+#: The starter config. Documentation-only by default, because that is the
+#: cheapest adoption and needs no knowledge of which adapters exist: it declares
+#: `[claims]`, which checks every path, link and commit the prose asserts.
+#: Everything requiring a decision is commented out with the decision named.
+STARTER_CONFIG = '''\
+# Written by `kinemata init`. Every section below is optional except that the
+# file must declare at least one check -- a config nothing can fail is not a
+# configuration.
+
+[project]
+root = "."
+exclude = ["build/", "dist/"]
+
+# Falsify what the documentation says about this tree: paths that do not exist,
+# links that do not resolve, commits that are not in history. Needs no registry.
+[claims]
+suffixes = [".md"]
+# historical = ["archives/"]   # a record of what was true is not a stale claim
+# promised = []                # paths a design will produce; fails once they exist
+
+# A registry is one declared place per fact, and `check` fails on code that
+# re-derives one. Declare the constants module you already have:
+#
+# [[registry]]
+# name = "constants"
+# kind = "python-constants"
+# modules = ["src/pkg/constants.py"]
+#
+# Adopting on a codebase that already fails: run `kinemata baseline --record`
+# once, locally, and commit the file. Never from CI.
+
+# A ceiling on what a session loads. No default: measure what you carry today,
+# declare that, then drive it down.
+#
+# [context]
+# include = ["README.md", "docs/**/*.md"]
+# budget = 0
+'''
+
+#: Gate rows matching the workflow ``init --ci`` writes. Kept beside it because
+#: ``claims`` verifies the pair: if the two drift, our own gate fails.
+STARTER_GATES = '''
+# Checks this project requires, verified against the file meant to run them.
+# A deleted or commented-out step fails `kinemata claims`.
+[[gate]]
+command = "kinemata claims"
+note = "documentation, and this inventory"
+
+[[gate]]
+command = "kinemata check"
+note = "code that re-derives a declared fact"
+'''
+
+#: Through ``WORKFLOW_DIR`` rather than spelled again: `kinemata clusters`
+#: reported the second spelling the moment this was written.
+WORKFLOW_PATH = f"{WORKFLOW_DIR}/kinemata.yml"
+
+STARTER_WORKFLOW = '''\
+# Written by `kinemata init --ci`.
+#
+# A workflow file lives in the repo, so an agent with write access can edit it:
+# on its own this is a reminder, not a catch. Branch protection with this job as
+# a REQUIRED status check is what promotes it, because a deleted job then blocks
+# the merge instead of passing silently. See examples/ci-github-actions.yml in
+# kinemata for the longer argument.
+
+name: kinemata
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  kinemata:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install the checker
+        run: pip install "kinemata @ git+https://github.com/doctorjei/kinemata@main"
+      - name: Documentation claims
+        run: kinemata claims
+      - name: Gate on strong bypasses
+        run: kinemata check
+'''
+
+
+def cmd_init(args: argparse.Namespace) -> int:
+    """Write a config a project can run today, and optionally the CI to run it.
+
+    **The friction this answers was measured, not imagined.** Gating one real
+    artifact set by hand took a config written from scratch against knowledge of
+    which adapters exist, ten count tables, and a registry declared only to
+    satisfy a loader rule that no longer exists. The first minute of adoption
+    should not require reading the source.
+
+    It refuses to overwrite. A scaffold that silently replaces a config someone
+    tuned would be the worst possible first impression for a tool whose argument
+    is that declarations should be true.
+    """
+    root = Path(args.path or ".").resolve()
+    written: list[Path] = []
+
+    config = root / CONFIG_NAMES[0]
+    workflow = root / WORKFLOW_PATH
+    for existing in (config, workflow if args.ci else None):
+        if existing is not None and existing.exists():
+            raise ConfigError(
+                f"{existing} already exists. Delete it or edit it by hand -- "
+                "this writes a starting point, it does not merge into one."
+            )
+
+    body = STARTER_CONFIG + (STARTER_GATES if args.ci else "")
+    config.write_text(body)
+    written.append(config)
+
+    if args.ci:
+        workflow.parent.mkdir(parents=True, exist_ok=True)
+        workflow.write_text(STARTER_WORKFLOW)
+        written.append(workflow)
+
+    for path in written:
+        print(f"wrote {path.relative_to(root)}")
+    print("\nRun `kinemata claims` now; it needs no registry. Then declare a "
+          "registry and run `kinemata check`.")
     return 0
 
 
@@ -601,6 +769,14 @@ def build_parser() -> argparse.ArgumentParser:
     ctx = sub.add_parser("context", parents=[common],
                          help="gate: what a session loads, against its ceiling")
     ctx.set_defaults(func=cmd_context)
+
+    ini = sub.add_parser("init", parents=[common],
+                         help=f"write a starting {CONFIG_NAMES[0]}, and "
+                              "optionally the CI to run it")
+    ini.add_argument("path", nargs="?", help="where to write (default: here)")
+    ini.add_argument("--ci", action="store_true",
+                     help="also write a workflow, and declare it as a gate")
+    ini.set_defaults(func=cmd_init)
 
     base = sub.add_parser("baseline", parents=[common],
                           help="the ratchet: findings accepted as pre-existing")

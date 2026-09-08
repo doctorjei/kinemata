@@ -92,7 +92,16 @@ the only question that matters — did this need to exist?
 
 ```bash
 pip install -e ".[dev]"
+kinemata init          # a starting config; --ci also writes a workflow and
+                       # declares it as a gate. Refuses to overwrite either.
 ```
+
+What `init` writes runs immediately, because it declares `[claims]` and nothing
+else: **a config does not need a registry.** It needs at least one check —
+`[[registry]]`, `[[count]]`, `[[gate]]`, `[claims]` or `[context]` — and a config
+that declares none of them is refused, because every command it configures would
+pass by doing nothing. A registry-shaped command run against a config with no
+registry refuses too, rather than scanning nothing and exiting 0.
 
 Declare your registries in `kinemata.toml`:
 
@@ -130,7 +139,14 @@ kinemata check       # the gate. Exits 1 on a strong finding. Run in CI.
 kinemata claims      # the gate, for documentation. Exits 1 on a dead claim.
 kinemata baseline    # what the gate already accepts. --record to change it.
 kinemata context     # the gate, for what a session loads. Exits 1 over the ceiling.
+kinemata init        # a starting config, and optionally the CI to run it.
 ```
+
+A config found by walking **up** from the working directory says so on stderr.
+The walk is convenience in one place and a leak in another — a role meant to see
+one subtree picks up its parent's config and everything that config points at —
+and the announcement is what makes the inherited case visible without narrowing
+the walk for trees that are not repositories.
 
 A registry that produces **no entries is refused, not accepted quietly** — a missing
 module, an unknown kind, or an adapter that recognizes nothing in the source you
@@ -332,7 +348,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **198 tests**, and
+The companion guard is a number with an oracle. This suite is **209 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 
@@ -422,6 +438,26 @@ extract = '(\d+) tests collected'
 
 A declared oracle that cannot run **fails**, rather than printing a note and
 passing — in CI those are the same thing.
+
+**One oracle, several numbers.** `[[count]]` binds one command to one figure and
+TOML cannot share a value, so a real integration ended up with eight inline
+programs of which only four were distinct — the duplication this package exists
+to report, forced by its own config format, and invisible to `check` because a
+config is not source. Name the command once instead:
+
+```toml
+[command]
+lines = ["wc", "-l"]
+
+[[count]]
+pattern = 'the brief is \*\*(\d+) lines\*\*'
+run = "lines"
+args = ["docs/brief.md"]
+extract = '(\d+)'
+```
+
+`run` against a name no `[command]` declares raises, and so does a count giving
+both `command` and `run` — two answers to one question is not a decision.
 
 **Retired names and spelling conventions are registries, not special cases.**
 Both are one shape: forbidden spellings with a preferred replacement. Kept in a

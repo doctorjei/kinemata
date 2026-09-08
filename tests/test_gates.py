@@ -267,3 +267,108 @@ def test_the_promise_count_is_printed_even_when_quiet(tmp_path, capsys):
 
     assert main(["claims", "-c", str(tmp_path / "kinemata.toml"), "-q"]) == 0
     assert "promised: 1 declared, 1 claim(s) held open" in capsys.readouterr().out
+
+
+# -- a command declared once, used by several counts --------------------------
+
+
+def _count_config(tmp_path, body):
+    write(tmp_path, "consts.py", 'BOX_META_FILE = "box.yaml"\n')
+    write(
+        tmp_path,
+        "kinemata.toml",
+        body + """
+        [[registry]]
+        name = "constants"
+        kind = "python-constants"
+        modules = ["consts.py"]
+        """,
+    )
+    return tmp_path / "kinemata.toml"
+
+
+def test_one_declared_command_settles_several_counts(tmp_path):
+    """This package's own config format forced the duplication it exists to
+    catch: `[[count]]` binds one command to one number and TOML cannot share a
+    value, so a real integration carried eight inline programs of which four
+    were distinct -- one copied three times, differing only in its argument."""
+    write(tmp_path, "one.md", "a\nb\nc\n")
+    write(tmp_path, "two.md", "a\nb\n")
+    write(tmp_path, "doc.md", "one holds **3 lines** and two holds **2 lines**.\n")
+    config = _count_config(tmp_path, """
+        [command]
+        lines = ["wc", "-l"]
+
+        [[count]]
+        label = "one"
+        pattern = 'one holds \\*\\*(\\d+) lines\\*\\*'
+        run = "lines"
+        args = ["one.md"]
+        extract = '(\\d+)'
+
+        [[count]]
+        label = "two"
+        pattern = 'two holds \\*\\*(\\d+) lines\\*\\*'
+        run = "lines"
+        args = ["two.md"]
+        extract = '(\\d+)'
+        """)
+    settings = load(config)
+    assert [spec.command for spec in settings.counts] == [
+        ("wc", "-l", "one.md"), ("wc", "-l", "two.md"),
+    ]
+    assert main(["claims", "-c", str(config)]) == 0
+
+    write(tmp_path, "doc.md", "one holds **9 lines** and two holds **2 lines**.\n")
+    assert main(["claims", "-c", str(config)]) == 1
+
+
+def test_a_count_that_runs_an_undeclared_command_is_refused(tmp_path):
+    """Refused rather than defaulted, like an unknown `strip` transform: the
+    alternative is a count that looks configured and settles nothing."""
+    config = _count_config(tmp_path, """
+        [command]
+        lines = ["wc", "-l"]
+
+        [[count]]
+        label = "one"
+        pattern = '(\\d+) lines'
+        run = "words"
+        extract = '(\\d+)'
+        """)
+    with pytest.raises(ConfigError, match="which no \\[command\\] declares"):
+        load(config)
+
+
+def test_a_count_cannot_name_its_oracle_twice(tmp_path):
+    """`command` and `run` are two answers to one question, and a config that
+    gives both has not decided which oracle is authoritative."""
+    config = _count_config(tmp_path, """
+        [command]
+        lines = ["wc", "-l"]
+
+        [[count]]
+        label = "one"
+        pattern = '(\\d+) lines'
+        command = ["wc", "-l", "one.md"]
+        run = "lines"
+        extract = '(\\d+)'
+        """)
+    with pytest.raises(ConfigError, match="both 'command' and 'run'"):
+        load(config)
+
+
+def test_a_command_declared_as_a_bare_string_is_refused(tmp_path):
+    """TOML takes it happily and it would run as a one-character program."""
+    config = _count_config(tmp_path, """
+        [command]
+        lines = "wc -l"
+
+        [[count]]
+        label = "one"
+        pattern = '(\\d+) lines'
+        run = "lines"
+        extract = '(\\d+)'
+        """)
+    with pytest.raises(ConfigError, match="non-empty list of arguments"):
+        load(config)

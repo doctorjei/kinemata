@@ -11,6 +11,7 @@ from kinemata.bypass import scan, unused
 from kinemata.cli import main
 from kinemata.config import ConfigError, load
 from kinemata.contract import BaseRegistry, Entry
+from kinemata.gates import enforced
 from kinemata.report import review
 
 
@@ -544,3 +545,118 @@ def test_a_promised_list_that_is_not_a_list_is_refused(tmp_path):
     )
     with pytest.raises(ConfigError, match="must be a list"):
         load(tmp_path / "kinemata.toml")
+
+
+def test_a_config_that_only_checks_documents_needs_no_registry(tmp_path, capsys):
+    """The cheapest adoption there is, and it used to require a fiction.
+
+    The loader demanded a `[[registry]]`, so a project wanting `claims` alone
+    had to invent one -- measured on a real integration, where exactly one
+    registry existed to get past that line. The rule it came from is about an
+    *empty* registry reading like a clean tree, which is a different thing from
+    an absent one.
+    """
+    write(tmp_path, "doc.md", "See `src/app.py`.\n")
+    write(tmp_path, "src/app.py", "x = 1\n")
+    write(
+        tmp_path,
+        "kinemata.toml",
+        """
+        [claims]
+        suffixes = [".md"]
+        """,
+    )
+    assert load(tmp_path / "kinemata.toml").registries == []
+    assert main(["claims", "-c", str(tmp_path / "kinemata.toml")]) == 0
+
+
+def test_a_scan_refuses_when_no_registry_is_declared(tmp_path, capsys):
+    """The refusal moved, it did not disappear. Scanning nothing and exiting 0
+    is the inert signal, and it reads exactly like a clean tree."""
+    write(tmp_path, "doc.md", "Nothing to see.\n")
+    write(
+        tmp_path,
+        "kinemata.toml",
+        """
+        [claims]
+        suffixes = [".md"]
+        """,
+    )
+    # 2, not 1: a configuration error is not a finding, and a caller reading
+    # exit codes should be able to tell "this tree is dirty" from "this tool
+    # was asked something it cannot answer".
+    assert main(["check", "-c", str(tmp_path / "kinemata.toml")]) == 2
+    assert "no [[registry]] declared" in capsys.readouterr().err
+
+
+def test_a_config_that_declares_no_check_at_all_is_refused(tmp_path):
+    """What the old rule was reaching for. A config nobody can fail is not a
+    configuration, and every command it defines would pass by doing nothing."""
+    write(tmp_path, "kinemata.toml", '[project]\nroot = "."\n')
+    with pytest.raises(ConfigError, match="declares no check at all"):
+        load(tmp_path / "kinemata.toml")
+
+
+def test_a_config_inherited_from_a_parent_says_so(tmp_path, capsys, monkeypatch):
+    """The upward walk is convenience in one place and a blindness leak in
+    another: a role meant to see one subtree, running a gate inside it, picks up
+    the parent's config and everything it points at. The walk stays -- narrowing
+    it to a repository boundary would break a tree that is not one -- but an
+    inherited config announces itself, and a local one stays quiet."""
+    write(tmp_path, "consts.py", 'BOX_META_FILE = "box.yaml"\n')
+    write(
+        tmp_path,
+        "kinemata.toml",
+        """
+        [[registry]]
+        name = "constants"
+        kind = "python-constants"
+        modules = ["consts.py"]
+        """,
+    )
+    inside = tmp_path / "subtree"
+    inside.mkdir()
+
+    monkeypatch.chdir(inside)
+    assert main(["review"]) == 0
+    assert "above the current directory" in capsys.readouterr().err
+
+    monkeypatch.chdir(tmp_path)
+    assert main(["review"]) == 0
+    assert "above the current directory" not in capsys.readouterr().err
+
+
+# -- init: the first minute of adoption ---------------------------------------
+
+
+def test_init_writes_a_config_that_runs_immediately(tmp_path):
+    """Measured friction, not imagined: gating one real artifact set by hand
+    took a config written from scratch against knowledge of which adapters
+    exist. The starter declares `[claims]`, which needs no registry, so the
+    first command a project runs works before it has decided anything."""
+    assert main(["init", str(tmp_path)]) == 0
+    config = tmp_path / "kinemata.toml"
+    assert load(config).registries == []
+    assert main(["claims", "-c", str(config)]) == 0
+
+
+def test_init_ci_declares_the_gates_its_workflow_runs(tmp_path):
+    """The scaffold is checked by our own gate. `claims` verifies that every
+    declared gate appears in the file meant to run it, so a generated pair that
+    drifts apart fails rather than reassures."""
+    assert main(["init", str(tmp_path), "--ci"]) == 0
+    assert (tmp_path / ".github/workflows/kinemata.yml").is_file()
+
+    settings = load(tmp_path / "kinemata.toml")
+    inventory = enforced(tmp_path, settings.gates)
+    assert inventory.declared == 2
+    assert not inventory.absent
+
+
+def test_init_refuses_to_overwrite(tmp_path):
+    """A scaffold that silently replaced a config someone tuned would be the
+    worst possible first impression for a tool arguing that declarations should
+    be true."""
+    write(tmp_path, "kinemata.toml", "# mine\n")
+    assert main(["init", str(tmp_path)]) == 2
+    assert (tmp_path / "kinemata.toml").read_text() == "# mine\n"
