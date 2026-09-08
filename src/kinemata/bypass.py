@@ -28,7 +28,7 @@ from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from .contract import BaseRegistry, Entry
+from .contract import BaseRegistry, Entry, undeclared
 from .prose import FILTERS, LITERAL_EXTRACTORS, PROSE_FILTERS, STRING_FILTERS
 
 #: Which filter table each ``match_mode`` selects. A mode is a row here, so
@@ -231,6 +231,84 @@ def scan(
                             text=text,
                         )
                     )
+    return found
+
+
+@dataclass(frozen=True)
+class Stray:
+    """One use of an identifier the registry does not declare."""
+
+    path: str
+    line: int
+    identifier: str
+
+    def __str__(self) -> str:
+        return f"{self.path}:{self.line}: {self.identifier}"
+
+
+def strays(
+    registry: BaseRegistry,
+    root: str | Path,
+    *,
+    suffixes: Sequence[str] = (".py",),
+    exclude: Iterable[str] = (),
+) -> list[Stray]:
+    """Identifiers used under ``root`` that ``registry`` does not declare.
+
+    This walks the tree for :func:`~kinemata.contract.undeclared`, which is the
+    closed-world catch — the operation that *raises* rather than advising, and
+    the one that makes a registry a mechanism instead of a convention.
+
+    **It only answers for a registry that can recognize its own identifiers**,
+    which today means a mapping registry with a declared ``syntax``. Any other
+    kind raises ``NotImplementedError`` from ``candidates()``, deliberately:
+    a registry that cannot tell an identifier from ordinary text would answer
+    "nothing is undeclared" about every tree it was ever pointed at.
+
+    Matching is per line so a finding carries a location. A caller that wants
+    one row per identifier can collapse them; a catch that reported a bare name
+    with no site would be asking a reader to go and find it.
+
+    **It honors the registry's ``match_mode``, for the same reason ``scan`` does
+    and with the same evidence behind it.** A keyspace identifier appears in
+    source as a *string literal*; the identifier syntax that recognizes it also
+    matches every dotted attribute access in the language. Measured on
+    kanibako-cli with the fixture's permissive syntax: matching raw lines gives
+    **48,685** findings, string literals alone **7,266**. Neither is a usable
+    gate — the residue is filenames like ``credentials.json``, not settings keys
+    — which is the point. **The mode filter is necessary and not sufficient;
+    what makes this catch usable is a registry declaring an identifier syntax
+    narrow enough to mean something.** Same lesson ``design.md`` §7 records for
+    ``detect``, reached again from the other side.
+    """
+    root = Path(root)
+    exclusions = tuple(exclude)
+    mode = getattr(registry, "match_mode", "strings")
+    strings_only = mode == "strings"
+
+    found: list[Stray] = []
+    for path in _walk(root, tuple(suffixes)):
+        rel = str(path.relative_to(root))
+        if any(fragment in rel for fragment in exclusions):
+            continue
+        try:
+            source = path.read_text(errors="ignore")
+        except OSError:
+            continue
+
+        extractor = LITERAL_EXTRACTORS.get(path.suffix) if strings_only else None
+        if extractor is not None:
+            for number, content, _line in extractor(source):
+                for identifier in undeclared(registry, content):
+                    found.append(Stray(path=rel, line=number, identifier=identifier))
+            continue
+
+        table = MODE_FILTERS.get(mode, FILTERS)
+        blank = table.get(path.suffix)
+        text = blank(source) if blank else source
+        for number, line in enumerate(text.splitlines(), 1):
+            for identifier in undeclared(registry, line):
+                found.append(Stray(path=rel, line=number, identifier=identifier))
     return found
 
 

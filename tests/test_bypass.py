@@ -11,6 +11,8 @@ from __future__ import annotations
 import textwrap
 
 from kinemata import Entry, scan, unused
+from kinemata.adapters.mapping import MappingRegistry
+from kinemata.bypass import strays
 from kinemata.contract import BaseRegistry
 from kinemata.prose import python_code_only, python_strings_only
 
@@ -202,3 +204,42 @@ def test_a_reference_only_in_its_own_definition_does_not_count_as_use(tmp_path):
             yield Entry(id="ORPHAN", home=("keys.py",))
 
     assert unused(Keys(), tmp_path) == ["ORPHAN"]
+
+
+def test_strays_finds_an_identifier_the_registry_does_not_declare(tmp_path):
+    """The closed-world catch, over a tree rather than a string.
+
+    ``undeclared()`` had no command and no tree-walking caller for the whole
+    life of the project, while the name ``kinemata undeclared`` belonged to an
+    advisory scan over repeated text -- a different mechanism wearing it. Wired
+    2026-09-08.
+    """
+    (tmp_path / "app.py").write_text(
+        "cfg = get('config.settings')\ntmp = get('config.scratchpad')\n"
+    )
+    keys = MappingRegistry(
+        {"config.settings": {}}, name="keys", syntax=r"\b[a-z_]+(?:\.[a-z_]+)+\b"
+    )
+    found = strays(keys, tmp_path)
+    assert [(s.line, s.identifier) for s in found] == [(2, "config.scratchpad")]
+
+
+def test_strays_honors_the_registry_match_mode(tmp_path):
+    """A keyspace identifier is a string literal; the syntax that recognizes one
+    also matches every dotted attribute access in the language.
+
+    Measured on kanibako-cli with a permissive syntax: 48,685 findings matching
+    raw lines against 7,266 reading string literals only. Without this the catch
+    reports the language rather than the keyspace.
+    """
+    (tmp_path / "app.py").write_text(
+        "import config.scratchpad\nvalue = get('config.settings')\n"
+    )
+    keys = MappingRegistry(
+        {"config.settings": {}}, name="keys", syntax=r"\b[a-z_]+(?:\.[a-z_]+)+\b"
+    )
+    # default match_mode is "strings": the import is code, not a literal
+    assert strays(keys, tmp_path) == []
+
+    keys.match_mode = "raw"
+    assert [s.identifier for s in strays(keys, tmp_path)] == ["config.scratchpad"]

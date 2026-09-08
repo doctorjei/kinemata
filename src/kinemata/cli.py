@@ -39,7 +39,7 @@ import sys
 from pathlib import Path
 
 from .baseline import Baseline, BaselineError, record
-from .bypass import Bypass
+from .bypass import Bypass, strays
 from .claims import verify
 from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
 from .context import measure
@@ -161,8 +161,14 @@ def cmd_review(args: argparse.Namespace) -> int:
     return 0  # advisory, always
 
 
-def cmd_undeclared(args: argparse.Namespace) -> int:
+def cmd_clusters(args: argparse.Namespace) -> int:
     """The opposite question to ``review``: what wants a declaration.
+
+    Called ``undeclared`` until 2026-09-08, when the name went to the
+    closed-world catch it had been shadowing. The two questions are genuinely
+    different: this one finds *text* that repeats with no declared home, which
+    is a judgment; the catch finds an *identifier* a closed registry does not
+    declare, which is an error.
 
     Advisory, and it stays advisory. ``review`` and ``check`` answer whether a
     *declared* thing was re-derived, which is a violation. This answers whether
@@ -199,6 +205,74 @@ def cmd_undeclared(args: argparse.Namespace) -> int:
             f"Declare one, or leave them apart on purpose."
         )
     return 0  # advisory, always
+
+
+def cmd_undeclared(args: argparse.Namespace) -> int:
+    """Catch A: an identifier the tree uses and a closed registry does not declare.
+
+    This is the operation ``design.md`` §5 calls the catch — the one that raises
+    rather than advises, and the reason a registry is a mechanism rather than a
+    convention. It had **no command for the whole life of the project**: the
+    function existed, was tested, and was reachable from nothing, while the name
+    ``undeclared`` belonged to an advisory scan over repeated text. Wired
+    2026-09-08.
+
+    **Closed gates; open advises.** A legacy codebase cannot close on day one,
+    so an open registry routes undeclared identifiers to a review list and exits
+    0. Closing is the ratchet.
+
+    **Refuses when no registry can answer.** Only a registry that recognizes its
+    own identifiers can say what is undeclared, and today that is a mapping
+    registry with a ``syntax``. Pointing this at a project whose registries
+    cannot answer and exiting 0 would report "nothing undeclared" about a
+    question nobody asked -- the inert signal this project exists to catch.
+    """
+    settings = _settings(args)
+    target = _target(args, settings)
+
+    answered: list[tuple[object, list[object]]] = []
+    for registry in settings.registries:
+        try:
+            found = strays(
+                registry,
+                target,
+                suffixes=settings.suffixes,
+                exclude=settings.exclude,
+            )
+        except NotImplementedError:
+            continue  # cannot recognize an identifier; reported below
+        answered.append((registry, found))
+
+    if not answered:
+        raise ConfigError(
+            "no declared registry can recognize its own identifiers, so none "
+            "can say what is undeclared. This needs a registry with an "
+            "identifier syntax (today: kind = \"yaml-mapping\" with `syntax`). "
+            "Running anyway would report nothing and mean nothing."
+        )
+
+    failed = 0
+    for registry, found in answered:
+        closed = getattr(registry, "closed", False)
+        label = "closed" if closed else "open"
+        if not found:
+            if not args.quiet:
+                print(f"# {registry.name} ({label}): no undeclared identifiers.")
+            continue
+        print(f"# {registry.name} ({label})")
+        for stray in found:
+            print(f"  {stray}")
+        if closed:
+            failed += len(found)
+
+    if failed:
+        print(
+            f"\nFAIL: {failed} use(s) of an identifier no closed registry "
+            "declares. Declare it, or open the registry deliberately.",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
 
 
 def cmd_claims(args: argparse.Namespace) -> int:
@@ -460,8 +534,14 @@ def build_parser() -> argparse.ArgumentParser:
     rev.add_argument("path", nargs="?", help="limit the scan to this path")
     rev.set_defaults(func=cmd_review)
 
-    und = sub.add_parser("undeclared", parents=[common],
+    clu = sub.add_parser("clusters", parents=[common],
                          help="advisory: repeated text with no declared home")
+    clu.add_argument("path", nargs="?", help="limit the scan to this path")
+    clu.set_defaults(func=cmd_clusters)
+
+    und = sub.add_parser("undeclared", parents=[common],
+                         help="gate: an identifier a closed registry does not "
+                              "declare (advisory while the registry is open)")
     und.add_argument("path", nargs="?", help="limit the scan to this path")
     und.set_defaults(func=cmd_undeclared)
 

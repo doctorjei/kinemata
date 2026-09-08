@@ -253,14 +253,14 @@ What this project ships, read back against its own rules:
 
 | Principle | How the registry layer answers it |
 |---|---|
-| §1 reminder or catch | `ids`, `review` and `undeclared` are reminders; `check` and `claims` are catches, and only in CI with branch protection; `baseline` is a catch with an escape hatch, below |
+| §1 reminder or catch | `ids`, `review` and `clusters` are reminders; `check` and `claims` are catches, and only in CI with branch protection; `baseline` is a catch with an escape hatch, below |
 | §1 one source | `review` and `check` run identical analysis; only the exit code differs |
 | §2 spend test | duplication scores yes/no/no — cheap to commit, invisible in a diff, silent on landing |
 | §3 refuse | bad configuration raises; an empty registry raises; a registry that cannot detect its identifiers refuses to be `closed`; suppression is reported |
 | §3 stay running | the checks a project requires are declared and verified against the files meant to run them, so a deleted or commented-out step fails instead of passing |
 | §3 break it on purpose | the self-check's five entries were each verified by injecting the bypass and watching the gate fail |
 | §6 validation | labeled history from real repositories, with the components that failed labeled as failing |
-| §4 classify first | `undeclared` reports; `check` and `claims` gate. A missing file is a fact; text repeating with no declared home is a judgment |
+| §4 classify first | `clusters` reports; `check` and `claims` gate. A missing file is a fact; text repeating with no declared home is a judgment |
 
 One of those rows was added late, and the reason generalizes past this project. Every
 mechanism above was built and validated on the question *does it find the thing?* — and all
@@ -295,7 +295,7 @@ reach:
 
 | Shape | Instances | Reachable |
 |---|---|---|
-| A value or message spelled in several places, declared nowhere | 5 | **4** — shipped as `undeclared` |
+| A value or message spelled in several places, declared nowhere | 5 | **4** — shipped as `clusters` |
 | Two copies of a code block, drifted apart | 4 | 0 — on measurement, see below |
 | Two implementations of one rule that share no text | 4 | 0 — out of reach by nature |
 

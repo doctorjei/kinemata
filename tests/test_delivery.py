@@ -283,7 +283,7 @@ def test_review_advises_and_always_exits_zero(project, capsys):
     assert "BOX_META_FILE" in capsys.readouterr().out
 
 
-def test_undeclared_reports_repeated_text_and_stays_advisory(project, capsys):
+def test_clusters_reports_repeated_text_and_stays_advisory(project, capsys):
     """The opposite question to review, and it never gates.
 
     Repeated text with no declared home is a judgment, not a violation -- two
@@ -291,15 +291,15 @@ def test_undeclared_reports_repeated_text_and_stays_advisory(project, capsys):
     """
     write(project, "src/one.py", 'msg = "could not reach the daemon"\n')
     write(project, "src/two.py", 'note = "could not reach the daemon"\n')
-    code = main(["undeclared", "-c", str(project / "kinemata.toml")])
+    code = main(["clusters", "-c", str(project / "kinemata.toml")])
     assert code == 0
     assert "could not reach the daemon" in capsys.readouterr().out
 
 
-def test_undeclared_does_not_repeat_what_the_registry_declares(project, capsys):
+def test_clusters_does_not_repeat_what_the_registry_declares(project, capsys):
     """box.yaml is declared, so it is the bypass scan's finding, not this one."""
     write(project, "src/three.py", 'p = other / "box.yaml"\n')
-    assert main(["undeclared", "-c", str(project / "kinemata.toml")]) == 0
+    assert main(["clusters", "-c", str(project / "kinemata.toml")]) == 0
     assert "box.yaml" not in capsys.readouterr().out
 
 
@@ -447,3 +447,58 @@ def test_unused_is_vacuous_without_excluding_the_declaring_machinery(tmp_path):
     assert unused(Keys(), tmp_path) == []
     # excluding the declaring machinery makes the check mean something:
     assert unused(Keys(), tmp_path, exclude=["keys.py"]) == ["a.two"]
+
+
+def test_a_kind_that_cannot_recognize_identifiers_is_refused_when_closed(tmp_path):
+    """``closed`` is a promise only one adapter can keep.
+
+    Every kind accepts ``closed = true`` from configuration; only
+    ``yaml-mapping`` implements ``candidates()``. A closed registry that cannot
+    recognize an identifier answers nothing when asked what is undeclared, which
+    reads exactly like a tree with nothing undeclared in it.
+
+    ``BaseRegistry.__post_init_check__`` existed to ask this question and was
+    called from nowhere in ``src/`` for the whole life of the mechanism, so the
+    promise was checked by nothing. Found 2026-09-08 while auditing why the
+    closed-world catch had no CLI surface.
+    """
+    write(
+        tmp_path,
+        "kinemata.toml",
+        """
+        [[registry]]
+        name = "helpers"
+        kind = "code-patterns"
+        closed = true
+
+          [[registry.entry]]
+          id = "run_or_die"
+          antipatterns = ['check\\s*=\\s*True']
+        """,
+    )
+    with pytest.raises(ConfigError, match="cannot be closed"):
+        load(tmp_path / "kinemata.toml")
+
+
+def test_the_closure_guard_does_not_fire_on_an_open_registry(tmp_path):
+    """The same declaration without ``closed`` loads.
+
+    A guard that refused this would make the ratchet unusable: an open registry
+    routes undeclared identifiers to a review list rather than a failure, which
+    is how a legacy codebase adopts one at all.
+    """
+    write(
+        tmp_path,
+        "kinemata.toml",
+        """
+        [[registry]]
+        name = "helpers"
+        kind = "code-patterns"
+
+          [[registry.entry]]
+          id = "run_or_die"
+          antipatterns = ['check\\s*=\\s*True']
+        """,
+    )
+    settings = load(tmp_path / "kinemata.toml")
+    assert [r.name for r in settings.registries] == ["helpers"]

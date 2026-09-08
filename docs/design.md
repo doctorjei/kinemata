@@ -147,7 +147,7 @@ mechanisms, not settings.
 | | Mechanism |
 |---|---|
 | **Reminder** | the projection, budgeted small enough that an agent cannot plausibly claim not to have seen it |
-| **Catch A** | new code introducing an *undeclared* capability — CI failure when `closed`, review list when open |
+| **Catch A** | new code introducing an *undeclared* capability — CI failure when `closed`, review list when open. `kinemata undeclared`, wired 2026-09-08 after shipping with no command at all; see the note below |
 | **Catch B** | a new *declaration* is visible in the diff, and routes to review |
 
 ### What this does and does not do
@@ -163,6 +163,31 @@ should not be described as more.
 
 The forgetful agent is handled by the reminder. The rogue agent is handled by the fact
 that both branches leave a trace, and skipping both fails CI.
+
+**Catch A shipped for months with no way to run it, and that is worth recording.** The
+function existed, was tested against a real keyspace, and was reachable from nothing: the
+name `kinemata undeclared` belonged to an advisory scan over repeated text, so the absence
+of the catch was hidden behind a command that answered a different question. The guard on
+`closed` — a registry must be able to recognize its own identifiers — was likewise called
+from nowhere, so three of the four adapters could be declared `closed` and would have
+answered "nothing is undeclared" about every tree. Both were wired on 2026-09-08; the
+advisory scan is now `kinemata clusters`.
+
+**What the catch is worth, measured rather than asserted.** Run against kanibako-cli with
+its real keyspace manifest as a closed registry: **48,685** findings matching raw lines,
+**7,266** reading string literals only, **2,434** with an identifier syntax scoped to the
+keyspace's own prefixes. The residue at that point is filenames, not keys. So the mode
+filter is necessary and nowhere near sufficient, and **the precision of this catch is a
+property of the syntax a project declares, not of anything kinemata supplies.** A project
+adopting it should expect to tune that syntax and to record a baseline first, exactly as
+the duplication scan does.
+
+**Two limits that follow.** kinemata cannot dogfood Catch A — its own registries are
+`code-patterns` and `substitutions`, and neither can be closed, so `kinemata undeclared`
+run here refuses rather than reporting a false clean. And the catch is not yet wired to
+the ratchet, so there is no way to accept an existing population and fail only on new
+ones; on a mature codebase that is the difference between a usable gate and one that gets
+switched off.
 
 ---
 

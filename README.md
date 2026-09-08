@@ -123,7 +123,9 @@ Then:
 ```bash
 kinemata ids         # the projection: what already exists. Budgeted, loadable.
 kinemata review      # advisory. Always exits 0. Run in-box, during the work.
-kinemata undeclared  # advisory. Repeated text with no declared home.
+kinemata clusters    # advisory. Repeated text with no declared home.
+kinemata undeclared  # the closed-world catch. Exits 1 on an identifier a
+                     # closed registry does not declare; advisory while open.
 kinemata check       # the gate. Exits 1 on a strong finding. Run in CI.
 kinemata claims      # the gate, for documentation. Exits 1 on a dead claim.
 kinemata baseline    # what the gate already accepts. --record to change it.
@@ -330,7 +332,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **175 tests**, and
+The companion guard is a number with an oracle. This suite is **179 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 
@@ -361,7 +363,7 @@ suffixes = [".md"]
 historical = ["archives/"]   # a record of what was true is not a stale claim
 ```
 
-`kinemata claims` gates, unlike `undeclared`: a missing file is a fact, not a
+`kinemata claims` gates, unlike `clusters`: a missing file is a fact, not a
 judgment. It prints the number of claims checked even when everything passes,
 because "all resolve" and "nothing was looked at" otherwise read identically.
 
@@ -421,7 +423,7 @@ check quietly stops checking.
 
 ## Text with no declared home
 
-Everything above needs the thing to be declared first. `undeclared` asks the
+Everything above needs the thing to be declared first. `clusters` asks the
 opposite question: what repeats with nothing declaring it? Three tiers, most
 precise first — on a 65k-line codebase they report **6**, **111** and **222**.
 
@@ -450,7 +452,7 @@ commit message names the sites a human found by hand:
   diagnosing a missing adapter rather than a broken mechanism. With
   `code-patterns` it finds 6 live bypasses there.
 
-`undeclared` was measured the same way, against two more labeled commits — and
+`clusters` was measured the same way, against two more labeled commits — and
 its **first implementation scored 0/4**, because it compared literals for
 equality and the incident's sites were composed paths that are not equal. A
 second miss followed: the other incident's messages were f-strings, invisible
@@ -470,7 +472,7 @@ anything.
 
 - `review` and `check` detect only **re-derivation of something already
   declared**. Against 37 attributable commits from a six-repository corpus,
-  duplication with nothing declared appeared **13 times**, and `undeclared`
+  duplication with nothing declared appeared **13 times**, and `clusters`
   reaches **4 of them**. The other nine are duplicated code blocks (a clone
   detector scored 0 on a labeled incident at any usable precision — the copies
   worth finding are the ones that have drifted, and drift removes the signal)
