@@ -211,3 +211,36 @@ def test_kinds_are_a_table_not_a_hardcoded_sequence():
     assert {kind.name for kind in CLAIM_KINDS} == {"path", "link", "commit"}
     (commit,) = [kind for kind in CLAIM_KINDS if kind.needs_git]
     assert commit.when_unavailable
+
+
+def test_a_document_behind_a_symlink_is_read(tmp_path):
+    """The silent half of the walk defect, and the one that matters here.
+
+    ``_walk`` skipped a symlinked directory entirely, so documents living
+    behind one were never read and every claim in them passed by not being
+    looked at. A checker reporting "all resolve" about files it never opened is
+    the inert signal this project exists to catch.
+    """
+    write(tmp_path, "real/doc.md", "See `src/gone.py`.\n")
+    (tmp_path / "tree").mkdir()
+    (tmp_path / "tree" / "linked").symlink_to(tmp_path / "real")
+
+    assert broken(verify(tmp_path / "tree")) == {("path", "src/gone.py")}
+
+
+def test_a_path_behind_a_symlink_resolves_however_it_is_anchored(tmp_path):
+    """The index has the same defect with the opposite symptom: loud.
+
+    A path claim is checked against the filesystem first, so a root-anchored
+    one resolved anyway. One anchored from inside -- the ordinary way to cite a
+    module -- falls through to the index, which was built on ``rglob`` and so
+    did not contain anything behind a link. Correct prose, reported dead.
+    """
+    write(tmp_path, "real/internal/handler.py", "x = 1\n")
+    (tmp_path / "tree").mkdir()
+    (tmp_path / "tree" / "linked").symlink_to(tmp_path / "real")
+    write(tmp_path, "tree/doc.md", "See `internal/handler.py`.\n")
+
+    result = verify(tmp_path / "tree")
+    assert result.checked == 1  # a claim nobody extracted proves nothing
+    assert result.broken == []

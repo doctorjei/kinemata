@@ -39,7 +39,7 @@ import sys
 from pathlib import Path
 
 from .baseline import Baseline, BaselineError, record
-from .bypass import Bypass, strays
+from .bypass import Bypass, crossings, strays
 from .claims import verify
 from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
 from .context import measure
@@ -58,18 +58,47 @@ def _settings(args: argparse.Namespace) -> Settings:
     return load(path)
 
 
+#: Roots already announced in this run. A root scanned once per registry would
+#: otherwise report the same crossing once per registry.
+_ANNOUNCED: set[Path] = set()
+
+
+def _announce(target: Path) -> None:
+    """Say so when the scan leaves the tree it was pointed at.
+
+    The walk follows symlinked directories on purpose -- refusing to scanned an
+    assembled tree as empty and called it clean. The cost is that a root can be
+    a name for material living somewhere else, and a reader who assumed the root
+    bounds the scan would never learn otherwise. **Not suppressed by
+    ``--quiet``:** this is the scope of the check, not one of its findings.
+    """
+    if target in _ANNOUNCED:
+        return
+    _ANNOUNCED.add(target)
+    for crossing in crossings(target):
+        print(f"warning: scan follows {crossing}, outside the tree given",
+              file=sys.stderr)
+
+
 def _target(args: argparse.Namespace, settings: Settings) -> Path:
-    """Where to scan.
+    """Where to scan, announcing anything the scan reaches outside it.
 
     A relative path resolves against the **project root**, not the working
     directory. Otherwise ``kinemata check src`` run from a parent directory
     silently scans a different tree and reports a clean or bogus result -- which
     it did, on the first run of this command.
+
+    The announcement is wired here rather than into each command because this is
+    the one place every scanning command passes through; a command added later
+    inherits it instead of having to remember it.
     """
     if not args.path:
-        return settings.root
-    given = Path(args.path)
-    return given if given.is_absolute() else settings.root / given
+        target = settings.root
+    else:
+        given = Path(args.path)
+        target = given if given.is_absolute() else settings.root / given
+    _announce(target)
+    return target
 
 
 def _max_sites(args: argparse.Namespace, settings: Settings) -> int | None:

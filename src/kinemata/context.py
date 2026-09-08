@@ -74,6 +74,7 @@ whatever arrives next, which is the same rot a baseline has.
 
 from __future__ import annotations
 
+import glob
 import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
@@ -174,16 +175,28 @@ def measure(
     Each glob is resolved against ``root``. A file matched by two globs is
     counted once: the declaration says what is loaded, and loading a file twice
     is a property of the harness, not of the set.
+
+    **Resolved with ``glob``, not ``Path.glob``, and the difference is the
+    point.** ``Path.glob`` does not descend into a symlinked directory, so
+    ``notebook/**/*.md`` weighed nothing at all behind a link -- an *under*-count
+    in a ceiling check, which passes. Two traps came with the swap, both
+    measured rather than assumed: the ``glob`` module skips names beginning with
+    a dot unless told otherwise, which would have silently dropped a declared
+    ``.claude/`` file; and it expands a symlink loop about forty deep, which
+    counted three files 120 times. Hence ``include_hidden`` and a key on the
+    real file rather than on the path that reached it.
     """
     root = Path(root)
-    seen: dict[str, Path] = {}
+    seen: dict[Path, str] = {}
     for pattern in include:
-        for path in sorted(root.glob(pattern)):
+        for match in sorted(glob.glob(pattern, root_dir=root, recursive=True,
+                                      include_hidden=True)):
+            path = root / match
             if path.is_file():
-                seen.setdefault(str(path.relative_to(root)), path)
+                seen.setdefault(path.resolve(), match)
 
     files = []
-    for relative, path in sorted(seen.items()):
+    for path, relative in sorted(seen.items(), key=lambda item: item[1]):
         try:
             text = path.read_text(errors="ignore")
         except OSError:

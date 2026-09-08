@@ -12,7 +12,7 @@ import textwrap
 
 from kinemata import Entry, scan, unused
 from kinemata.adapters.mapping import MappingRegistry
-from kinemata.bypass import strays
+from kinemata.bypass import crossings, strays
 from kinemata.contract import BaseRegistry
 from kinemata.prose import python_code_only, python_strings_only
 
@@ -243,3 +243,94 @@ def test_strays_honors_the_registry_match_mode(tmp_path):
 
     keys.match_mode = "raw"
     assert [s.identifier for s in strays(keys, tmp_path)] == ["config.scratchpad"]
+
+
+# -- the walk -----------------------------------------------------------------
+
+
+def test_the_walk_enters_a_symlinked_directory(tmp_path):
+    """A tree reached through a link was scanned as empty and called clean.
+
+    Measured 2026-09-08 on a real tree: 0 files through the link against 130 on
+    the real path, because ``Path.rglob`` does not recurse a symlinked
+    directory. Every check in the package inherited it, so a project laid out
+    that way passed every gate by being invisible.
+    """
+    write(tmp_path, "real/pkg/names.py", 'p = root / "workset.yaml"\n')
+    (tmp_path / "tree").mkdir()
+    (tmp_path / "tree" / "linked").symlink_to(tmp_path / "real")
+
+    reg = Constants({"WORKSET_META_FILE": (r"workset\.yaml", "config.py")})
+    found = scan(reg, tmp_path / "tree")
+    assert [hit.path for hit in found] == ["linked/pkg/names.py"]
+
+
+def test_a_symlink_loop_yields_each_file_once(tmp_path):
+    """Following links without identity tracking does not hang -- it inflates.
+
+    Measured: ``os.walk(followlinks=True)`` and ``glob`` both expand a
+    self-referential link about forty times before the OS refuses, reporting
+    three files 120 times. Findings counted forty times over are a gate nobody
+    can read.
+    """
+    write(tmp_path, "pkg/names.py", 'p = root / "workset.yaml"\n')
+    (tmp_path / "pkg" / "loop").symlink_to(tmp_path / "pkg")
+
+    reg = Constants({"WORKSET_META_FILE": (r"workset\.yaml", "config.py")})
+    assert [hit.path for hit in scan(reg, tmp_path)] == ["pkg/names.py"]
+
+
+def test_two_links_to_one_tree_are_walked_once(tmp_path):
+    """Same mechanism as the loop guard, and the reason it keys on identity
+    rather than on a path already seen: one file, two names, one finding."""
+    write(tmp_path, "real/names.py", 'p = root / "workset.yaml"\n')
+    (tmp_path / "tree").mkdir()
+    (tmp_path / "tree" / "one").symlink_to(tmp_path / "real")
+    (tmp_path / "tree" / "two").symlink_to(tmp_path / "real")
+
+    reg = Constants({"WORKSET_META_FILE": (r"workset\.yaml", "config.py")})
+    assert [hit.path for hit in scan(reg, tmp_path / "tree")] == ["one/names.py"]
+
+
+def test_a_link_leaving_the_tree_is_followed_and_reported(tmp_path):
+    """Followed, because an assembled tree is a real layout; reported, because
+    the root then does not bound what was read."""
+    write(tmp_path, "elsewhere/names.py", "x = 1\n")
+    (tmp_path / "tree").mkdir()
+    (tmp_path / "tree" / "linked").symlink_to(tmp_path / "elsewhere")
+
+    (found,) = crossings(tmp_path / "tree")
+    assert found.path == "linked"
+    assert found.target == str((tmp_path / "elsewhere").resolve())
+
+
+def test_a_link_inside_the_tree_is_not_a_crossing(tmp_path):
+    """Nothing left the project, so there is nothing to announce. A warning on
+    every internal link is how a real one stops being read."""
+    write(tmp_path, "tree/real/names.py", "x = 1\n")
+    (tmp_path / "tree" / "linked").symlink_to(tmp_path / "tree" / "real")
+
+    assert crossings(tmp_path / "tree") == []
+
+
+def test_skipped_directories_are_not_entered_through_a_link(tmp_path):
+    """Pruning happens during the descent, so a linked tree carrying a
+    ``.venv`` costs nothing rather than thousands of files."""
+    write(tmp_path, "real/.venv/lib/names.py", 'p = root / "workset.yaml"\n')
+    write(tmp_path, "real/names.py", 'p = root / "workset.yaml"\n')
+    (tmp_path / "tree").mkdir()
+    (tmp_path / "tree" / "linked").symlink_to(tmp_path / "real")
+
+    reg = Constants({"WORKSET_META_FILE": (r"workset\.yaml", "config.py")})
+    assert [hit.path for hit in scan(reg, tmp_path / "tree")] == ["linked/names.py"]
+
+
+def test_a_broken_link_is_not_a_file_to_read(tmp_path):
+    """A dangling link used to arrive at ``read_text`` as though it were
+    source. It is skipped, and the walk keeps going rather than raising."""
+    write(tmp_path, "names.py", 'p = root / "workset.yaml"\n')
+    (tmp_path / "dangling.py").symlink_to(tmp_path / "gone.py")
+    (tmp_path / "nowhere").symlink_to(tmp_path / "missing")
+
+    reg = Constants({"WORKSET_META_FILE": (r"workset\.yaml", "config.py")})
+    assert [hit.path for hit in scan(reg, tmp_path)] == ["names.py"]

@@ -332,7 +332,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **179 tests**, and
+The companion guard is a number with an oracle. This suite is **192 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 
@@ -349,6 +349,25 @@ domain words account for 1,054 of them. Two filters, both forced by measurement:
   `max_sites` (default 20) is a domain word, not a duplication signal. 314 → 43.
   **Reported, never silent** — a check that quietly stops checking is worse than
   no check.
+
+## What the scan walks
+
+Every check here walks the tree the same way, so a defect in the walk is a
+defect in all of them. It **follows symlinked directories**, because
+`Path.rglob` does not: measured on a real tree, 0 files through a link against
+**130** on the real path, which meant a project whose source is reached that way
+scanned as empty and passed every gate by being invisible.
+
+Two consequences, both deliberate:
+
+- **A link is followed once.** A cycle is not hypothetical — `os.walk` and
+  `glob` both expand a self-referential link about forty deep before the
+  operating system refuses, reporting three files 120 times. Directories are
+  keyed on their real identity, which also collapses two links to one tree.
+- **A link out of the project is announced**, on stderr, and `--quiet` does not
+  suppress it: that is the scope of the check, not one of its findings. The
+  root you point at is otherwise read as the bound on what was scanned, and
+  here it is not one.
 
 ## Documentation is a registry of claims
 

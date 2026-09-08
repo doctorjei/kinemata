@@ -22,6 +22,7 @@ Two properties, both learned from corpus evidence:
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from collections.abc import Iterable, Iterator, Sequence
@@ -121,13 +122,105 @@ def _is_home(path: str, entry: Entry) -> bool:
     return False
 
 
+@dataclass(frozen=True)
+class Crossing:
+    """A symlinked directory the walk followed out of the tree it was given."""
+
+    path: str
+    target: str
+
+    def __str__(self) -> str:
+        return f"{self.path} -> {self.target}"
+
+
+def _crossing(here: Path, root: Path, base: Path) -> Crossing | None:
+    """Was this directory reached by a link that leaves ``root``?
+
+    Only the top of a linked subtree is itself a symlink, so a crossing is
+    reported once per link rather than once per directory beneath it.
+    """
+    if here == root or not here.is_symlink():
+        return None
+    target = here.resolve()
+    if target.is_relative_to(base):
+        return None
+    return Crossing(path=here.relative_to(root).as_posix(), target=str(target))
+
+
+def _tree(root: Path) -> Iterator[tuple[Path, list[str], Crossing | None]]:
+    """Every directory under ``root``, sorted, with its file names.
+
+    **``Path.rglob`` does not enter a symlinked directory, and every check in
+    this package was built on it.** Measured 2026-09-08: a tree reached through
+    a symlink yielded **0** files where the real path yielded **130**. A project
+    whose source is reached that way was scanned as empty and every gate
+    reported clean -- a catch reporting a clean tree because it could not see
+    the tree, which is the worst way this package can fail.
+
+    So the walk follows symlinked directories, and pays the two costs:
+
+    * **Loops.** Not hypothetical: measured on a self-referential link, both
+      ``os.walk(followlinks=True)`` and ``glob`` expand it about forty times
+      before the OS refuses, reporting three files 120 times. Each directory is
+      entered once, keyed on its real identity, which also collapses two links
+      to the same tree into one visit.
+    * **Scope.** A link can leave the project. It is followed and *announced*:
+      the third element of each yield is a :class:`Crossing` when this directory
+      was reached that way. Following is right -- a tree assembled from symlinks
+      is a real layout, and one carrier reached from several places is the
+      arrangement this project recommends -- but a scan reading files outside
+      the root it was given should say so rather than let the reader assume the
+      root bounds it.
+
+    ``SKIP_DIRS`` are pruned before descending rather than filtered after, which
+    is also what keeps the walk out of ``.venv``'s thousands of files.
+    """
+    base = root.resolve()
+    try:
+        top = root.stat()
+    except OSError:
+        return
+    seen = {(top.st_dev, top.st_ino)}
+
+    for parent, dirnames, filenames in os.walk(root, followlinks=True):
+        here = Path(parent)
+        filenames.sort()
+        keep: list[str] = []
+        for name in sorted(dirnames):
+            if name in SKIP_DIRS:
+                continue
+            try:
+                stat = (here / name).stat()  # follows the link, by design
+            except OSError:
+                continue  # broken link, or a directory we may not read
+            identity = (stat.st_dev, stat.st_ino)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            keep.append(name)
+        dirnames[:] = keep
+        yield here, filenames, _crossing(here, root, base)
+
+
+def crossings(root: str | Path) -> list[Crossing]:
+    """Every symlinked directory the walk follows out of ``root``.
+
+    Separate from the scans so the fact can be reported once per run rather than
+    once per registry, and so a caller that only wants to know the scope of a
+    scan does not have to read every file to find out.
+    """
+    return [found for _, _, found in _tree(Path(root)) if found is not None]
+
+
 def _walk(root: Path, suffixes: Sequence[str]) -> Iterator[Path]:
-    for path in sorted(root.rglob("*")):
-        if not path.is_file() or path.suffix not in suffixes:
-            continue
-        if SKIP_DIRS & set(path.parts):
-            continue
-        yield path
+    for here, filenames, _ in _tree(root):
+        for name in filenames:
+            path = here / name
+            if path.suffix not in suffixes:
+                continue
+            if not path.is_file():  # a broken link is not a file to read
+                continue
+            yield path
 
 
 def scan(

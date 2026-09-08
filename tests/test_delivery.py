@@ -502,3 +502,23 @@ def test_the_closure_guard_does_not_fire_on_an_open_registry(tmp_path):
     )
     settings = load(tmp_path / "kinemata.toml")
     assert [r.name for r in settings.registries] == ["helpers"]
+
+
+def test_a_scan_leaving_the_tree_says_so_even_when_quiet(project, tmp_path, capsys):
+    """Following a link out of the project is deliberate; doing it silently is
+    not. The root would otherwise read as the bound on what was scanned.
+
+    Reported through ``-q`` because this is the scope of the check rather than
+    one of its findings, the same rule the exemption count follows.
+    """
+    outside = tmp_path.parent / "outside-the-project"
+    outside.mkdir(exist_ok=True)
+    (outside / "app.py").write_text('p = root / "box.yaml"\n')
+    (project / "src" / "linked").symlink_to(outside)
+
+    assert main(["check", "-c", str(project / "kinemata.toml"), "-q"]) == 1
+    captured = capsys.readouterr()
+    assert "src/linked" in captured.err
+    assert str(outside.resolve()) in captured.err
+    # and it is scanned, not merely announced
+    assert "linked/app.py" in captured.out

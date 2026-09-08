@@ -39,7 +39,7 @@ from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from .bypass import GIT_DIR, SKIP_DIRS, _walk, git_ignored
+from .bypass import GIT_DIR, _tree, _walk, git_ignored
 
 #: How far back from a claim to look for a word that turns it into a mention.
 #: Scoped rather than whole-line: an earlier version skipped the entire line and
@@ -417,13 +417,18 @@ def _index(root: Path, exclusions: Sequence[str]) -> tuple[set[str], set[str]]:
     """
     files: set[str] = set()
     directories: set[str] = set()
-    for path in root.rglob("*"):
-        if SKIP_DIRS & set(path.parts):
-            continue
-        rel = path.relative_to(root).as_posix()
-        if _excluded(rel, exclusions):
-            continue
-        (directories if path.is_dir() else files).add(rel)
+    # Shares ``_tree`` with the scans, and for the same reason: this index was
+    # built on ``rglob``, which does not enter a symlinked directory, so a
+    # document citing a path reached that way was reported as a dead claim.
+    for here, filenames, _ in _tree(root):
+        if here != root:
+            rel = here.relative_to(root).as_posix()
+            if not _excluded(rel, exclusions):
+                directories.add(rel)
+        for name in filenames:
+            rel = (here / name).relative_to(root).as_posix()
+            if not _excluded(rel, exclusions):
+                files.add(rel)
     return files, directories
 
 

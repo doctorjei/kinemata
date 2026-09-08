@@ -191,3 +191,39 @@ def test_every_declared_transform_is_reachable_by_name():
     for name, transform in STRIPPERS.items():
         assert re.fullmatch(r"[a-z-]+", name)
         assert transform("plain text") == "plain text"
+
+
+def test_a_file_behind_a_symlink_is_weighed(tmp_path):
+    """``Path.glob`` does not descend a symlinked directory, so an instruction
+    layer assembled from links weighed nothing -- an under-count in a ceiling
+    check, which passes. A budget that cannot see what it is bounding is worse
+    than no budget."""
+    write(tmp_path, "real/policy.md", "p" * 400)
+    (tmp_path / "canon").mkdir()
+    (tmp_path / "canon" / "linked").symlink_to(tmp_path / "real")
+
+    found = measure(tmp_path / "canon", ["**/*.md"], ceiling=1000)
+    assert [f.path for f in found.files] == ["linked/policy.md"]
+    assert found.size == 400
+
+
+def test_a_symlink_loop_counts_a_file_once(tmp_path):
+    """Measured: ``glob`` expands a self-referential link about forty deep
+    before the OS refuses. Counting the same file forty times would fail a
+    ceiling that nothing had actually breached."""
+    write(tmp_path, "docs/policy.md", "p" * 400)
+    (tmp_path / "docs" / "loop").symlink_to(tmp_path / "docs")
+
+    found = measure(tmp_path, ["**/*.md"], ceiling=1000)
+    assert found.size == 400
+    assert len(found.files) == 1
+
+
+def test_a_declared_dotfile_is_still_counted(tmp_path):
+    """The trap that came with the fix. Unlike ``Path.glob``, the ``glob``
+    module skips names beginning with a dot unless told otherwise -- and an
+    instruction layer is full of them. Dropping one silently would have traded
+    one under-count for another."""
+    write(tmp_path, ".claude/CLAUDE.md", "c" * 120)
+    found = measure(tmp_path, ["**/*.md"], ceiling=1000)
+    assert [f.path for f in found.files] == [".claude/CLAUDE.md"]
