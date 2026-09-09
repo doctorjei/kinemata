@@ -365,7 +365,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **252 tests**, and
+The companion guard is a number with an oracle. This suite is **254 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 
@@ -752,8 +752,17 @@ entries carry no antipattern, and on httpie that was **18 of 21** — the scan w
 of the twenty-one things the config declared. The single finding it reported was true, and the
 silence around it was the larger fact.
 
-The threshold that causes it has not moved: it was measured, and lowering it
-matches everything. What changed is that the silence says so.
+Then the silence itself was fixed. A short value is now matched **as a whole literal** rather
+than not at all, which is the precise half of what the length threshold was protecting against:
+`GET` inside `TARGET` is noise, a literal that *is* `GET` is not. httpie's `HTTP_GET` is now
+found at both of its sites, including the lexer line two above the `POST` that was already
+reported, and the silent count there falls to 15 of 21.
+
+**The floor below that tier is measured rather than chosen.** Set at two characters, the same
+65k-line settings package went from 14 strong findings to **31** — and all seventeen new ones
+were a single constant, `RW_PATH = "rw"`, matching the unrelated mount-binding key in
+`bindings["rw"]`. A two-character value collides across namespaces even as a whole literal. At
+three, that package is back to **14 with no adoption cost at all**, and `GET` is still found.
 
 ## Documentation
 

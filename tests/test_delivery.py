@@ -41,6 +41,50 @@ def test_short_and_generic_values_get_no_antipattern(tmp_path):
     assert got["REAL"] != ()
 
 
+def test_a_short_value_is_matched_only_as_a_whole_literal(tmp_path):
+    """The GET/POST incident, which is what a foreign project exposed.
+
+    httpie declares ``HTTP_GET = 'GET'`` and ``HTTP_POST = 'POST'`` on adjacent
+    lines, and a lexer table writes both as literals two lines apart. POST was
+    reported and GET was invisible, because three characters was under the
+    threshold -- so one of two identical constructs was reported and a reader
+    would reasonably conclude the other was fine.
+
+    Anchoring gives the precise half of what the threshold was protecting
+    against and drops the noisy half: ``GET`` is a finding when a literal *is*
+    it, never when a literal merely contains it.
+    """
+    write(tmp_path, "consts.py", "HTTP_GET = 'GET'\nHTTP_POST = 'POST'\n")
+    write(
+        tmp_path,
+        "lexer.py",
+        """
+        TYPES = {'GET': 1, 'POST': 2}
+        label = "TARGET"
+        """,
+    )
+    reg = PythonConstants([tmp_path / "consts.py"], root=tmp_path)
+    found = {(h.entry_id, h.line) for h in scan(reg, tmp_path) if h.strength == "strong"}
+    assert found == {("HTTP_GET", 1), ("HTTP_POST", 1)}
+    # ...and the substring that made the threshold right in the first place.
+    # `TARGET` contains `GET`; unanchored, this is what buried the real
+    # findings, and the case matters -- an earlier version of this test used
+    # `budget`, whose `get` is lowercase, so it passed without the anchors.
+    assert not [h for h in scan(reg, tmp_path) if h.line == 2]
+
+
+def test_two_characters_is_below_even_the_anchored_tier(tmp_path):
+    """Set by measurement. At a floor of 2, kanibako-cli's settings package went
+    from 14 strong findings to 31, and every one of the seventeen was
+    ``RW_PATH = "rw"`` matching the unrelated mount-binding key in
+    ``bindings["rw"]``. A two-character value collides across namespaces even as
+    a whole literal."""
+    write(tmp_path, "consts.py", "RW_PATH = 'rw'\nSEP = '/'\n")
+    got = {e.id: e.antipatterns for e in PythonConstants([tmp_path / "consts.py"]).entries()}
+    assert got["RW_PATH"] == ()
+    assert got["SEP"] == ()
+
+
 def test_private_constants_are_skipped_by_default(tmp_path):
     write(tmp_path, "consts.py", '_INTERNAL = "box_data"\nPUBLIC = "workset.yaml"\n')
     ids = {e.id for e in PythonConstants([tmp_path / "consts.py"]).entries()}
@@ -170,6 +214,10 @@ def test_a_registry_that_yields_no_entries_is_recorded_not_dropped(tmp_path):
     This is not hypothetical -- it is what this project's own config did for six
     commits, over three of its own modules, because the codebase has no
     module-level string constants.
+
+    **Load used to raise here**, which also stopped the documentation check on a
+    project whose data model no adapter fits. The refusal moved to the command
+    that would have done the scanning; see the CLI test for the other half.
     """
     write(tmp_path, "src/consts.py", "TIMEOUT = 30\nlowercase = 'box.yaml'\n")
     write(

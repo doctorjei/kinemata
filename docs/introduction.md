@@ -195,6 +195,22 @@ matches inside the live `spec~box-vault-enable`.
 **Defaults:** projection budget `16384` B. Frequency suppression at `20` sites per
 (entry, antipattern).
 
+**Constant values are matched in three tiers**, by length:
+
+| Value length | Matched | Why |
+|---|---|---|
+| ≥ `min_length` (4) | anywhere in a literal | long enough that a substring match means something |
+| 3 | **only as a whole literal** | `GET` inside `TARGET` is noise; a literal that *is* `GET` is not |
+| ≤ 2, or generic | not at all | two characters collide across namespaces even anchored |
+
+The middle tier exists because httpie declares `HTTP_GET` and `HTTP_POST` on adjacent lines, a
+lexer writes both as literals two lines apart, and only POST was reported. The floor below it is
+measured, not chosen: at 2, one 65k-line project's settings package went from 14 findings to 31,
+and all seventeen were `RW_PATH = "rw"` matching an unrelated mount-binding key.
+
+`review` and `check` print how many declared entries carry **no** antipattern, because an entry
+nothing can be reported about otherwise reads as an entry being watched.
+
 ---
 
 ## Refusal semantics

@@ -20,9 +20,20 @@ from pathlib import Path
 from ..contract import BaseRegistry, Entry
 from ..prose import parsed
 
-#: Values shorter than this are skipped. ``"/"`` or ``"y"`` as an antipattern
-#: matches half the tree; the noise would bury the real findings.
+#: Below this, a value is matched **only as a whole literal**. ``"box_data"``
+#: is worth finding inside a longer string; ``"GET"`` is not, because it is a
+#: substring of half the tree and the noise would bury the real findings.
 MIN_VALUE_LENGTH = 4
+
+#: Below *this*, a value gets no antipattern at all, anchored or otherwise.
+#: **Set by measurement, not taste.** At 2, kanibako-cli's settings package went
+#: from 14 strong findings to 31, and all seventeen were one constant:
+#: ``RW_PATH = "rw"``, matching the unrelated mount-binding key in
+#: ``bindings["rw"]``. A two-character value collides across namespaces even as
+#: a whole literal, which is the noise the original threshold existed to
+#: prevent. At 3 the same package is unchanged and httpie's ``HTTP_GET`` is
+#: still found.
+MIN_ANCHORED_LENGTH = 3
 
 #: Values that are common English or code punctuation regardless of length.
 #: Deliberately short -- an over-eager denylist hides real duplication.
@@ -101,8 +112,32 @@ class PythonConstants(BaseRegistry):
             )
 
     def _antipatterns_for(self, value: str) -> tuple[str, ...]:
-        if len(value) < self._min_length or value.lower() in self._generic:
+        """The value as a pattern, in one of three tiers.
+
+        A short value used to get **nothing**, and nothing is invisible.
+        Measured on httpie: it declares ``HTTP_GET = 'GET'`` and
+        ``HTTP_POST = 'POST'`` on adjacent lines, a lexer table writes both as
+        literals two lines apart, and ``check`` reported POST and said nothing
+        about GET -- three characters against a threshold of four. A reader
+        seeing one of two identical constructs reported concludes the other is
+        fine. **18 of that project's 21 declared entries were in this
+        position.**
+
+        The threshold is still right about what it was measuring: ``GET`` as a
+        *substring* matches ``target``, ``budget``, ``widget``. What it got
+        wrong is treating "cannot be matched loosely" as "cannot be matched".
+        Anchoring gives the precise half and drops the noisy half -- a short
+        value is reported when a literal *is* that value, and never when a
+        literal merely contains it. The weak tier is unavailable to it by
+        construction, which is the correct trade rather than a limitation.
+
+        Generic values still get nothing at any length: ``"true"`` is generic in
+        meaning, not merely short, and anchoring does not make it a finding.
+        """
+        if value.lower() in self._generic or len(value) < MIN_ANCHORED_LENGTH:
             return ()
+        if len(value) < self._min_length:
+            return (rf"\A{re.escape(value)}\Z",)
         return (re.escape(value),)
 
 
