@@ -96,6 +96,8 @@ case_sensitive = true
 [claims]
 suffixes = [".md"]
 historical = ["archives/"]         # records that cite what was true when written
+external = true                    # check cited URLs; off by default, and the
+                                   # number skipped is printed when it is off
 
 # Something deferred, and the date the deferral lapses. `path` for a file the
 # project will produce; `what` for anything else. `until` is required on both.
@@ -257,6 +259,7 @@ multiplicity counted. Line numbers are excluded; path is included.
 | `path` | the filesystem |
 | `link` | link targets |
 | `commit` | `git cat-file` (skipped, and reported as skipped, outside a repository) |
+| `url` | the web, **opt-in** via `external = true`. `404`/`410` fails; anything ambiguous — a timeout, a 5xx, a `403` from a bot-hostile host — is reported by name and never fails |
 | `[[count]]` | the declared oracle command's output |
 | `[[gate]]` | the text of the file declared in `where` |
 
@@ -310,9 +313,11 @@ transforms, sum bytes, compare to `budget`. `-v` lists files largest-first.
 - **A CI workflow in the repository is editable by the agent it constrains.** Branch protection
   with the jobs as required status checks, and bypass disallowed, is what promotes it from
   reminder to catch.
-- **`claims` cannot see a dead external link.** Link claims carrying a scheme are skipped, so a
-  URL that 404s is invisible to every check here. Found when a dead OpenFastTrace link sat in
-  this project's own conventions.
+- **A dead external link is `404`/`410` and nothing else.** The `url` kind closed the gap where
+  a scheme-carrying target was skipped entirely, but what replaced it is narrower than "the link
+  works": a page that now redirects to a parking domain answers `200`, and a host that refuses
+  an unfamiliar client answers `403`, which this reports as unchecked rather than dead. It
+  settles *gone*, not *good*.
 - **The catch cannot be dogfooded here.** kinemata's own registries are `code-patterns` and
   `substitutions`, neither closable, so `kinemata undeclared` refuses in this repository rather
   than reporting a false clean.

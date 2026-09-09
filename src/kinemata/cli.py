@@ -434,6 +434,8 @@ def cmd_claims(args: argparse.Namespace) -> int:
         resolve_in=settings.resolve_in,
         commits_in=settings.commits_in,
         promised=settings.promised,
+        external=settings.external,
+        timeout=settings.external_timeout,
     )
     inventory = enforced(settings.root, settings.gates)
 

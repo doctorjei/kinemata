@@ -358,7 +358,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **237 tests**, and
+The companion guard is a number with an oracle. This suite is **244 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 
@@ -406,6 +406,7 @@ nobody falsifies is how documentation rots while reporting itself correct.
 [claims]
 suffixes = [".md"]
 historical = ["archives/"]   # a record of what was true is not a stale claim
+external = true              # settle cited URLs too. Off by default
 ```
 
 `kinemata claims` gates, unlike `clusters`: a missing file is a fact, not a
@@ -415,6 +416,19 @@ because "all resolve" and "nothing was looked at" otherwise read identically.
 A claim it cannot settle is **named, not skipped** — run outside a git
 repository, it reports that commit hashes went unchecked rather than passing
 quietly.
+
+**A URL is a claim about the world**, and for most of this project's life it was
+the one claim here nothing could falsify: link checking skipped any target
+carrying a scheme, and a dead OpenFastTrace URL sat in the conventions until a
+person reading them noticed. `external = true` turns it on — opt-in, because a
+documentation checker that reaches the network unasked is a surprise, and an
+air-gapped CI would fail with nothing wrong. Off, the run says **how many links
+it skipped**; silence would read as "these documents cite nothing external".
+
+It settles *gone*, not *good*. Only `404` and `410` fail. A timeout, a 5xx, or
+the `403` a bot-hostile host returns to an unfamiliar client is reported by name
+and never gates — a check that goes red on weather teaches its reader to skim a
+red gate, which is the failure most of the mechanism here exists to prevent.
 
 ### Paths a design has not built yet
 

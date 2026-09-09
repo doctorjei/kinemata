@@ -19,6 +19,17 @@ exclude = ["tests/", "corpus/", ".venv/", "deliverables/"]
 suffixes = [".md"]
 historical = ["archives/"]
 
+# A URL is a claim about the world, and it was the one claim in these documents
+# nothing could falsify: link checking skipped any target carrying a scheme, so
+# a dead OpenFastTrace URL sat in this box's conventions until a person reading
+# them noticed. Opt-in, because a documentation checker that reaches the network
+# unasked is a surprise and an air-gapped CI would fail with nothing wrong.
+#
+# Only 404 and 410 fail. A timeout, a 5xx or the 403 a bot-hostile host returns
+# is reported by name and never gates: a check that goes red on weather teaches
+# its reader to skim a red gate.
+external = true
+
 # A number in prose, and the command that settles it. Opt-in, because settling
 # it means running a command named in a config file -- a trust decision worth
 # making deliberately. Declared here because the failure is real: this project's

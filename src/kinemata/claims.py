@@ -35,7 +35,10 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from collections.abc import Callable, Iterable, Iterator, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path, PurePosixPath
@@ -105,6 +108,22 @@ FILE_SUFFIXES = frozenset({
 _BACKTICKED = re.compile(r"`([^`\s]+)`")
 _LINK = re.compile(r"\[[^\]]*\]\(([^)#\s]+)[^)]*\)")
 _SHA = re.compile(r"`([0-9a-f]{7,12})`")
+#: A web address, whether it sits in a link target, in backticks, or bare in
+#: prose. All three spellings appear in this project's own documents.
+_URL = re.compile(r"https?://[^\s)>\]\"'`]+")
+
+#: Status codes that settle a URL as gone. Everything else that is not a success
+#: is ambiguous from here -- see :func:`_reach`.
+DEAD_STATUS = frozenset({404, 410})
+
+#: The server refusing the *method*, not the resource. Worth a second ask.
+HEAD_REFUSED = frozenset({405, 501})
+
+#: Sent because a default Python user agent is refused by enough sites to turn
+#: real answers into unknowns.
+USER_AGENT = "kinemata-claims/1.0 (documentation link check)"
+
+EXTERNAL_TIMEOUT = 10.0
 
 
 @dataclass(frozen=True)
@@ -130,6 +149,10 @@ class Tree:
     commits: set[str] | None = None
     #: Every tree a claim may resolve against, in order.
     roots: tuple[Path, ...] = ()
+    #: What each cited URL answered: ``True`` alive, ``False`` gone, ``None``
+    #: asked and unanswerable. The whole map is ``None`` when nothing was asked,
+    #: which is the same distinction ``commits`` draws.
+    reachable: dict[str, bool | None] | None = None
 
     def resolves(self, claim: str) -> bool:
         """Is this path in the tree, however the document chose to anchor it?
@@ -220,6 +243,54 @@ class Verification:
         for kind in self.unavailable:
             out.append(f"  NOT CHECKED: {kind}")
         return "\n".join(out)
+
+
+# -- the network, asked once and in one place --------------------------------
+
+
+def _ask(url: str, method: str, timeout: float) -> tuple[bool | None, int | None]:
+    """One request. The verdict, and the status code that produced it."""
+    request = urllib.request.Request(
+        url, method=method, headers={"User-Agent": USER_AGENT}
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return (200 <= response.status < 400), response.status
+    except urllib.error.HTTPError as exc:
+        return (False if exc.code in DEAD_STATUS else None), exc.code
+    except (urllib.error.URLError, OSError, ValueError):
+        return None, None
+
+
+def _reach(url: str, timeout: float = EXTERNAL_TIMEOUT) -> bool | None:
+    """Is this address still there? ``None`` when that is not knowable.
+
+    **Three outcomes, because two would be a lie.** A 404 or 410 is the site
+    saying the page is gone. A success is a success. Everything else -- a
+    timeout, a 5xx, and above all the 401, 403 or 429 a bot-hostile site returns
+    to an unfamiliar client -- cannot tell a deleted page from a refused reader.
+    Calling those dead would fill a gate with findings nobody can act on, and
+    the reader would learn to skim it.
+
+    ``HEAD`` first because a link check has no use for the body, then ``GET``
+    when the server refuses the *method* rather than the resource.
+    """
+    verdict, status = _ask(url, "HEAD", timeout)
+    if status in HEAD_REFUSED:
+        verdict, _ = _ask(url, "GET", timeout)
+    return verdict
+
+
+def _reach_all(
+    urls: Iterable[str], timeout: float, workers: int = 8
+) -> dict[str, bool | None]:
+    """Every distinct address, asked once. Order of the answers is irrelevant."""
+    unique = sorted(set(urls))
+    if not unique:
+        return {}
+    with ThreadPoolExecutor(max_workers=min(workers, len(unique))) as pool:
+        verdicts = pool.map(lambda url: _reach(url, timeout), unique)
+        return dict(zip(unique, verdicts, strict=True))
 
 
 # -- git, asked once and in one place ----------------------------------------
@@ -325,6 +396,21 @@ def _commit_claims(line: str, previous: str = "") -> Iterator[str]:
         yield match.group(1)
 
 
+def _url_claims(line: str, previous: str = "") -> Iterator[str]:
+    """Web addresses, wherever a document put them.
+
+    Deliberately not restricted to markdown link targets. The dead
+    OpenFastTrace link that motivated this kind was a bare URL in a list, and a
+    checker that only reads ``[text](target)`` would have walked past it -- which
+    is what happened for the whole life of the project.
+    """
+    seen: dict[str, None] = {}
+    for match in _URL.finditer(line):
+        # Trailing sentence punctuation belongs to the prose, not the address.
+        seen.setdefault(match.group(0).rstrip(".,;:!?"), None)
+    yield from seen
+
+
 def _resolve_path(text: str, tree: Tree, document: Path) -> bool:
     return tree.resolves(text.split(":", 1)[0])
 
@@ -340,6 +426,19 @@ def _resolve_link(text: str, tree: Tree, document: Path) -> bool:
 
 def _resolve_commit(text: str, tree: Tree, document: Path) -> bool:
     return tree.commits is None or text in tree.commits
+
+
+def _resolve_url(text: str, tree: Tree, document: Path) -> bool:
+    """A URL is false only when something said so.
+
+    Not asked, or asked and unanswerable, both resolve. A link check that
+    reported every timeout as a dead link would be red on a bad network day,
+    and a gate that is red for reasons the reader cannot fix is a gate the
+    reader learns to skip.
+    """
+    if tree.reachable is None:
+        return True
+    return tree.reachable.get(text) is not False
 
 
 @dataclass(frozen=True)
@@ -421,6 +520,10 @@ class ClaimKind:
     #: row rather than testing its name, so a fourth kind needing git costs a
     #: field and no edit here.
     needs_git: bool = False
+    #: This kind cannot be settled without leaving the machine. Opt-in, and off
+    #: by default: a documentation checker that reaches the network unasked is a
+    #: surprise, and in an air-gapped CI it fails with nothing wrong.
+    needs_network: bool = False
     #: What to report when the kind cannot be checked. Named, never dropped.
     when_unavailable: str = ""
 
@@ -434,6 +537,11 @@ CLAIM_KINDS: tuple[ClaimKind, ...] = (
         needs_git=True,
         when_unavailable="commit hashes (not a git repository)",
     ),
+    # A URL is a claim about the world rather than about the tree, and it was
+    # the one claim in these documents nothing could falsify: `_link_claims`
+    # skips any target carrying a scheme, so a dead OpenFastTrace link sat in
+    # `CONVENTIONS.md` until a reader noticed it. Off unless asked.
+    ClaimKind("url", _url_claims, _resolve_url, needs_network=True),
 )
 
 
@@ -552,6 +660,8 @@ def verify(
     commits_in: Iterable[str] = (),
     promised: Iterable[Promise] = (),
     today: date | None = None,
+    external: bool = False,
+    timeout: float = EXTERNAL_TIMEOUT,
 ) -> Verification:
     """Falsify every claim the prose makes about this tree.
 
@@ -652,6 +762,26 @@ def verify(
             kind.when_unavailable
             for kind in kinds
             if kind.needs_git and kind.when_unavailable
+        )
+
+    cited = {text for kind, text, _ in pending if kind.needs_network}
+    if external:
+        tree.reachable = _reach_all(cited, timeout)
+        # Named one at a time rather than counted. An unanswerable address is
+        # the one case where a reader may want to open it themselves, and a
+        # bare number gives them nothing to open.
+        found.unavailable.extend(
+            f"{url} (asked, no usable answer)"
+            for url, verdict in sorted(tree.reachable.items())
+            if verdict is None
+        )
+    elif cited:
+        # Counted, because silence here reads as "these documents cite nothing
+        # external" -- which is the shape of inert signal this module exists to
+        # refuse. Off is a decision; off and invisible is a blind spot.
+        found.unavailable.append(
+            f"{len(cited)} external link(s) (network checks not enabled; "
+            "set external = true under [claims])"
         )
 
     for kind, text, claim in pending:

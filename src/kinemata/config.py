@@ -41,7 +41,7 @@ from .adapters.patterns import CodePatterns
 from .adapters.substitutions import Substitutions
 from .baseline import BASELINE_NAME
 from .bypass import git_ignored
-from .claims import Counted, Promise
+from .claims import EXTERNAL_TIMEOUT, Counted, Promise
 from .context import STRIPPERS
 from .contract import BaseRegistry
 from .gates import Gate
@@ -88,6 +88,10 @@ class Settings:
     resolve_in: tuple[str, ...] = ()
     #: Further repositories whose commits the documentation may cite.
     commits_in: tuple[str, ...] = ()
+    #: May `claims` leave the machine to settle a URL? Off by default, and the
+    #: number of links it therefore skips is printed rather than assumed.
+    external: bool = False
+    external_timeout: float = EXTERNAL_TIMEOUT
     #: Paths a design says it will produce. Held open while absent, and failing
     #: once they exist, once nothing cites them, or once their date has passed --
     #: three ways of noticing that the list has outlived the work it describes.
@@ -339,6 +343,8 @@ def load(path: str | Path) -> Settings:
         historical=tuple(claims.get("historical", ())),
         resolve_in=tuple(claims.get("resolve_in", ())),
         commits_in=tuple(claims.get("commits_in", ())),
+        external=bool(claims.get("external", False)),
+        external_timeout=float(claims.get("external_timeout", EXTERNAL_TIMEOUT)),
         promised=_promised(raw.get("promise"), claims, path),
         counts=_build_counts(raw.get("count", []), path,
                              _commands(raw.get("command"), path)),

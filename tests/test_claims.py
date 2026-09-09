@@ -8,7 +8,11 @@ from __future__ import annotations
 
 import subprocess
 import textwrap
+import threading
 from datetime import date
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+import pytest
 
 from kinemata.claims import CLAIM_KINDS, Promise, verify
 
@@ -213,9 +217,13 @@ def test_a_count_pattern_may_use_alternation(tmp_path):
 
 def test_kinds_are_a_table_not_a_hardcoded_sequence():
     """Adding a kind is a row, and the loop never learns their names."""
-    assert {kind.name for kind in CLAIM_KINDS} == {"path", "link", "commit"}
+    assert {kind.name for kind in CLAIM_KINDS} == {"path", "link", "commit", "url"}
     (commit,) = [kind for kind in CLAIM_KINDS if kind.needs_git]
     assert commit.when_unavailable
+    # The capability fields are what let a kind say it cannot run here, and a
+    # kind needing both would need neither field tested to slip through.
+    (url,) = [kind for kind in CLAIM_KINDS if kind.needs_network]
+    assert not url.needs_git
 
 
 def test_a_document_behind_a_symlink_is_read(tmp_path):
@@ -355,3 +363,105 @@ def test_every_promise_lapses_eventually(tmp_path):
     result = verify(tmp_path, promised=[LATER], today=date(2099, 1, 1))
     assert result.overdue == ["out/report.json (deferred until 2027-01-01)"]
     assert result.failed
+
+
+# -- external links: the one claim nothing here could falsify -----------------
+
+
+class _Answers(BaseHTTPRequestHandler):
+    """Serves a status chosen by the path, so a test can name what it wants."""
+
+    def do_HEAD(self):  # http.server's spelling, not ours
+        code = 405 if "headless" in self.path else self._code()
+        self.send_response(code)
+        self.end_headers()
+
+    def do_GET(self):
+        self.send_response(self._code())
+        self.end_headers()
+
+    def _code(self):
+        return int(self.path.strip("/").split("-")[-1] or 200)
+
+    def log_message(self, *args):
+        pass  # the suite is not a web server log
+
+
+@pytest.fixture
+def server():
+    httpd = HTTPServer(("127.0.0.1", 0), _Answers)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    yield f"http://127.0.0.1:{httpd.server_port}"
+    httpd.shutdown()
+    httpd.server_close()
+
+
+def test_a_dead_external_link_is_reported(tmp_path, server):
+    """The gap this closes. A URL that 404s was invisible to every check here.
+
+    Found 2026-09-08 when a dead OpenFastTrace link sat in `CONVENTIONS.md` and
+    was caught by a person reading it rather than by a gate.
+    """
+    write(tmp_path, "doc.md", f"See [the guide]({server}/gone-404).\n")
+    result = verify(tmp_path, external=True)
+    assert ("url", f"{server}/gone-404") in broken(result)
+    assert result.failed
+
+
+def test_a_live_external_link_is_not_a_finding(tmp_path, server):
+    write(tmp_path, "doc.md", f"See [the guide]({server}/here-200).\n")
+    result = verify(tmp_path, external=True)
+    assert not result.broken
+
+
+def test_a_bare_url_in_prose_is_checked_too(tmp_path, server):
+    """Not restricted to markdown link targets: the link that motivated this
+    kind was a bare URL in a list, which a target-only reader walks past."""
+    write(tmp_path, "doc.md", f"Repo: {server}/gone-404\n")
+    result = verify(tmp_path, external=True)
+    assert ("url", f"{server}/gone-404") in broken(result)
+
+
+def test_an_unanswerable_address_is_reported_and_never_fails(tmp_path, server):
+    """Three outcomes, because two would be a lie.
+
+    A 403 cannot distinguish a deleted page from a reader the site refuses, and
+    a gate that goes red on a bot-hostile host is a gate its reader learns to
+    skim. Reported by name -- the reader may want to open it themselves.
+    """
+    write(tmp_path, "doc.md", f"See {server}/refused-403 and {server}/broken-500.\n")
+    result = verify(tmp_path, external=True)
+    assert not result.broken
+    assert not result.failed
+    assert [line for line in result.unavailable if "refused-403" in line]
+    assert [line for line in result.unavailable if "broken-500" in line]
+
+
+def test_external_links_are_counted_when_the_check_is_off(tmp_path, server):
+    """Off is a decision; off and invisible is a blind spot."""
+    write(tmp_path, "doc.md", f"See {server}/gone-404 and {server}/other-404.\n")
+    result = verify(tmp_path)
+    assert not result.broken
+    assert ("2 external link(s) (network checks not enabled; "
+            "set external = true under [claims])") in result.unavailable
+
+
+def test_an_archive_may_cite_a_url_that_has_since_died(tmp_path, server):
+    """A record citing a page that later went away is a record, not a defect."""
+    write(tmp_path, "archives/old.md", f"We used {server}/gone-404 at the time.\n")
+    result = verify(tmp_path, external=True, historical=["archives/"])
+    assert not result.broken
+
+
+def test_a_server_refusing_head_is_asked_again_with_get(tmp_path, server):
+    """The refusal is of the method, not the resource.
+
+    A link check has no use for a body, so it asks with ``HEAD`` -- and enough
+    servers answer 405 to that alone. Treating those as unanswerable would put a
+    working link on the unchecked list, where nobody looks.
+    """
+    write(tmp_path, "doc.md", f"See {server}/headless-200\n")
+    result = verify(tmp_path, external=True)
+    assert not result.broken
+    assert not [line for line in result.unavailable if "headless" in line]
