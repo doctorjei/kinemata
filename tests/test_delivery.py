@@ -425,14 +425,18 @@ def test_code_patterns_needs_at_least_one_entry(tmp_path):
 # -- unused: detects mention, not use ----------------------------------------
 
 
-def test_unused_is_vacuous_without_excluding_the_declaring_machinery(tmp_path):
-    """The failure found by validating against a labeled incident.
+def test_unused_refuses_when_nothing_says_where_a_declaration_lives(tmp_path):
+    """The failure found by validating against a labeled incident, now refused.
 
     kanibako-cli ``d8037cf5`` records three declared keys with "no reader at
     all". This check missed all three, because each appears in the project's own
     key table -- a mention, not a reader, and text matching cannot tell them
-    apart. Excluding the declaring machinery is what makes the check mean
-    anything.
+    apart. Naming the declaring machinery is what makes the check mean anything.
+
+    It used to return ``[]`` here, which is the inert signal: a clean-looking
+    answer to a question that could not be asked. The exclusion was documented
+    as "required in practice" while the signature defaulted it to empty, so the
+    measured-0/3 configuration was what asking for nothing gave you.
     """
     write(tmp_path, "keys.py", 'KEY_TABLE = ["a.one", "a.two"]\n')
     write(tmp_path, "app.py", "value = resolve('a.one')\n")
@@ -444,10 +448,150 @@ def test_unused_is_vacuous_without_excluding_the_declaring_machinery(tmp_path):
             yield Entry(id="a.one")
             yield Entry(id="a.two")
 
-    # a.two has no reader, but the key table mentions it:
-    assert unused(Keys(), tmp_path) == []
-    # excluding the declaring machinery makes the check mean something:
-    assert unused(Keys(), tmp_path, exclude=["keys.py"]) == ["a.two"]
+    with pytest.raises(ValueError, match="nothing says where"):
+        unused(Keys(), tmp_path)
+    # a project's build and test exclusions are not an answer to this question:
+    with pytest.raises(ValueError, match="nothing says where"):
+        unused(Keys(), tmp_path, exclude=["build/"])
+    # naming the declaring machinery makes the check mean something:
+    assert unused(Keys(), tmp_path, machinery=["keys.py"]) == ["a.two"]
+
+
+def test_a_registry_can_carry_its_own_declaring_machinery(tmp_path):
+    """``machinery`` is the declaration; ``exclude`` is the call-site argument.
+
+    The incident needs the registry-level one. Those keys' ``home`` is the
+    manifest they are declared in, while the table that mentions them is a
+    module -- so ``home`` alone cannot answer, and a project should not have to
+    re-supply the same list at every call site to get a meaningful answer.
+    """
+    write(tmp_path, "keys.py", 'KEY_TABLE = ["a.one", "a.two"]\n')
+    write(tmp_path, "app.py", "value = resolve('a.one')\n")
+
+    class Keys(BaseRegistry):
+        name = "keys"
+        machinery = ("keys.py",)
+
+        def entries(self):
+            yield Entry(id="a.one")
+            yield Entry(id="a.two")
+
+    assert unused(Keys(), tmp_path) == ["a.two"]
+
+
+def test_a_registry_declaring_absence_is_not_asked_what_is_unused(tmp_path):
+    """Found by dogfooding, and it reported success as failure.
+
+    Run over this project's own ``spelling`` registry, ``unused`` returned 28
+    American spellings -- every one of them a word the convention says should
+    not appear, correctly absent. A page of findings that all mean the check
+    passed is worse than no output, because a reader learns to skim it.
+    """
+    write(tmp_path, "doc.md", "Nothing retired here.\n")
+
+    class Retired(BaseRegistry):
+        name = "retired"
+        mentions_are_uses = False
+        machinery = ("words.toml",)
+
+        def entries(self):
+            yield Entry(id="traceface")
+
+    with pytest.raises(ValueError, match="the convention being kept"):
+        unused(Retired(), tmp_path, suffixes=[".md"])
+
+
+def test_config_declares_the_machinery_on_the_registry(tmp_path):
+    write(tmp_path, "src/consts.py", 'BOX_META_FILE = "box.yaml"\n')
+    write(
+        tmp_path,
+        "kinemata.toml",
+        """
+        [[registry]]
+        name = "constants"
+        kind = "python-constants"
+        modules = ["src/consts.py"]
+        machinery = ["src/keys.py", "src/paths.py"]
+        """,
+    )
+    (registry,) = load(tmp_path / "kinemata.toml").registries
+    assert registry.machinery == ("src/keys.py", "src/paths.py")
+
+
+def test_unused_reports_a_declared_thing_and_stays_advisory(project, capsys):
+    """The mirror of ``scan``, over the same tree.
+
+    ``scan`` catches a file that re-derives a declared value; this catches a
+    declared value no file names. The fixture's ``app.py`` writes ``"box.yaml"``
+    rather than routing through ``BOX_META_FILE``, so both fire on it -- one
+    saying the constant was bypassed, the other saying nothing refers to it.
+    Making ``app.py`` route properly silences both, which is the point.
+    """
+    write(project, "src/consts.py", 'BOX_META_FILE = "box.yaml"\nSPARE = "spare.yaml"\n')
+    write(project, "src/app.py", "from .consts import BOX_META_FILE\np = root / BOX_META_FILE\n")
+    assert main(["unused", "-c", str(project / "kinemata.toml")]) == 0
+    out = capsys.readouterr().out
+    assert "SPARE" in out
+    assert "BOX_META_FILE" not in out
+    assert "review list, never a cut list" in out
+
+
+def test_unused_names_the_registries_that_could_not_answer(project, capsys):
+    """Suppression is reported, never silent.
+
+    A run that printed the answering registry's clean line and said nothing
+    about the one it skipped would read as "this project has no unused
+    declarations", which is the inert signal in its most persuasive form.
+    """
+    write(project, "docs/note.md", "Prose with no retired names.\n")
+    write(
+        project,
+        "kinemata.toml",
+        """
+        [project]
+        root = "."
+
+        [[registry]]
+        name = "constants"
+        kind = "python-constants"
+        modules = ["src/consts.py"]
+
+        [[registry]]
+        name = "retired"
+        kind = "substitutions"
+        suffixes = [".md"]
+
+          [registry.words]
+          traceface = "kinemata"
+        """,
+    )
+    assert main(["unused", "-c", str(project / "kinemata.toml")]) == 0
+    captured = capsys.readouterr()
+    assert "skipped: registry 'retired'" in captured.err
+    assert "constants" in captured.out
+
+
+def test_unused_refuses_when_no_registry_can_answer(tmp_path, capsys):
+    """2, not 0. A question nobody could ask has no clean answer."""
+    write(tmp_path, "doc.md", "Prose.\n")
+    write(
+        tmp_path,
+        "kinemata.toml",
+        """
+        [project]
+        root = "."
+
+        [[registry]]
+        name = "retired"
+        kind = "substitutions"
+        suffixes = [".md"]
+
+          [registry.words]
+          traceface = "kinemata"
+        """,
+    )
+    assert main(["unused", "-c", str(tmp_path / "kinemata.toml")]) == 2
+    assert "no declared registry can say what is unused" in capsys.readouterr().err
 
 
 def test_a_kind_that_cannot_recognize_identifiers_is_refused_when_closed(tmp_path):

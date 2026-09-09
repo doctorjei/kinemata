@@ -420,6 +420,7 @@ def unused(
     *,
     suffixes: Sequence[str] = (".py",),
     exclude: Iterable[str] = (),
+    machinery: Iterable[str] = (),
 ) -> list[str]:
     """Declared entries nothing *mentions*. **A review list, never a cut list.**
 
@@ -433,12 +434,28 @@ def unused(
     readers, and no amount of text matching tells them apart.
 
     Every declared entry is mentioned somewhere by construction -- that is what
-    declaring *is* -- so without ``exclude`` this check is close to vacuous on
-    precisely the registries it is meant to serve.
+    declaring *is* -- so with nothing excluded this check is vacuous on precisely
+    the registries it is meant to serve. **That configuration now raises.** It
+    was the signature default for the life of the project while the docstring
+    called exclusions "required in practice", which is a requirement nothing
+    required: asking for nothing returned a clean-looking list measured at 0/3.
 
-    :param exclude: path fragments holding the declaring machinery (key tables,
-        inventories, the manifest itself). **Required in practice.** With the
-        three declaring modules excluded, the incident above is found.
+    Two ways to say where a declaration lives, and either satisfies this.
+    ``home`` is per entry and says where *that* entry is defined; ``machinery``
+    is per registry and names files that declare without using -- a key table,
+    an inventory. The incident needs the second, because those keys' ``home`` is
+    the manifest while the table that mentions them is a module.
+
+    ⚠ **``exclude`` is not one of them, and that distinction is the whole
+    refusal.** A project's ``exclude`` names build and test trees, and it is
+    non-empty in every real project -- so accepting it as an answer would let
+    the refusal pass everywhere while meaning nothing. Written that way first,
+    and caught by running the command against this repository.
+
+    :param exclude: trees not to read at all. Does not satisfy the requirement.
+    :param machinery: declaring files, added to the registry's own.
+    :raises ValueError: when nothing says where a declaration lives, or when the
+        registry's entries are declared to be absent rather than used.
 
     Finding a real *reader* means tracing a value from resolution into
     behavior. That is dataflow analysis and deliberately out of scope here: a
@@ -450,8 +467,25 @@ def unused(
     destroys deliberate declarations.
     """
     root = Path(root)
-    exclusions = tuple(exclude)
+    if not registry.mentions_are_uses:
+        raise ValueError(
+            f"registry {registry.name!r}: these entries are declared so that "
+            "nothing says them, so an unmentioned one is the convention being "
+            "kept. Every entry would be reported and every report would be a "
+            "success."
+        )
+    declaring = tuple(machinery) + tuple(registry.machinery)
     entries = list(registry.entries())
+    if not declaring and not any(entry.home for entry in entries):
+        raise ValueError(
+            f"registry {registry.name!r}: nothing says where these entries are "
+            "declared, so every one of them is mentioned by its own declaring "
+            "machinery and this check has nothing to report. Measured at 0/3 "
+            "against a labeled incident in exactly this configuration. Declare "
+            "`machinery` -- the files that declare rather than use these "
+            "entries -- or give the entries a `home`."
+        )
+    exclusions = declaring + tuple(exclude)
     referenced: set[str] = set()
 
     for path in _walk(Path(root), suffixes):

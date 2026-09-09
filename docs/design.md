@@ -90,8 +90,10 @@ satisfies it with a real adapter, and neither is privileged.
 ### 4.3 Declared properties
 
 ```
-closed: bool          # is an undeclared identifier an error?
-budget: bytes         # ceiling on the projection's size
+closed: bool           # is an undeclared identifier an error?
+budget: bytes          # ceiling on the projection's size
+machinery: [path]      # files that declare these entries rather than use them
+mentions_are_uses: bool # is "nothing mentions this" a finding at all?
 ```
 
 **`closed`** — kanibako's keyspace is closed: an undeclared key is not a key, and
@@ -100,6 +102,16 @@ a legacy codebase cannot close on day one. So `closed` is declared, and an open 
 routes undeclared identifiers to a **review list** rather than a failure. Closing is a
 ratchet: record the baseline, fail on any increase, drive it down on a separate schedule
 that does not block feature work.
+
+**`machinery` and `mentions_are_uses`** both serve one question — *what does this registry
+declare that nothing uses?* — and both narrow it rather than widening it. `machinery` names
+the files that declare rather than use, because every entry is mentioned by whatever declares
+it and a check counting those mentions answers nothing. A project's ordinary `exclude` is
+deliberately **not** accepted in its place: it names build and test trees, it is non-empty in
+every real project, and taking it as the answer would satisfy the requirement everywhere while
+meaning nothing. `mentions_are_uses` is false for a registry whose entries are declared to be
+*absent* — a list of retired names is honored precisely when nothing says them, so the question
+does not apply and is refused rather than answered with the whole list.
 
 The ratchet is built — `baseline.py`, `kinemata baseline`, read by `check`. Two
 decisions the specification above left open, both settled by measurement rather than
@@ -172,6 +184,13 @@ of the catch was hidden behind a command that answered a different question. The
 from nowhere, so three of the four adapters could be declared `closed` and would have
 answered "nothing is undeclared" about every tree. Both were wired on 2026-09-08; the
 advisory scan is now `kinemata clusters`.
+
+`unused()` was the third of the same shape, wired 2026-09-09. Not a catch — it is a review
+list and exits 0 — but reachable from nothing for the project's whole life, and shipping the
+one configuration its own validation had measured at 0/3 as the signature default. **The
+pattern across all three is a mechanism that is present, tested, and unreachable**, which
+inspection of the source does not reveal because the source is correct. What reveals it is
+asking, of each mechanism, which command runs it.
 
 **What the catch is worth, measured rather than asserted.** Run against kanibako-cli with
 its real keyspace manifest as a closed registry: **48,685** findings matching raw lines,

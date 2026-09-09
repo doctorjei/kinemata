@@ -86,6 +86,10 @@ class Substitutions(BaseRegistry):
     name = "substitutions"
     match_mode = "prose"
 
+    # These spellings are declared so that nothing says them. Absence is the
+    # convention being kept, so disuse is not a question this registry answers.
+    mentions_are_uses = False
+
     def __init__(
         self,
         words: Mapping[str, str],

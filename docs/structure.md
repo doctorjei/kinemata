@@ -278,7 +278,7 @@ What that produced here, published in full because the mixed result is the hones
 | **3 further bypasses the manual fix missed**, one still live | it finds what a careful human missed |
 | **1,537 → 314 → 43** matches, after two filters | naive matching is unusable; both filters were forced by measurement, not taste |
 | A second codebase initially yielded **nothing** | a missing adapter, correctly distinguished from a broken mechanism |
-| `unused()` **failed 0/3** | it detects *mention*, not *use* — kept, labeled weak in its own docstring |
+| `unused()` **failed 0/3** | it detects *mention*, not *use* — kept, labeled weak, and the configuration it failed in now refuses instead of answering |
 
 The last row is the one that matters most. A mechanism that fails validation and is quietly
 kept anyway poisons every result the suite produces afterward. Publishing the failure is what
@@ -302,6 +302,12 @@ rather than argument.
 load-bearing, because its consumer is the conversation rather than the document. Every disuse
 detector inherits this blind spot. That is why `unused()` emits a review list and never a cut
 list, and why any detector of the same shape should do the same.
+
+**Ask whether the question applies before answering it.** The same detector pointed at a list of
+*forbidden* spellings returns the entire list, because those entries are declared so that
+nothing says them — a page of findings, every one of which is the convention being kept. Found
+by running it over this project's own spelling registry. A check that reports compliance is
+worse than a silent one: a reader learns to skim it, and then skims the run where it matters.
 
 ---
 

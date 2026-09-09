@@ -40,10 +40,11 @@ from datetime import date
 from pathlib import Path
 
 from .baseline import Baseline, BaselineError, record
-from .bypass import Bypass, crossings, strays
+from .bypass import Bypass, crossings, strays, unused
 from .claims import verify
 from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
 from .context import measure
+from .contract import BaseRegistry
 from .gates import WORKFLOW_DIR, enforced
 from .literals import clusters
 from .projection import project
@@ -340,6 +341,73 @@ def cmd_undeclared(args: argparse.Namespace) -> int:
         )
         return 1
     return 0
+
+
+def cmd_unused(args: argparse.Namespace) -> int:
+    """Declared entries nothing in the tree mentions. **Advisory, always.**
+
+    Never a gate, and this is not timidity. An entry can be real and
+    unreferenced: "Supreme Law" is declared in kanibako's canon and referenced
+    nowhere in it, because its consumer is a conversation rather than a
+    document. Every disuse detector inherits that blind spot, so this one emits
+    a review list and a human takes the decision.
+
+    **Registries that cannot answer are named, not dropped.** Two refuse: one
+    with no ``machinery`` and no ``home``, because every declared entry is
+    mentioned by whatever declares it; and one whose entries are declared to be
+    absent, where the whole list comes back and every line of it is the
+    convention being kept. Reporting the registries that answered while staying
+    silent about the rest would put a clean line in front of a reader with no way
+    to know the check skipped half the project.
+    """
+    settings = _settings(args)
+    _needs_registries(settings, "look for unused entries in")
+    target = _target(args, settings)
+
+    answered: list[tuple[BaseRegistry, list[str]]] = []
+    refused: list[str] = []
+    for registry in settings.registries:
+        try:
+            found = unused(
+                registry,
+                target,
+                suffixes=registry.suffixes or settings.suffixes,
+                exclude=settings.exclude,
+            )
+        except ValueError as exc:
+            refused.append(str(exc))
+            continue
+        answered.append((registry, found))
+
+    if not answered:
+        raise ConfigError(
+            "no declared registry can say what is unused. "
+            + " ".join(refused)
+        )
+
+    total = 0
+    for registry, found in answered:
+        if not found:
+            if not args.quiet:
+                print(f"# {registry.name}: every declared entry is mentioned.")
+            continue
+        print(f"# {registry.name}")
+        for identifier in found:
+            print(f"  {identifier}")
+        total += len(found)
+
+    for message in refused:
+        print(f"skipped: {message}", file=sys.stderr)
+
+    if total and not args.quiet:
+        print()
+        print(
+            f"{total} declared entry(s) nothing mentions outside the files that "
+            "declare them. **A review list, never a cut list** -- this detects "
+            "mention, not use, and an entry whose consumer is not a file in "
+            "this tree looks identical to one nobody wants."
+        )
+    return 0  # advisory, always
 
 
 def cmd_claims(args: argparse.Namespace) -> int:
@@ -803,6 +871,12 @@ def build_parser() -> argparse.ArgumentParser:
                               "declare (advisory while the registry is open)")
     und.add_argument("path", nargs="?", help="limit the scan to this path")
     und.set_defaults(func=cmd_undeclared)
+
+    unu = sub.add_parser("unused", parents=[common],
+                         help="advisory: declared entries nothing mentions "
+                              "(a review list, never a cut list)")
+    unu.add_argument("path", nargs="?", help="limit the scan to this path")
+    unu.set_defaults(func=cmd_unused)
 
     clm = sub.add_parser("claims", parents=[common],
                          help="gate: fail on a documentation claim that does not resolve")

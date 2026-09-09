@@ -135,6 +135,8 @@ kinemata review      # advisory. Always exits 0. Run in-box, during the work.
 kinemata clusters    # advisory. Repeated text with no declared home.
 kinemata undeclared  # the closed-world catch. Exits 1 on an identifier a
                      # closed registry does not declare; advisory while open.
+kinemata unused      # advisory. Declared entries nothing mentions. Refuses
+                     # unless something says where a declaration lives.
 kinemata check       # the gate. Exits 1 on a strong finding. Run in CI.
 kinemata claims      # the gate, for documentation. Exits 1 on a dead claim.
 kinemata baseline    # what the gate already accepts. --record to change it.
@@ -356,7 +358,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **231 tests**, and
+The companion guard is a number with an oracle. This suite is **237 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 
@@ -641,9 +643,12 @@ finds the message pair exactly.
 And a failure worth publishing: `unused()` **failed** its validation, 0/3
 against an incident recording three declared keys with "no reader at all". It
 detects *mention*, not *use* — and every declared entry is mentioned somewhere,
-because that is what declaring is. It is labeled known-weak in its own
-docstring and requires excluding a project's declaring machinery to mean
-anything.
+because that is what declaring is. Naming a project's declaring machinery is
+what makes it mean anything, and for the life of the project that was
+documented as required while the signature defaulted it to empty: the measured
+0/3 configuration was what asking for nothing gave you. **That configuration
+now raises**, the machinery is declared data (`machinery` on a registry), and
+`kinemata unused` reaches it. Still a review list, never a cut list.
 
 ## Known gaps
 

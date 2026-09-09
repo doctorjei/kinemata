@@ -288,6 +288,8 @@ def load(path: str | Path) -> Settings:
         # the thing this package exists to report.
         if "suffixes" in spec:
             registry.suffixes = tuple(spec["suffixes"])
+        if "machinery" in spec:
+            registry.machinery = tuple(spec["machinery"])
         # Every declaration above can be individually valid and still produce a
         # registry with nothing in it -- the modules exist and parse, they just
         # hold nothing this adapter recognizes. That check passes, reports

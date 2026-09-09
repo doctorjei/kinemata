@@ -150,7 +150,12 @@ on a config that declares no registry at all, and a registry-shaped command refu
 scanning nothing.
 
 **Per-registry options:** `suffixes`, `case_sensitive`, `match_mode`, `allow_empty`, `source`,
-`modules`, `closed`, and — on `substitutions` — `boundary`.
+`modules`, `closed`, `machinery`, and — on `substitutions` — `boundary`.
+
+**`machinery`** names the files that *declare* a registry's entries rather than use them — a key
+table, an inventory, the manifest. Only `unused` reads it, and only it or an entry `home`
+satisfies that command: a project's `exclude` names build and test trees, is non-empty
+everywhere, and accepting it as the answer would let the requirement pass while meaning nothing.
 
 **Boundaries** (`substitutions` only): `prose` bounds a spelling with `\b`, which is right for a
 word list and wrong for a name list; `identifier` bounds it with the class `contract` declares,
@@ -177,6 +182,7 @@ matches inside the live `spec~box-vault-enable`.
 | `kinemata review` | advisory scan; frequency suppression | never |
 | `kinemata clusters` | repeated text with no declared home | never |
 | `kinemata undeclared` | the closed-world catch — an identifier a `closed` registry does not declare | a stray under a closed registry; refuses outright if no registry can recognize its own identifiers |
+| `kinemata unused` | declared entries nothing mentions outside the files declaring them | never; refuses outright if no registry can say (needs `machinery` or entry `home`) |
 | `kinemata check` | the gate | a strong finding not covered by the baseline, or a baseline past its `until` |
 | `kinemata claims` | documentation gate; also verifies `[[gate]]` declarations | a dead claim, or a declared gate that does not run |
 | `kinemata context` | session-load gate | measured bytes exceed `budget` |
@@ -279,7 +285,7 @@ transforms, sum bytes, compare to `budget`. `-v` lists files largest-first.
 | `clusters`, after containment tier + f-string skeletons | **4/4**; precision 174 → 154 → 101 on a 65k-line tree |
 | `context` model vs. the artifact a harness actually loaded | over by **7.7%**, in the safe direction |
 | Clone detection | **0 recall** at 187 findings — built, measured, **not shipped** |
-| `unused()` | **failed 0/3.** Detects mention, not use |
+| `unused()` | **failed 0/3.** Detects mention, not use; the failing configuration now refuses |
 
 ---
 
@@ -291,9 +297,10 @@ transforms, sum bytes, compare to `budget`. `-v` lists files largest-first.
   5 literal / 4 code / 4 semantic.
 - **Drift defeats shape matching.** The copies worth catching are the drifted ones; drift
   removes the signal. This is why clone detection was not shipped.
-- **`unused()` detects mention, not use.** Every declared entry is mentioned by construction.
-  Requires `exclude` naming the declaring machinery to mean anything. Review list, never a cut
-  list. Not wired to any command.
+- **`unused()` detects mention, not use.** Every declared entry is mentioned by construction, so
+  it needs `machinery` or an entry `home` to mean anything and refuses without either. Review
+  list, never a cut list — and it does not apply at all to a registry whose entries are declared
+  to be *absent*, which it says rather than answering.
 - **A baseline is an allowlist.** An agent can silence a finding by re-recording it. What makes
   that survivable is that it is a committed file change, visible in review.
 - **`[[gate]]` verifies text presence, not execution.** Blind to a step disabled by `if:`, a
