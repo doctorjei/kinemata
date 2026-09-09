@@ -679,8 +679,58 @@ now raises**, the machinery is declared data (`machinery` on a registry), and
   finishing the other 34 halved the figure.
 - A CI workflow lives in the repo, so an agent can edit it. Branch protection
   with the job as a *required status check* is what makes it a catch.
-- Validated on two codebases by one author. The categories held across both;
-  they have not been tested against an unrelated project.
+- The duplication categories were derived from two codebases by one author.
+
+## Against projects this did not grow up on
+
+Everything above was measured on repositories written by one person, which puts an unmeasured
+claim at the center of a tool for "agent-run software projects". So it was run against two it
+had never seen — `psf/requests` and `httpie/cli` — with the projects chosen and the method
+fixed before the first run.
+
+| | requests | httpie |
+|---|---|---|
+| Registry the default adapter could bind to | **none** — no module-level string constants anywhere; refused as empty | httpie/cli/constants.py, 23 entries |
+| `check` | not reached | **1** strong finding |
+| `clusters` | not reached | **8**, several genuinely the "declare once" case |
+| `claims` | 333 checked, **3 reported** | 423 checked, **2 reported** |
+| Of those reports, true | 0 | 0 |
+
+**756 documentation claims, 5 reports, none of them true.** A false-positive rate near 0.7% is
+the good reading and it is the honest one, since over-reporting is the failure that killed the
+prototype. The bad reading is on the same line: on two projects it had not been tuned against,
+`claims` found **nothing real**. Both readings belong here.
+
+The five, each traced rather than assumed:
+
+- never a repo path, `%APPDATA%\httpie\config.json` is a Windows environment variable, and `%`
+  is absent from the external-prefix list.
+- not missing at all, `./get_release_artifacts.sh` is sitting beside the README that names it —
+  a leading `./` defeats the bare-name fallback.
+- not a file, `Response.json` is a Python attribute whose tail matches a known suffix.
+- no path in it, `\o/` is an emoticon that happens to contain a slash.
+- one commit hash, unresolvable only because the clone was shallow — a defect in the method
+  rather than the tool, and counted as one.
+
+Those first four are worth reading twice, because this paragraph had to be written to avoid
+tripping the checker it is describing — the negation machinery treats them as mentions once the
+denial sits in the same clause. A document discussing a false path claim is in the same position
+as one recording a corrected spelling.
+
+**What did work is the mechanism with no tuning in it.** `clusters` found `'--history-print'`
+spelled in both the argument definition and the validator that checks it, and `'upgrade-all'`
+spelled in both the command table and the branch that dispatches it. Those are the shape this
+project exists to report, found in code nobody here wrote.
+
+**And one result worth more than the numbers.** httpie declares `HTTP_POST = 'POST'` and
+`HTTP_GET = 'GET'` side by side, and a lexer table two lines apart writes `'POST'` and `'GET'`
+as literals. `check` reports the first and is blind to the second, because `'GET'` is three
+characters and the minimum length for deriving an antipattern is four. Not frequency
+suppression — that was the first hypothesis and disabling it changed nothing. A user seeing one
+of two identical constructs reported would reasonably conclude the other was fine.
+
+Seven defects came out of this and are on the board rather than fixed here: a rule changed to
+improve the numbers of the corpus being measured is the corpus being fitted.
 
 ## Documentation
 

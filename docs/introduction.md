@@ -324,5 +324,9 @@ transforms, sum bytes, compare to `budget`. `-v` lists files largest-first.
 - **The tree walk follows symlinked directories and says so.** Each directory is entered once by
   real identity, and a link leaving the tree is announced on stderr. Before 2026-09-08 it did
   not follow them at all, and a project reached that way scanned as empty.
-- **Validated against repositories belonging to one author.** Untested against an unrelated
-  project.
+- **Run against two projects it did not grow up on** (`psf/requests`, `httpie/cli`), 2026-09-09.
+  756 documentation claims, 5 reports, **none true**; one `check` finding on httpie, and
+  `clusters` findings that were real. `requests` has no module-level string constants at all, so
+  the default adapter bound to nothing and the registry was refused as empty. Seven defects came
+  out of it, all boarded. **Two projects is not a survey** — both are widely-used Python
+  libraries with careful documentation, which is the easy case for a claims checker.

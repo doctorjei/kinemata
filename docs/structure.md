@@ -303,6 +303,16 @@ load-bearing, because its consumer is the conversation rather than the document.
 detector inherits this blind spot. That is why `unused()` emits a review list and never a cut
 list, and why any detector of the same shape should do the same.
 
+**Validate against code you did not write.** Every threshold in a checker is tuned by somebody,
+against something, and the tuning is invisible from inside. Run against two unrelated projects,
+this one's documentation checker produced 5 reports across 756 claims and **none of them were
+true** — a false-positive rate under 1%, and nothing found, which are the same sentence read two
+ways. The sharpest result was not a number: a constant of three characters is invisible while
+its four-character neighbor on the next line is caught, because a minimum length nobody had
+reason to question on the original corpus. The first explanation offered for that was frequency
+suppression, and it was wrong; disabling suppression changed nothing. **Publishing the plausible
+guess is the failure mode**, not having one.
+
 **Ask whether the question applies before answering it.** The same detector pointed at a list of
 *forbidden* spellings returns the entire list, because those entries are declared so that
 nothing says them — a page of findings, every one of which is the convention being kept. Found
