@@ -657,6 +657,9 @@ anything.
 
 ## Documentation
 
+- `docs/introduction.md` — the whole tool on a few pages: every command, every
+  config key, what each refusal is, and the measured results including the
+  components that failed. Start here if you want the shape before the argument.
 - `docs/structure.md` — the method: how to decide what mechanism to build, how
   to keep it from quietly rotting, and how to know whether it works. Applies
   beyond the mechanism shipped here.
