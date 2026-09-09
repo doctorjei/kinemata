@@ -881,29 +881,50 @@ def cmd_baseline(args: argparse.Namespace) -> int:
     return 0
 
 
-def _common() -> argparse.ArgumentParser:
+def _common(*, hold: bool) -> argparse.ArgumentParser:
     """Flags accepted both before and after the subcommand.
 
     Without this, ``kinemata ids -r keys`` fails while ``kinemata -r keys ids``
     works -- an ordering rule nobody remembers and every user gets wrong.
+
+    ``hold`` is what makes it work in *both* directions, and its absence was a
+    real defect. argparse parses a subcommand into a fresh namespace and copies
+    every key of it over the outer one, so the subparser's own default silently
+    overwrote a value given before the subcommand. Measured 2026-09-09 --
+    ``kinemata -c canon.toml context`` reported "no [context] declared" while
+    reading the *repository's* config, having discarded the path it was handed.
+    A flag dropped in silence is worse than one rejected: the command still runs,
+    against something else.
+
+    So the subparsers hold their defaults (``SUPPRESS``, carrying only what was
+    actually typed) and the top-level parser supplies the real ones. They must be
+    two separate calls, because ``parents=`` shares `argparse.Action` objects by
+    reference -- the first attempt at this fix set the defaults with
+    ``set_defaults``, which walks those same shared actions and reassigns
+    ``.default``, undoing the ``SUPPRESS`` it had just been given.
     """
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("-c", "--config", help=f"path to {CONFIG_NAMES[0]}")
-    common.add_argument("-r", "--registry", help="limit to one registry by name")
-    common.add_argument("-q", "--quiet", action="store_true")
+    absent = argparse.SUPPRESS
+    common.add_argument("-c", "--config", default=absent if hold else None,
+                        help=f"path to {CONFIG_NAMES[0]}")
+    common.add_argument("-r", "--registry", default=absent if hold else None,
+                        help="limit to one registry by name")
+    common.add_argument("-q", "--quiet", action="store_true",
+                        default=absent if hold else False)
     common.add_argument("-v", "--verbose", action="store_true",
+                        default=absent if hold else False,
                         help="list weak signals and suppressed antipatterns")
-    common.add_argument("--max-sites", type=int, default=None,
+    common.add_argument("--max-sites", type=int, default=absent if hold else None,
                         help="suppress antipatterns matching more sites than this "
                              "(negative disables suppression)")
     return common
 
 
 def build_parser() -> argparse.ArgumentParser:
-    common = _common()
+    common = _common(hold=True)
     parser = argparse.ArgumentParser(
         prog="kinemata",
-        parents=[common],
+        parents=[_common(hold=False)],
         description="One declared place per fact. Find what re-derives it.",
     )
     sub = parser.add_subparsers(dest="command", required=True)

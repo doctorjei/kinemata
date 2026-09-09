@@ -8,7 +8,7 @@ import pytest
 
 from kinemata.adapters.constants import PythonConstants
 from kinemata.bypass import scan, unused
-from kinemata.cli import main
+from kinemata.cli import build_parser, main
 from kinemata.config import ConfigError, load
 from kinemata.contract import BaseRegistry, Entry
 from kinemata.gates import enforced
@@ -383,6 +383,45 @@ def test_ids_prints_the_projection(project, capsys):
 def test_flags_work_after_the_subcommand(project):
     # `kinemata ids -c X` must work, not only `kinemata -c X ids`.
     assert main(["ids", "-c", str(project / "kinemata.toml"), "-q"]) == 0
+
+
+def test_flags_work_before_the_subcommand_too(project):
+    """The mirror of the test above, and its absence hid a real defect.
+
+    The subcommand parses into a fresh namespace whose keys are then copied over
+    the outer one, so every shared flag given *before* the subcommand was
+    silently replaced by the subparser's default. `-c` was the one that bit:
+    `kinemata -c canon.toml context` read the repository's config instead and
+    reported that no ceiling was declared. The command ran; it just ran against
+    something else.
+
+    Only the "after" direction was covered, which is why nothing caught it --
+    a test asserting half a contract reads exactly like one asserting all of it.
+    """
+    assert main(["-c", str(project / "kinemata.toml"), "-q", "ids"]) == 0
+
+
+def test_no_shared_flag_is_dropped_before_the_subcommand(project):
+    """Every flag on the shared parent, not just the one that was noticed."""
+    argv = ["-c", str(project / "kinemata.toml"), "-r", "constants", "-q", "-v",
+            "--max-sites", "7", "ids"]
+    args = build_parser().parse_args(argv)
+    assert args.config == str(project / "kinemata.toml")
+    assert args.registry == "constants"
+    assert (args.quiet, args.verbose, args.max_sites) == (True, True, 7)
+
+
+def test_an_unflagged_run_still_gets_the_defaults(project):
+    """`SUPPRESS` holds the subparser's defaults back; the top level supplies them."""
+    args = build_parser().parse_args(["ids"])
+    assert (args.config, args.registry, args.max_sites) == (None, None, None)
+    assert (args.quiet, args.verbose) == (False, False)
+
+
+def test_the_later_spelling_of_a_flag_wins(project):
+    """Given both ways round, the one nearer the command is the one meant."""
+    args = build_parser().parse_args(["-r", "outer", "ids", "-r", "inner"])
+    assert args.registry == "inner"
 
 
 def test_a_relative_path_resolves_against_the_project_root(project, capsys):
