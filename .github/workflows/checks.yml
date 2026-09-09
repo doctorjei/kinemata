@@ -8,14 +8,22 @@ on:
 
 jobs:
   tests:
+    # Both ends of `requires-python`, because the floor was asserted for days and
+    # never run: the box this was written on has one interpreter, and a 3.12-only
+    # stdlib call parses fine at 3.11 and fails only when something executes it.
+    # `tests/test_packaging.py` fails if the floor stops appearing here.
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false          # which end broke is the whole information
+      matrix:
+        python-version: ["3.11", "3.13"]
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0        # corpus validation reconstructs a past commit
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
       - run: pytest -q
 

@@ -191,6 +191,8 @@ matches inside the live `spec~box-vault-enable`.
 | `kinemata baseline` | shows accepted findings; `--record --until`, `--prune` | — |
 
 **Common flags:** `-c/--config`, `-r/--registry`, `-q/--quiet`, `-v/--verbose`, `--max-sites`.
+Each is accepted **on either side of the subcommand** — `kinemata -c x.toml check` and
+`kinemata check -c x.toml` are the same command, and given both, the later one wins.
 
 **Defaults:** projection budget `16384` B. Frequency suppression at `20` sites per
 (entry, antipattern).
