@@ -37,6 +37,7 @@ import re
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 from .bypass import Bypass
@@ -144,10 +145,29 @@ class Split:
 
 @dataclass
 class Baseline:
-    """Accepted findings, loaded from or written to one file."""
+    """Accepted findings, loaded from or written to one file.
+
+    **The list carries the date it lapses**, for the reason the README already
+    admitted about it: a baseline is an allowlist, and an allowlist that cannot
+    expire is a decision nobody revisits. Every other deferral this package
+    understands names its own end -- a promised path, an open question -- and
+    an accepted finding is the same shape: *not now*, which is only honest with
+    a *when*.
+
+    ``until`` is not a repair estimate. It is when somebody looks at the list
+    again: extend it deliberately, or drive it down.
+    """
 
     path: Path
     accepted: tuple[Accepted, ...] = ()
+    until: date | None = None
+    #: Who accepted these, and why. ``by`` is required when there is a note, as
+    #: it is on a promise: an unsigned reason is a reason with nobody behind it.
+    by: str = ""
+    note: str = ""
+
+    def lapsed(self, today: date | None = None) -> bool:
+        return self.until is not None and self.until < (today or date.today())
 
     @property
     def size(self) -> int:
@@ -179,6 +199,21 @@ class Baseline:
         except (OSError, json.JSONDecodeError) as exc:
             raise BaselineError(f"cannot read baseline {path}: {exc}") from exc
 
+        raw_until = document.get("until")
+        if not raw_until:
+            raise BaselineError(
+                f"{path}: this baseline names no date it lapses. Every finding "
+                "in it is exempt on a decision nobody has to revisit. "
+                "Re-record it with --until YYYY-MM-DD."
+            )
+        try:
+            until = date.fromisoformat(str(raw_until))
+        except ValueError as exc:
+            raise BaselineError(
+                f"{path}: 'until' is {raw_until!r}, which is not a date. "
+                "Write it as YYYY-MM-DD."
+            ) from exc
+
         version = document.get("version")
         if version != FORMAT_VERSION:
             raise BaselineError(
@@ -202,7 +237,13 @@ class Baseline:
                 raise BaselineError(
                     f"{path}: finding {index} is malformed: {exc}"
                 ) from exc
-        return cls(path=path, accepted=tuple(records))
+        return cls(
+            path=path,
+            accepted=tuple(records),
+            until=until,
+            by=str(document.get("by", "")),
+            note=str(document.get("note", "")),
+        )
 
     def save(self) -> None:
         """Write the baseline, sorted so a diff shows only what changed."""
@@ -218,7 +259,25 @@ class Baseline:
             if item.count > 1:
                 written["count"] = item.count
             findings.append(written)
-        document = {"version": FORMAT_VERSION, "findings": findings}
+        if self.until is None:
+            raise BaselineError(
+                f"{self.path}: refusing to write a baseline with no date it "
+                "lapses. Give --until YYYY-MM-DD."
+            )
+        if self.note and not self.by:
+            raise BaselineError(
+                f"{self.path}: the note on this baseline is unsigned. Give "
+                "--by as well, so a later reader knows whose decision it was."
+            )
+        document: dict[str, object] = {
+            "version": FORMAT_VERSION,
+            "until": self.until.isoformat(),
+        }
+        if self.by:
+            document["by"] = self.by
+        if self.note:
+            document["note"] = self.note
+        document["findings"] = findings
         self.path.write_text(json.dumps(document, indent=2) + "\n")
 
     def split(self, findings: Iterable[tuple[str, Bypass]]) -> Split:
@@ -259,11 +318,22 @@ class Baseline:
         return Split(new=tuple(new), accepted=tuple(accepted), stale=stale)
 
 
-def record(path: str | Path, findings: Iterable[tuple[str, Bypass]]) -> Baseline:
-    """Build a baseline covering exactly ``findings``.
+def record(
+    path: str | Path,
+    findings: Iterable[tuple[str, Bypass]],
+    *,
+    until: date,
+    by: str = "",
+    note: str = "",
+) -> Baseline:
+    """Build a baseline covering exactly ``findings``, and the date it lapses.
 
     Identical sites collapse into one record carrying their count, which is what
     makes the file readable at 111 findings and still exact.
+
+    ``until`` has no default, deliberately. A date this package chose would be a
+    number nobody decided, enforced as though somebody had -- the same refusal
+    as the context ceiling's missing default.
     """
     counts: Counter[tuple[str, ...]] = Counter()
     first: dict[tuple[str, ...], Accepted] = {}
@@ -283,4 +353,4 @@ def record(path: str | Path, findings: Iterable[tuple[str, Bypass]]) -> Baseline
         )
         for key, count in sorted(counts.items())
     )
-    return Baseline(path=Path(path), accepted=accepted)
+    return Baseline(path=Path(path), accepted=accepted, until=until, by=by, note=note)

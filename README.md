@@ -167,9 +167,17 @@ produces **42 strong findings** on the first run.
 So record them and fail on *increase*:
 
 ```bash
-kinemata baseline --record   # accept today's findings; commit the file
+kinemata baseline --record --until 2026-12-01 --by "Jei" \
+                  --note "pre-existing at adoption"
 kinemata check               # green, and still red for anything new
 ```
+
+**`--until` is required.** A baseline is an allowlist, and one that cannot lapse
+is a decision nobody revisits — the same rule a promise follows, applied to the
+mechanism that admits to being an allowlist in the next paragraph. On that date
+`check` fails with nothing new, saying so: the exemptions are still in force and
+nobody has looked at them since the day somebody said they would. Extend it
+deliberately, or drive the list down. A note must be signed.
 
 `check` then reports only findings the baseline does not cover, and prints the
 size of the exemption list **on every run, including clean ones**. `review` is
@@ -348,7 +356,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **224 tests**, and
+The companion guard is a number with an oracle. This suite is **231 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 

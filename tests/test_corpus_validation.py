@@ -16,6 +16,7 @@ import ast
 import shutil
 import subprocess
 from collections import Counter
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -24,6 +25,11 @@ from kinemata import Entry, scan
 from kinemata.baseline import record
 from kinemata.contract import BaseRegistry
 from kinemata.report import review
+
+#: Far enough out that these tests are about fingerprints, not expiry.
+#: `until` has no default: a date this package chose would be a number
+#: nobody decided.
+LATER = date(2099, 1, 1)
 
 CORPUS = Path(__file__).resolve().parents[1] / "corpus" / "kanibako-cli"
 COMMIT = "42ece129"
@@ -143,14 +149,14 @@ def test_recording_silences_a_tree_that_is_genuinely_failing(scratch, tmp_path):
     findings = accepted_findings(scratch)
     assert len(findings) >= 9
 
-    split = record(tmp_path / "b.json", findings).split(accepted_findings(scratch))
+    split = record(tmp_path / "b.json", findings, until=LATER).split(accepted_findings(scratch))
     assert not split.new
     assert not split.stale
 
 
 def test_a_bypass_added_after_the_baseline_still_fires(scratch, tmp_path):
     """The half a baseline is capable of destroying."""
-    base = record(tmp_path / "b.json", accepted_findings(scratch))
+    base = record(tmp_path / "b.json", accepted_findings(scratch), until=LATER)
     (scratch / "kanibako" / "added_later.py").write_text('META = "workset.yaml"\n')
 
     split = base.split(accepted_findings(scratch))
@@ -161,7 +167,7 @@ def test_shifting_every_accepted_finding_down_its_file_changes_nothing(scratch, 
     """Real churn on a real tree: 40 lines inserted at the top of every file
     holding an accepted finding. Line numbers all move; the gate stays quiet."""
     findings = accepted_findings(scratch)
-    base = record(tmp_path / "b.json", findings)
+    base = record(tmp_path / "b.json", findings, until=LATER)
 
     for path in {hit.path for _, hit in findings}:
         source = scratch / path
@@ -177,7 +183,7 @@ def test_moving_an_accepted_bypass_to_another_file_reports_it(scratch, tmp_path)
     that file -- and a bypass the baseline follows around the tree would
     reproduce the failure ``42ece129``'s own tripwire made."""
     findings = accepted_findings(scratch)
-    base = record(tmp_path / "b.json", findings)
+    base = record(tmp_path / "b.json", findings, until=LATER)
 
     per_file = Counter(hit.path for _, hit in findings)
     for _, hit in findings:

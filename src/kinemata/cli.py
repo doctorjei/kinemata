@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import date
 from pathlib import Path
 
 from .baseline import Baseline, BaselineError, record
@@ -623,7 +624,10 @@ def cmd_check(args: argparse.Namespace) -> int:
     # --quiet**: an exemption list nobody reads the size of is how an allowlist
     # rots. The number is the point of printing it.
     if baseline.exists:
-        note = f"\nbaseline: {baseline.size} accepted finding(s) in {baseline.path.name}"
+        note = (f"\nbaseline: {baseline.size} accepted finding(s) in "
+                f"{baseline.path.name}, until {baseline.until}")
+        if baseline.by:
+            note += f" ({baseline.by})"
         # Under a narrowed scan the unscanned records are simply absent from the
         # findings, which is indistinguishable from fixed. Saying nothing beats
         # reporting a project's whole baseline as stale.
@@ -634,6 +638,18 @@ def cmd_check(args: argparse.Namespace) -> int:
                 f"(`kinemata baseline --prune` drops them)"
             )
         print(note)
+
+    # A lapsed baseline fails even with nothing new, because that is the whole
+    # point of the date: the exemptions are still in force and nobody has looked
+    # at them since the day somebody said they would.
+    if baseline.exists and baseline.lapsed():
+        print(
+            f"\nFAIL: the baseline lapsed on {baseline.until}. Its "
+            f"{baseline.size} exemption(s) are still in force and nobody has "
+            "decided again. Drive them down, or re-record with a new --until.",
+            file=sys.stderr,
+        )
+        return 1
 
     if split.new:
         label = "new bypass(es)" if baseline.exists else "bypass(es)"
@@ -665,11 +681,37 @@ def cmd_baseline(args: argparse.Namespace) -> int:
 
     settings, reports = _run_review(args)
     findings = _strong(reports)
-    baseline = Baseline.load(settings.baseline)
+    try:
+        baseline = Baseline.load(settings.baseline)
+    except BaselineError:
+        # `--record` replaces the file, so refusing to read the old one would
+        # make the instruction it prints impossible to follow -- which is what
+        # happened the first time a dateless baseline met the date requirement.
+        # Anything else still refuses: a baseline you cannot read must not be
+        # treated as an empty one while it is still exempting findings.
+        if not args.record:
+            raise
+        print(f"warning: {settings.baseline.name} could not be read; recording "
+              "a fresh one over it", file=sys.stderr)
+        baseline = Baseline(path=settings.baseline)
     split = baseline.split(findings)
 
     if args.record:
-        fresh = record(settings.baseline, findings)
+        if not args.until:
+            raise BaselineError(
+                "--record needs --until YYYY-MM-DD: the date this list stops "
+                "being accepted without somebody deciding again. A baseline is "
+                "an allowlist, and one that cannot lapse is a decision nobody "
+                "revisits."
+            )
+        try:
+            until = date.fromisoformat(args.until)
+        except ValueError as exc:
+            raise BaselineError(
+                f"--until {args.until!r} is not a date. Write it as YYYY-MM-DD."
+            ) from exc
+        fresh = record(settings.baseline, findings, until=until,
+                       by=args.by or "", note=args.note or "")
         delta = fresh.size - baseline.size
         fresh.save()
         change = f" ({delta:+d} against the previous baseline)" if baseline.exists else ""
@@ -682,7 +724,8 @@ def cmd_baseline(args: argparse.Namespace) -> int:
         return 0
 
     if args.prune:
-        kept = record(settings.baseline, split.accepted)
+        kept = record(settings.baseline, split.accepted, until=baseline.until,
+                      by=baseline.by, note=baseline.note)
         dropped = baseline.size - kept.size
         kept.save()
         print(f"Dropped {dropped} record(s) no longer present; "
@@ -791,6 +834,10 @@ def build_parser() -> argparse.ArgumentParser:
                       help="accept every current finding, replacing the baseline")
     base.add_argument("--prune", action="store_true",
                       help="drop records whose finding is no longer present")
+    base.add_argument("--until", metavar="YYYY-MM-DD",
+                      help="the date this list stops being accepted by itself")
+    base.add_argument("--by", help="who accepted it; required with --note")
+    base.add_argument("--note", help="why, in the words of whoever accepted it")
     base.set_defaults(func=cmd_baseline)
 
     return parser
@@ -799,7 +846,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    for attr in ("path", "strict", "record", "prune"):
+    for attr in ("path", "strict", "record", "prune", "until", "by", "note"):
         if not hasattr(args, attr):
             setattr(args, attr, None)
     try:

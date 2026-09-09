@@ -177,10 +177,10 @@ matches inside the live `spec~box-vault-enable`.
 | `kinemata review` | advisory scan; frequency suppression | never |
 | `kinemata clusters` | repeated text with no declared home | never |
 | `kinemata undeclared` | the closed-world catch — an identifier a `closed` registry does not declare | a stray under a closed registry; refuses outright if no registry can recognize its own identifiers |
-| `kinemata check` | the gate | a strong finding not covered by the baseline |
+| `kinemata check` | the gate | a strong finding not covered by the baseline, or a baseline past its `until` |
 | `kinemata claims` | documentation gate; also verifies `[[gate]]` declarations | a dead claim, or a declared gate that does not run |
 | `kinemata context` | session-load gate | measured bytes exceed `budget` |
-| `kinemata baseline` | shows accepted findings; `--record`, `--prune` | — |
+| `kinemata baseline` | shows accepted findings; `--record --until`, `--prune` | — |
 
 **Common flags:** `-c/--config`, `-r/--registry`, `-q/--quiet`, `-v/--verbose`, `--max-sites`.
 
@@ -205,6 +205,7 @@ outside, so the following are `ConfigError`, not silent skips:
 - a `[[promise]]` with no `until`, an unparseable date, or a `note` with no `by`
 - a `[[count]]` naming a `run` no `[command]` declares, or giving both `command` and `run`
 - an unknown `boundary` on a `substitutions` registry
+- a baseline with no `until`, or `--record` without one — and an unsigned `--note`
 
 Suppression is reported, never silent: `check` prints the exemption count on every run,
 including clean ones, and `-q` does not suppress it.
@@ -216,10 +217,14 @@ including clean ones, and `-q` does not suppress it.
 Measured first-run cost on one 65k-line project's settings package: **42 strong findings**.
 
 ```bash
-kinemata baseline --record   # accept today's findings; commit the file
+kinemata baseline --record --until 2026-12-01 --by "Jei"   # accept today's
 kinemata check               # green, and still red for anything new
-kinemata baseline --prune    # drop findings that no longer exist
+kinemata baseline --prune    # drop findings that no longer exist; keeps the date
 ```
+
+`--until` is required and has no default: on that date `check` fails with nothing
+new, because the exemptions are still in force and nobody has revisited them. A
+baseline carrying no date at all is refused rather than honored.
 
 **Fingerprint:** entry + antipattern + path + matched text, whitespace-collapsed, with
 multiplicity counted. Line numbers are excluded; path is included.
