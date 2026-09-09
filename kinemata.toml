@@ -67,6 +67,27 @@ note = "documentation, and this inventory"
 command = "ruff check"
 note = "lint; the rule set is declared in pyproject.toml"
 
+# Two findings from `kinemata unused`, reviewed 2026-09-09 and set aside. This
+# is the second kind of promise -- not a file the project will produce, but a
+# question somebody answered and dated so the answer expires rather than
+# hardens into silence.
+#
+# Both are true for the question `unused` asks and correct as they stand. The
+# check cannot tell "module-local by design" from "orphan", which is exactly
+# why it emits a review list and never a cut list.
+
+[[promise]]
+what = "DEFAULT_BUDGET is named only inside contract.py, and that is correct: consumers read registry.budget rather than the constant"
+until = "2027-03-01"
+note = "reviewed against projection.py, which routes through the attribute"
+by = "Jei"
+
+[[promise]]
+what = "SKIP_DIRS is named only inside bypass.py, and that is correct: every other tree walk routes through _walk and _tree"
+until = "2027-03-01"
+note = "context.measure globs independently and does not prune these; deliberate, since [context] include is an explicit declaration rather than an unbounded walk"
+by = "Jei"
+
 [[registry]]
 name = "canonical"
 kind = "code-patterns"
