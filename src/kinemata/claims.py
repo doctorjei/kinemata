@@ -205,7 +205,7 @@ class Verification:
             out.append(f"  BLOCKED: {kind}")
         for promise in self.kept:
             out.append(
-                f"  KEPT: {promise} exists now -- remove it from `promised`"
+                f"  KEPT: {promise} exists now -- remove the promise"
             )
         for promise in self.uncovered:
             out.append(
@@ -215,7 +215,7 @@ class Verification:
         for promise in self.overdue:
             out.append(
                 f"  LAPSED: {promise} -- decide again: extend the date, or drop "
-                "the promise and let the claim fail"
+                "the promise and let what it covered come back"
             )
         for kind in self.unavailable:
             out.append(f"  NOT CHECKED: {kind}")
@@ -439,23 +439,62 @@ CLAIM_KINDS: tuple[ClaimKind, ...] = (
 
 @dataclass(frozen=True)
 class Promise:
-    """A path a design says it will produce, and the date the deferral lapses.
+    """Something deferred, and the date the deferral lapses.
 
-    **``until`` is required, and there is no value meaning "never".** A promise
-    otherwise expires only by being kept: if the work is canceled or simply
-    never starts, the document goes on naming a file nobody will build, the
-    entry goes on covering it, and nothing is ever red again. At that point the
-    declaration is an ignore list with a better name.
+    **Two kinds, one shape.** A promise names either a ``path`` the project
+    intends to produce, or -- with ``what`` -- anything else it has decided not
+    to settle yet: a question left open, a threshold not yet measured, a finding
+    reviewed and set aside. The second kind exists because every deferral in a
+    real project is this shape, and a tool that dates only the ones it can see
+    for itself leaves the rest as good intentions in prose.
+
+    **``until`` is required, and there is no value meaning "never".** A deferral
+    that cannot lapse is an ignore list with a better name: if the work is
+    canceled or simply never starts, nothing is ever red again.
 
     ``until`` is **not a delivery date** and nothing here treats it as one. It
     is the date this deferral stops holding by itself, after which somebody
     decides again -- extend it, which is a visible edit somebody makes, or drop
-    the promise and let the claim fail until the document changes. The point is
-    the decision recurring, not the estimate being right.
+    it and let the thing it was covering come back. The point is the decision
+    recurring, not the estimate being right.
+
+    A ``path`` promise has three ways to end, because the tree can answer for
+    it: the path exists, nothing cites it any more, or the date passed. A
+    ``what`` promise has only the date, because nothing else can tell.
     """
 
-    path: str
     until: date
+    path: str | None = None
+    what: str | None = None
+    #: Why this was deferred, in the words of whoever deferred it. Free text,
+    #: like the field `[[gate]]` carries: a declaration a later reader cannot
+    #: account for is one they will not touch, so it outlives its reason.
+    note: str = ""
+    #: Who deferred it. **Required whenever there is a note**, because an
+    #: unsigned note is a reason with nobody behind it -- and the reader who
+    #: has to decide whether a deferral still holds needs to know whose call it
+    #: was. A deferral is somebody's decision or it is drift.
+    by: str = ""
+
+    def __post_init__(self) -> None:
+        if bool(self.path) == bool(self.what):
+            raise ValueError(
+                "a promise names a `path` or a `what`, not both and not neither"
+            )
+        if self.note and not self.by:
+            raise ValueError(
+                f"the note on {self.label!r} is unsigned: give `by` as well, "
+                "so a later reader knows whose decision this was"
+            )
+
+    @property
+    def label(self) -> str:
+        return self.path or self.what or ""
+
+    def described(self) -> str:
+        if not self.note:
+            return f"{self.label} ({self.by})" if self.by else self.label
+        return f"{self.label} -- {self.note} ({self.by})"
 
 
 #: Kinds a project may declare as promised. A file can be intended and absent;
@@ -550,9 +589,15 @@ def verify(
     archives = tuple(fragment for fragment in historical if fragment)
     exclusions = tuple(fragment.rstrip("/") for fragment in exclude if fragment)
     exclusions += git_ignored(root)
+    # A path promise is keyed by its normalized spelling so a claim can match
+    # it; a `what` promise has nothing to match and only the date can end it.
     promises: list[tuple[str, Promise]] = []
+    open_questions: list[Promise] = []
     for promise in promised:
-        key = _normalize(promise.path)
+        if promise.what:
+            open_questions.append(promise)
+            continue
+        key = _normalize(promise.path or "")
         if key and key not in {seen for seen, _ in promises}:
             promises.append((key, promise))
     promised_paths = {key for key, _ in promises}
@@ -624,13 +669,22 @@ def verify(
     # project set has passed. The second and third are the silent ones.
     when = today or date.today()
     for key, promise in promises:
-        if tree.resolves(promise.path):
-            found.kept.append(promise.path)
+        if tree.resolves(promise.path or ""):
+            found.kept.append(promise.described())
         elif key not in covered:
-            found.uncovered.append(promise.path)
+            found.uncovered.append(promise.described())
         elif promise.until < when:
             found.overdue.append(
-                f"{promise.path} (deferred until {promise.until.isoformat()})"
+                f"{promise.described()} (deferred until {promise.until.isoformat()})"
+            )
+
+    # An open question has no tree to answer for it. The date is the whole
+    # mechanism, which is why `until` is required on every promise rather than
+    # only on the ones nothing else can check.
+    for promise in open_questions:
+        if promise.until < when:
+            found.overdue.append(
+                f"{promise.described()} (deferred until {promise.until.isoformat()})"
             )
 
     _verify_counts(root, suffixes, exclusions, archives, counts, found)

@@ -228,6 +228,7 @@ def _build_substitutions(spec: dict[str, Any], root: Path) -> BaseRegistry:
             name=spec.get("name", "substitutions"),
             closed=spec.get("closed", False),
             case_sensitive=spec.get("case_sensitive", False),
+            boundary=spec.get("boundary", "prose"),
         )
     except ValueError as exc:
         raise ConfigError(f"registry {spec.get('name', '?')!r}: {exc}") from exc
@@ -336,7 +337,7 @@ def load(path: str | Path) -> Settings:
         historical=tuple(claims.get("historical", ())),
         resolve_in=tuple(claims.get("resolve_in", ())),
         commits_in=tuple(claims.get("commits_in", ())),
-        promised=_promised(claims.get("promised", ()), path),
+        promised=_promised(raw.get("promise"), claims, path),
         counts=_build_counts(raw.get("count", []), path,
                              _commands(raw.get("command"), path)),
         baseline=root / project.get("baseline", BASELINE_NAME),
@@ -348,68 +349,91 @@ def load(path: str | Path) -> Settings:
 #: What a promise may say. Anything else is refused rather than ignored: a
 #: misspelled key would drop the date silently and leave a deferral that expires
 #: never, which is the whole failure this field exists to prevent.
-PROMISE_KEYS = frozenset({"path", "until"})
+PROMISE_KEYS = frozenset({"path", "what", "until", "note", "by"})
 
 #: How to spell one, quoted in every refusal so the fix is on screen.
-PROMISE_FORM = '{ path = "...", until = "YYYY-MM-DD" }'
+PROMISE_FORM = '[[promise]] with `until = "YYYY-MM-DD"` and either `path` or `what`'
 
 
 def _promise(entry: Any, path: Path) -> Promise:
-    """One promised path and the date its deferral lapses.
+    """One deferral and the date it lapses.
 
-    **Both fields are required and no value means "never".** A promise that
-    cannot lapse is an ignore list with a better name: the document goes on
-    naming a file nobody will build and nothing is ever red again. If the work
-    has no schedule, the date is still answerable -- it is when somebody looks
-    at this again, not when the work ships.
+    **Two kinds, one table.** ``path`` defers a claim about a file the project
+    intends to produce, and the tree can end it three ways. ``what`` defers
+    anything else -- a question left open, a threshold not yet measured, a
+    finding reviewed and set aside -- and only the date can end that. The second
+    kind exists because every deferral in a project has this shape, and a tool
+    that dates only the ones it can see for itself leaves the rest as good
+    intentions in prose.
+
+    **Both fields are required and no value means "never".** A deferral that
+    cannot lapse is an ignore list with a better name. If the work has no
+    schedule the date is still answerable: it is when somebody looks at this
+    again, not when the work ships.
     """
-    if isinstance(entry, str) or not isinstance(entry, dict):
+    if not isinstance(entry, dict):
         raise ConfigError(
-            f"{path}: [claims] promised holds {entry!r}. Every promise names "
-            f"the date its deferral lapses: {PROMISE_FORM}."
+            f"{path}: a promise is a table, not {entry!r}. Write {PROMISE_FORM}."
         )
-    # Unknown keys first, deliberately: `untl = "2026-12-01"` is missing `until`
-    # *because* of the typo, and "missing until" sends a reader to stare at a
-    # line where they believe they wrote it.
     unknown = set(entry) - PROMISE_KEYS
     if unknown:
         raise ConfigError(
-            f"{path}: [claims] promise {entry.get('path', entry)!r} declares "
-            f"{', '.join(sorted(unknown))}, which means nothing here "
+            f"{path}: promise {entry.get('path') or entry.get('what') or entry!r} "
+            f"declares {', '.join(sorted(unknown))}, which means nothing here "
             f"(known: {', '.join(sorted(PROMISE_KEYS))})."
         )
-    missing = [key for key in ("path", "until") if not entry.get(key)]
-    if missing:
+    if bool(entry.get("path")) == bool(entry.get("what")):
         raise ConfigError(
-            f"{path}: [claims] promise {entry!r} is missing "
-            f"{', '.join(missing)}. Write it as {PROMISE_FORM}."
+            f"{path}: promise {entry!r} needs exactly one of `path` (a file the "
+            "project will produce) or `what` (anything else being deferred)."
+        )
+    if not entry.get("until"):
+        raise ConfigError(
+            f"{path}: promise {entry.get('path') or entry.get('what')!r} names "
+            f"no date it lapses. Write {PROMISE_FORM} -- there is no value "
+            "meaning never."
         )
     until = entry["until"]
     # `date`, because TOML parses a bare 2026-12-01 into one; a quoted string is
     # the likelier spelling and both should work.
-    if isinstance(until, date):
-        return Promise(path=str(entry["path"]), until=until)
+    if not isinstance(until, date):
+        try:
+            until = date.fromisoformat(str(until))
+        except ValueError as exc:
+            raise ConfigError(
+                f"{path}: promise {entry.get('path') or entry.get('what')!r} is "
+                f"deferred until {until!r}, which is not a date. Write it as "
+                "YYYY-MM-DD."
+            ) from exc
     try:
-        return Promise(path=str(entry["path"]), until=date.fromisoformat(str(until)))
+        return Promise(
+            until=until,
+            path=str(entry["path"]) if entry.get("path") else None,
+            what=str(entry["what"]) if entry.get("what") else None,
+            note=str(entry.get("note", "")),
+            by=str(entry.get("by", "")),
+        )
     except ValueError as exc:
-        raise ConfigError(
-            f"{path}: [claims] promise {entry['path']!r} is deferred until "
-            f"{until!r}, which is not a date. Write it as YYYY-MM-DD -- there "
-            "is no value meaning never."
-        ) from exc
+        raise ConfigError(f"{path}: {exc}") from exc
 
 
-def _promised(raw: Any, path: Path) -> tuple[Promise, ...]:
-    """Paths a design promises, as declared -- or a refusal.
+def _promised(raw: Any, claims: dict[str, Any], path: Path) -> tuple[Promise, ...]:
+    """The ``[[promise]]`` tables -- or a refusal.
 
-    Every entry here suppresses a claim, so a malformed one suppresses nothing
-    while looking like it does. A bare string is the likely slip: TOML accepts
-    ``promised = "docs/plan.md"`` happily, and iterating it would defer claims
-    about ``d``, ``o``, ``c``.
+    Every entry here suppresses something, so a malformed one suppresses nothing
+    while looking like it does.
     """
-    if isinstance(raw, str) or not isinstance(raw, (list, tuple)):
+    if claims.get("promised") is not None:
         raise ConfigError(
-            f"{path}: [claims] promised must be a list of paths, not "
+            f"{path}: [claims] promised has moved to [[promise]] tables, which "
+            "defer a `what` as well as a `path`. Write "
+            f"{PROMISE_FORM}."
+        )
+    if raw is None:
+        return ()
+    if not isinstance(raw, (list, tuple)):
+        raise ConfigError(
+            f"{path}: promises are declared as [[promise]] tables, not "
             f"{type(raw).__name__}."
         )
     return tuple(_promise(entry, path) for entry in raw)

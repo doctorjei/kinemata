@@ -348,7 +348,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **216 tests**, and
+The companion guard is a number with an oracle. This suite is **224 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 
@@ -418,8 +418,11 @@ So write down the names that do not exist yet, and the date each one stops being
 excused:
 
 ```toml
-[claims]
-promised = [{ path = "example/clause-index.json", until = "2026-12-01" }]
+[[promise]]
+path = "example/clause-index.json"
+until = "2026-12-01"
+note = "Phase 1 output; deferred by the design review"
+by = "Jei"
 ```
 
 Now the run is clean, and the day someone mistypes a path it is the only line on
@@ -429,7 +432,7 @@ the screen. The claim is still counted — held open, not skipped.
 
 ```
 FAIL: 1 promised path(s) now exist and are still declared.
-  KEPT: example/clause-index.json exists now -- remove it from `promised`
+  KEPT: example/clause-index.json exists now -- remove the promise
 ```
 
 Nothing cites it any more — usually a rename, where the new name fails loudly as
@@ -443,7 +446,7 @@ Or the date has passed:
 
 ```
   LAPSED: example/clause-index.json (deferred until 2026-12-01) -- decide again:
-          extend the date, or drop the promise and let the claim fail
+          extend the date, or drop the promise and let what it covered come back
 ```
 
 That is the difference between this and an ignore list. You deal with the entry
@@ -455,6 +458,30 @@ starts, the document goes on naming a file nobody will build and nothing is ever
 red again. It is **not a delivery date** — it is when somebody looks at this
 again. If the work is not ripe, move the date; that edit is a decision in a
 commit, which is the entire point.
+
+### Deferring something that is not a path
+
+Every deferral in a project has the same shape, and most of them are not files:
+a question left open, a threshold nobody has measured yet, a finding reviewed
+and set aside. A tool that dates only the deferrals it can see for itself leaves
+the rest as good intentions in prose. So a promise may name a `what` instead:
+
+```toml
+[[promise]]
+what = "whether the note cap needs a number before Phase 2"
+until = "2027-03-08"
+note = "measured distribution first; a guessed cap is a number nobody chose"
+by = "Jei"
+```
+
+Nothing in the tree can answer for that one, so the date is the whole mechanism —
+which is why `until` is required on both kinds rather than only where nothing
+else can check.
+
+**A note must be signed.** `by` is required whenever there is a `note`, because
+an unsigned reason is a reason with nobody behind it, and the person deciding
+whether a deferral still holds needs to know whose call it was. A deferral is
+somebody's decision or it is drift.
 
 Two smaller decisions, both to stop the list becoming junk. The names are
 **declared, not guessed from the prose** — reading English for future tense is
@@ -522,6 +549,34 @@ suffixes = [".md", ".py"]
 These match as **prose**: comments and docstrings are exactly where a spelling
 matters, so they are not stripped. Inline code spans are, because a document
 recording that a word was corrected has to spell the word.
+
+**A list of retired identifiers is a different job, and needs `boundary =
+"identifier"`.** Two things go wrong otherwise, both measured on a real clause-ID
+scheme:
+
+- A retired `spec~box-vault` matches inside the live `spec~box-vault-enable`,
+  because `-` supplies a word boundary. The report names the very site that
+  proves the rename happened, and reads exactly like a real surviving
+  reference. Hyphenated families are the natural way to name related things, so
+  a project hits this at its first such rename.
+- Identifiers are written in backticks, and prose mode blanks code spans — so
+  the registry reports clean over documents that carry the retired name. That
+  is not hypothetical: switching one real config to `identifier` turned a clean
+  run into a finding on the first document it scanned.
+
+```toml
+[[registry]]
+name = "retired"
+kind = "substitutions"
+suffixes = [".md"]
+case_sensitive = true        # identifiers, where case carries meaning
+boundary = "identifier"      # bounded by [A-Za-z0-9_.-], and code spans are read
+```
+
+The cost is stated rather than discovered later: a document narrating the rename
+— "`old` is now `new`" — now reports the old name. That is what `exclude`,
+`historical` and the baseline are for. A legitimate mention gets declared, not
+guessed at.
 
 That is the ordinary machinery aimed at documentation. This project's own
 design doc went on naming a method the code had already renamed, for three

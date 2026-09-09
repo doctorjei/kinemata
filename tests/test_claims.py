@@ -284,7 +284,7 @@ def test_a_promise_the_tree_has_kept_fails(tmp_path):
     result = verify(tmp_path, promised=[LATER], today=date(2026, 9, 8))
     assert result.kept == ["out/report.json"]
     assert result.failed
-    assert "remove it from `promised`" in result.text()
+    assert "remove the promise" in result.text()
 
 
 def test_a_promise_does_not_silence_a_path_it_did_not_name(tmp_path):
@@ -310,7 +310,8 @@ def test_a_commit_cannot_be_promised(tmp_path):
     subprocess.run(["git", "-C", str(tmp_path), "commit", "-qm", "first"], check=True)
 
     write(tmp_path, "doc.md", "Fixed in `deadbee1`.\n")
-    result = verify(tmp_path, promised=[Promise("deadbee1", date(2027, 1, 1))],
+    result = verify(tmp_path,
+                    promised=[Promise(path="deadbee1", until=date(2027, 1, 1))],
                     today=date(2026, 9, 8))
     assert broken(result) == {("commit", "deadbee1")}
     assert result.deferred == []

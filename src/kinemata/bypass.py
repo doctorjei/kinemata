@@ -34,7 +34,16 @@ from .prose import FILTERS, LITERAL_EXTRACTORS, PROSE_FILTERS, STRING_FILTERS
 
 #: Which filter table each ``match_mode`` selects. A mode is a row here, so
 #: adding one does not mean editing the branch that picks it.
-MODE_FILTERS = {"prose": PROSE_FILTERS, "code": FILTERS, "strings": STRING_FILTERS}
+MODE_FILTERS = {
+    "prose": PROSE_FILTERS,
+    "code": FILTERS,
+    "strings": STRING_FILTERS,
+    # No filtering at all. A row rather than a fallback, because ``raw`` was
+    # already being passed by name and worked only because an unknown mode
+    # happens to land on a table with no entry for the suffix -- a mode that
+    # works by accident is one nobody can rely on.
+    "raw": {},
+}
 
 #: Git's directory. Named on its own because two checks must look *for* it to
 #: decide whether the tree is a repository, and a second spelling of it there

@@ -525,17 +525,18 @@ def test_a_scan_leaving_the_tree_says_so_even_when_quiet(project, tmp_path, caps
     assert "linked/app.py" in captured.out
 
 
-def test_a_promised_list_that_is_not_a_list_is_refused(tmp_path):
-    """Every entry suppresses a claim, so a malformed one suppresses nothing
-    while looking like it does. TOML takes a bare string happily, and iterating
-    it would defer claims about `d`, `o`, `c`."""
+def test_the_old_promised_key_says_where_it_went(tmp_path):
+    """`[claims] promised` shipped in the morning and moved the same day, once
+    it was clear a project defers questions as well as paths. A config carrying
+    the old key is told where it went rather than having its promises silently
+    ignored."""
     write(tmp_path, "consts.py", 'BOX_META_FILE = "box.yaml"\n')
     write(
         tmp_path,
         "kinemata.toml",
         """
         [claims]
-        promised = "docs/plan.md"
+        promised = [{ path = "docs/plan.md", until = "2027-01-01" }]
 
         [[registry]]
         name = "constants"
@@ -543,7 +544,7 @@ def test_a_promised_list_that_is_not_a_list_is_refused(tmp_path):
         modules = ["consts.py"]
         """,
     )
-    with pytest.raises(ConfigError, match="must be a list"):
+    with pytest.raises(ConfigError, match=r"has moved to \[\[promise\]\]"):
         load(tmp_path / "kinemata.toml")
 
 

@@ -116,3 +116,72 @@ def test_declaring_both_a_file_and_inline_words_is_refused(tmp_path):
     )
     with pytest.raises(ConfigError, match="not both"):
         load(tmp_path / "kinemata.toml")
+
+
+# -- boundaries: a spelling in prose and a spelling in code are two jobs -------
+
+
+def test_an_identifier_does_not_match_inside_a_longer_one(tmp_path):
+    """The failure that produced this, measured on a real clause-ID scheme.
+
+    Prose boundaries assert `\\b` after `vault`, and `-` supplies that boundary,
+    so a retired `spec~box-vault` matched inside the live `spec~box-vault-enable`
+    — reporting a surviving reference to the retired ID at exactly the site that
+    proves the rename happened. Shared hyphenated prefixes are the natural
+    spelling for a family of clauses, so a project meets this at its first such
+    rename, and the report is indistinguishable from a real one.
+    """
+    write(tmp_path, "notes.md", "Renamed to spec~box-vault-enable this week.\n")
+    words = {"spec~box-vault": "spec~box-vault-enable"}
+
+    prose = Substitutions(words, case_sensitive=True)
+    assert [hit.entry_id for hit in scan(prose, tmp_path, suffixes=[".md"])]
+
+    identifiers = Substitutions(words, case_sensitive=True, boundary="identifier")
+    assert scan(identifiers, tmp_path, suffixes=[".md"]) == []
+
+
+def test_an_identifier_in_a_code_span_is_seen(tmp_path):
+    """The second half of the same defect, and the one that made the registry
+    report clean over documents carrying the retired name.
+
+    `prose` blanks inline code spans — right for a word list, since a document
+    correcting `recognisable` has to spell it — and wrong for a name list,
+    because a retired identifier is nearly always written in backticks. So the
+    boundary choice carries the match mode with it.
+    """
+    write(tmp_path, "notes.md", "Still references `spec~box-vault` here.\n")
+    words = {"spec~box-vault": "spec~box-vault-enable"}
+
+    found = scan(Substitutions(words, case_sensitive=True, boundary="identifier"),
+                 tmp_path, suffixes=[".md"])
+    assert [hit.entry_id for hit in found] == ["spec~box-vault-enable"]
+
+
+def test_prose_keeps_the_boundary_an_identifier_would_reject(tmp_path):
+    """Why this is a declared choice and not a replacement. A sentence ending
+    `behaviour.` is a real violation that prose boundaries catch and identifier
+    boundaries reject, because `.` legitimately abuts an identifier."""
+    write(tmp_path, "notes.md", "We documented the behaviour.\n")
+    words = {"behaviour": "behavior"}
+
+    assert [hit.entry_id for hit in scan(Substitutions(words), tmp_path,
+                                         suffixes=[".md"])] == ["behavior"]
+    assert scan(Substitutions(words, boundary="identifier"), tmp_path,
+                suffixes=[".md"]) == []
+
+
+def test_an_unknown_boundary_is_refused():
+    """A misspelled boundary silently falling back to prose would reinstate the
+    false positive this exists to remove."""
+    with pytest.raises(ValueError, match="unknown boundary"):
+        Substitutions({"a": "b"}, boundary="identifiers")
+
+
+def test_a_spelling_holding_a_regex_metacharacter_still_matches(tmp_path):
+    """Regression on my own first draft, which stripped `|` out of the compiled
+    pattern and would have silently broken any spelling containing one."""
+    write(tmp_path, "notes.md", "The `a|b` form is retired.\n")
+    found = scan(Substitutions({"a|b": "c"}, boundary="identifier"),
+                 tmp_path, suffixes=[".md"])
+    assert [hit.entry_id for hit in found] == ["c"]

@@ -384,7 +384,7 @@ def cmd_claims(args: argparse.Namespace) -> int:
     # optional reading. A project that stops noticing its deferrals has an
     # allowlist.
     if settings.promised:
-        print(f"promised: {len(settings.promised)} declared, "
+        print(f"promises: {len(settings.promised)} declared, "
               f"{len(found.deferred)} claim(s) held open")
 
     if found.failed or inventory.failed:

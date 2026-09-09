@@ -8,9 +8,11 @@ tree. These tests are mostly about the ways a step can be gone.
 from __future__ import annotations
 
 import textwrap
+from datetime import date
 
 import pytest
 
+from kinemata.claims import verify
 from kinemata.cli import main
 from kinemata.config import ConfigError, load
 from kinemata.gates import Gate, enforced
@@ -254,8 +256,9 @@ def test_the_promise_count_is_printed_even_when_quiet(tmp_path, capsys):
         [project]
         root = "."
 
-        [claims]
-        promised = [{ path = "out/report.json", until = "2027-01-01" }]
+        [[promise]]
+        path = "out/report.json"
+        until = "2027-01-01"
 
         [[registry]]
         name = "constants"
@@ -266,7 +269,7 @@ def test_the_promise_count_is_printed_even_when_quiet(tmp_path, capsys):
     write(tmp_path, "consts.py", 'BOX_META_FILE = "box.yaml"\n')
 
     assert main(["claims", "-c", str(tmp_path / "kinemata.toml"), "-q"]) == 0
-    assert "promised: 1 declared, 1 claim(s) held open" in capsys.readouterr().out
+    assert "promises: 1 declared, 1 claim(s) held open" in capsys.readouterr().out
 
 
 # -- a command declared once, used by several counts --------------------------
@@ -378,22 +381,68 @@ def test_a_promise_date_must_be_a_date(tmp_path):
     """Refused rather than ignored: a misparsed date would leave a deferral that
     looks bounded and lapses never."""
     config = _count_config(tmp_path, """
-        [claims]
-        promised = [{ path = "out/report.json", until = "next quarter" }]
+        [[promise]]
+        path = "out/report.json"
+        until = "next quarter"
         """)
     with pytest.raises(ConfigError, match="not a date"):
         load(config)
 
 
 def test_a_promise_must_name_the_date_it_lapses(tmp_path):
-    """The shorthand this replaced -- a bare path -- said nothing about when the
-    deferral stops holding, so it never did. A promise that cannot lapse is an
-    ignore list with a better name."""
+    """A promise that cannot lapse is an ignore list with a better name."""
     config = _count_config(tmp_path, """
-        [claims]
-        promised = ["out/report.json"]
+        [[promise]]
+        path = "out/report.json"
         """)
-    with pytest.raises(ConfigError, match="date its deferral lapses"):
+    with pytest.raises(ConfigError, match="no date it lapses"):
+        load(config)
+
+
+def test_a_promise_defers_a_question_as_well_as_a_path(tmp_path):
+    """Every deferral in a project has this shape, and a tool that dates only
+    the ones it can see for itself leaves the rest as good intentions in prose.
+    A `what` promise has no tree to answer for it, so the date is the whole
+    mechanism -- which is why `until` is required on both kinds."""
+    config = _count_config(tmp_path, """
+        [[promise]]
+        what = "whether the note cap needs a number before Phase 2"
+        until = "2027-03-08"
+        note = "measured distribution first; a guessed cap is a number nobody chose"
+        by = "Jei"
+        """)
+    (promise,) = load(config).promised
+    assert promise.what and promise.path is None
+    assert main(["claims", "-c", str(config)]) == 0
+
+    settings = load(config)
+    found = verify(tmp_path, promised=settings.promised, today=date(2027, 3, 9))
+    assert found.overdue and "Jei" in found.overdue[0]
+    assert found.failed
+
+
+def test_a_note_must_be_signed(tmp_path):
+    """An unsigned note is a reason with nobody behind it, and the reader
+    deciding whether a deferral still holds needs to know whose call it was."""
+    config = _count_config(tmp_path, """
+        [[promise]]
+        what = "whether to split the rename check"
+        until = "2027-03-08"
+        note = "deferred pending the escalation rate"
+        """)
+    with pytest.raises(ConfigError, match="unsigned"):
+        load(config)
+
+
+def test_a_promise_names_a_path_or_a_question_not_both(tmp_path):
+    """Two answers to what is being deferred is not a declaration."""
+    config = _count_config(tmp_path, """
+        [[promise]]
+        path = "out/report.json"
+        what = "whether we still want that file"
+        until = "2027-03-08"
+        """)
+    with pytest.raises(ConfigError, match="exactly one of"):
         load(config)
 
 
@@ -402,8 +451,9 @@ def test_a_promise_with_an_unknown_key_is_refused(tmp_path):
     field -- being told `until` is missing sends a reader to stare at a line
     where they believe they wrote it."""
     config = _count_config(tmp_path, """
-        [claims]
-        promised = [{ path = "out/report.json", untl = "2026-12-01" }]
+        [[promise]]
+        path = "out/report.json"
+        untl = "2026-12-01"
         """)
     with pytest.raises(ConfigError, match="which means nothing here"):
         load(config)
@@ -413,8 +463,9 @@ def test_a_toml_native_date_is_accepted(tmp_path):
     """TOML parses a bare 2026-12-01 into a date object and a quoted one into a
     string; both are the same declaration to a reader, so both work."""
     config = _count_config(tmp_path, """
-        [claims]
-        promised = [{ path = "out/report.json", until = 2026-12-01 }]
+        [[promise]]
+        path = "out/report.json"
+        until = 2026-12-01
         """)
     (promise,) = load(config).promised
     assert promise.until.isoformat() == "2026-12-01"
