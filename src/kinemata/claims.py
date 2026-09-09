@@ -83,7 +83,30 @@ PLACEHOLDER = re.compile(
 EXAMPLE_STEM = re.compile(r"(^|/)[a-z]\.[a-z]+$")
 
 #: Prefixes that put a path outside the tree, where this cannot verify it.
-EXTERNAL_PREFIXES = ("~", "/", "#", "@", "$")
+#: ``%`` joined them after a Windows ``%APPDATA%\\httpie\\config.json`` in
+#: httpie's documentation was reported as a dead path in httpie's own tree.
+EXTERNAL_PREFIXES = ("~", "/", "#", "@", "$", "%")
+
+#: A backslash means this is not a path *here*: a Windows path, which cannot be
+#: resolved against this tree either way, or a token like ``\o/`` that only
+#: looks like one. Both were reported on a foreign project, and both belong with
+#: the prefixes above -- cases this cannot settle rather than cases it failed.
+WINDOWS_SEPARATOR = "\\"
+
+#: A bare ``Word.suffix`` whose stem is capitalized the way a class is.
+#: ``Response.json`` is an attribute reference in requests' changelog, read as a
+#: file because ``.json`` is a known suffix. Filenames in these trees are
+#: lowercase (``config.json``) or shouted (``README.md``), neither of which
+#: matches.
+ATTRIBUTE_REFERENCE = re.compile(r"^[A-Z][a-z0-9]+\.[A-Za-z0-9]+$")
+
+#: Suffixes the rule above does **not** apply to. It shipped costing a
+#: capitalized document name -- ``Introduction.md``, ``Changelog.md`` -- which
+#: is a spelling projects actually use, while an attribute called ``md`` is one
+#: nobody writes. The collision is real only where the tail is also a plausible
+#: method name, and ``json`` is the case that produced it. Narrowing the rule by
+#: suffix keeps the catch and drops the cost.
+ATTRIBUTE_EXEMPT_SUFFIXES = (".md", ".rst", ".txt")
 
 #: Characters that make a token a shape being described rather than a file.
 PATTERN_CHARACTERS = "*?<>{}"
@@ -164,6 +187,12 @@ class Tree:
         be ignored.
         """
         target = claim.strip().rstrip("/.,;:")
+        # `./name` anchors to the document's own directory. Stripping it lets
+        # the fallbacks below answer: httpie's packaging README names
+        # `./get_release_artifacts.sh`, the file sits beside it, and this
+        # reported it dead because the prefix survived into every lookup.
+        if target.startswith("./"):
+            target = target[2:]
         if not target:
             return True
         # On disk beats the index. Exclusions say which documents to *read*;
@@ -363,6 +392,12 @@ def _path_claims(line: str, previous: str = "") -> Iterator[str]:
     for match in _BACKTICKED.finditer(line):
         token = match.group(1)
         if SCHEME in token or token.startswith(EXTERNAL_PREFIXES):
+            continue
+        if WINDOWS_SEPARATOR in token:
+            continue
+        if ATTRIBUTE_REFERENCE.match(token) and not token.endswith(
+            ATTRIBUTE_EXEMPT_SUFFIXES
+        ):
             continue
         if any(character in token for character in PATTERN_CHARACTERS):
             continue

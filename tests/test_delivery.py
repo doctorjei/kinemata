@@ -160,7 +160,7 @@ def test_a_missing_module_is_refused_not_skipped(tmp_path):
         load(tmp_path / "kinemata.toml")
 
 
-def test_a_registry_that_yields_no_entries_is_refused(tmp_path):
+def test_a_registry_that_yields_no_entries_is_recorded_not_dropped(tmp_path):
     """The wrong adapter looks exactly like a clean tree.
 
     Every part of this declaration is individually valid: the module exists, it
@@ -182,8 +182,10 @@ def test_a_registry_that_yields_no_entries_is_refused(tmp_path):
         modules = ["src/consts.py"]
         """,
     )
-    with pytest.raises(ConfigError, match="no entries"):
-        load(tmp_path / "kinemata.toml")
+    settings = load(tmp_path / "kinemata.toml")
+    assert settings.registries == []
+    assert len(settings.unfitted) == 1
+    assert "no entries" in settings.unfitted[0]
 
 
 def test_allow_empty_permits_a_deliberately_empty_registry(tmp_path):
@@ -805,3 +807,74 @@ def test_init_refuses_to_overwrite(tmp_path):
     write(tmp_path, "kinemata.toml", "# mine\n")
     assert main(["init", str(tmp_path)]) == 2
     assert (tmp_path / "kinemata.toml").read_text() == "# mine\n"
+
+
+# -- what running over somebody else's code exposed ---------------------------
+
+
+def test_the_scanned_project_s_syntax_warnings_are_not_ours(tmp_path, recwarn):
+    """httpie has invalid escape sequences in its own source, and ten warning
+    lines landed in the middle of a report about httpie's duplication.
+
+    The warning is attributed to whoever called ``parse``, which is us. A
+    foreign project's lint is not our finding, and this is not a compiler.
+    """
+    write(tmp_path, "consts.py", 'PATTERN = "ok"\nBAD = re.compile("\\d+")\n')
+
+    class Consts(BaseRegistry):
+        name = "consts"
+
+        def entries(self):
+            yield Entry(id="PATTERN", antipatterns=("ok",), home=("consts.py",))
+
+    scan(Consts(), tmp_path)
+    assert not [w for w in recwarn if issubclass(w.category, SyntaxWarning)]
+
+
+def test_declared_entries_nothing_can_report_on_are_counted(project, capsys):
+    """The silence had no voice, which is the same failure as an unprinted
+    exemption list.
+
+    httpie declares ``HTTP_GET = 'GET'`` and ``HTTP_POST = 'POST'`` on adjacent
+    lines and a lexer writes both as literals two lines apart. ``check``
+    reported POST and said nothing about GET, because three characters is under
+    the minimum value length -- and 18 of its 21 declared entries were in that
+    position. The threshold is not the defect; the invisibility was.
+    """
+    write(project, "src/consts.py", 'BOX_META_FILE = "box.yaml"\nMODE = "vm"\n')
+    main(["review", "-c", str(project / "kinemata.toml")])
+    assert "silent: 1 of 2 declared entry(s) carry no antipattern" in capsys.readouterr().out
+
+
+def test_a_registry_that_fits_nothing_does_not_block_the_documentation_check(tmp_path, capsys):
+    """`requests` declares its canonical things as code shapes and numbers, so
+    `python-constants` bound to nothing -- and refusing at load stopped its
+    documentation from being checked as well.
+
+    The refusal moves to the command that would have done the scanning. Nothing
+    is lost from CI, which runs both.
+    """
+    write(tmp_path, "src/app.py", "value = 1\n")
+    write(tmp_path, "doc.md", "The entry point is `src/app.py`.\n")
+    write(
+        tmp_path,
+        "kinemata.toml",
+        """
+        [project]
+        root = "."
+
+        [claims]
+        suffixes = [".md"]
+
+        [[registry]]
+        name = "constants"
+        kind = "python-constants"
+        modules = ["src/app.py"]
+        """,
+    )
+    config = str(tmp_path / "kinemata.toml")
+    assert main(["claims", "-c", config]) == 0
+    assert "produced no entries" in capsys.readouterr().err
+    # ...and the command that would scan for nothing still refuses.
+    assert main(["check", "-c", config]) == 2
+    assert "produced no entries" in capsys.readouterr().err

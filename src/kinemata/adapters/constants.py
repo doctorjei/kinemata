@@ -18,6 +18,7 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 from ..contract import BaseRegistry, Entry
+from ..prose import parsed
 
 #: Values shorter than this are skipped. ``"/"`` or ``"y"`` as an antipattern
 #: matches half the tree; the noise would bury the real findings.
@@ -69,7 +70,7 @@ class PythonConstants(BaseRegistry):
 
     def _entries_in(self, path: Path) -> Iterable[Entry]:
         try:
-            tree = ast.parse(path.read_text(errors="ignore"))
+            tree = parsed(path.read_text(errors="ignore"))
         except (OSError, SyntaxError):
             return
         try:

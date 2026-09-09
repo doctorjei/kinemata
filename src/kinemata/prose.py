@@ -19,7 +19,47 @@ import ast
 import io
 import re
 import tokenize
+import warnings
+from collections.abc import Iterator
+from contextlib import contextmanager
 
+
+@contextmanager
+def reading_foreign_source() -> Iterator[None]:
+    """Suppress warnings *about the scanned project* while we read it.
+
+    Python raises ``SyntaxWarning`` at parse time for an invalid escape
+    sequence, and attributes it to whoever called the parser -- which is us.
+    Running over httpie, whose own source has several, put ten warning lines in
+    the middle of a report about httpie's duplication. **A foreign project's
+    lint is not our finding**, and this is not a compiler.
+
+    Found by pointing the tool at code this project did not write; it never
+    surfaced on the original corpus, because that author's code is
+    warning-clean.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", SyntaxWarning)
+        yield
+
+
+def parsed(source: str) -> ast.Module:
+    """``ast.parse`` under :func:`reading_foreign_source`."""
+    with reading_foreign_source():
+        return ast.parse(source)
+
+
+def evaluated(literal: str) -> object:
+    """``ast.literal_eval`` under the same rule, and the site that mattered.
+
+    The first pass at this replaced every ``ast.parse`` and missed here, because
+    ``literal_eval`` parses without saying so. A string literal is precisely
+    where an invalid escape sequence lives, so this was the call actually
+    producing the noise -- and the test written for the fix is what caught the
+    fix being incomplete.
+    """
+    with reading_foreign_source():
+        return ast.literal_eval(literal)
 
 def python_code_only(source: str) -> str:
     """Return ``source`` with comments and docstrings blanked out.
@@ -47,7 +87,7 @@ def python_code_only(source: str) -> str:
 
     # Docstrings: blank every line they span.
     try:
-        tree = ast.parse(source)
+        tree = parsed(source)
     except SyntaxError:
         return "\n".join(blanked)
 
@@ -92,7 +132,7 @@ def python_strings_only(source: str) -> str:
 
     docstring_rows: set[int] = set()
     try:
-        tree = ast.parse(source)
+        tree = parsed(source)
     except SyntaxError:
         tree = None
     if tree is not None:
@@ -147,7 +187,7 @@ def python_string_literals(source: str) -> list[tuple[int, str, str]]:
 
     docstring_rows: set[int] = set()
     try:
-        tree = ast.parse(source)
+        tree = parsed(source)
     except SyntaxError:
         tree = None
     if tree is not None:
@@ -176,7 +216,7 @@ def python_string_literals(source: str) -> list[tuple[int, str, str]]:
         if row in docstring_rows:
             continue
         try:
-            content = ast.literal_eval(token.string)
+            content = evaluated(token.string)
         except (ValueError, SyntaxError):
             continue
         if not isinstance(content, str):
@@ -205,7 +245,7 @@ def python_message_skeletons(source: str) -> list[tuple[int, str, str]]:
     one.
     """
     try:
-        tree = ast.parse(source)
+        tree = parsed(source)
     except SyntaxError:
         return []
     lines = source.splitlines()
@@ -240,7 +280,7 @@ def python_annotation_strings(source: str) -> set[str]:
     is a filter that eventually drops something that mattered.
     """
     try:
-        tree = ast.parse(source)
+        tree = parsed(source)
     except SyntaxError:
         return set()
 

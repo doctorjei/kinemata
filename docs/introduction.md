@@ -202,9 +202,13 @@ matches inside the live `spec~box-vault-enable`.
 A misconfigured check raises rather than passing. Green and inert are indistinguishable from
 outside, so the following are `ConfigError`, not silent skips:
 
-- a registry producing **zero entries** — missing module, unknown kind, or an adapter that
-  recognizes nothing at the path given (`allow_empty = true` to bootstrap deliberately)
-- an unknown `kind`
+- a registry producing **zero entries** — an adapter that recognizes nothing at the path given.
+  Recorded at load and raised by the commands that would scan (`review`, `check`, `ids`,
+  `undeclared`, `unused`); `claims` and `context` run and report it, because a project whose
+  data model no adapter fits should still get its documentation checked. `allow_empty = true`
+  to bootstrap deliberately
+- a missing module, or an unknown `kind` — raised at load, because those are typos rather than a
+  statement that the adapter does not fit
 - `[context]` missing `include` or `budget` — there is **no default ceiling**
 - `[context] strip` naming an unknown transform
 - `[[gate]]` with no `command`

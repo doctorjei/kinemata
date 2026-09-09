@@ -155,6 +155,13 @@ module, an unknown kind, or an adapter that recognizes nothing in the source you
 pointed it at. All three look identical to a clean tree from the outside. Set
 `allow_empty = true` on a registry you are deliberately bootstrapping.
 
+The first two are refused when the config loads, because they are typos. The
+third is refused by the commands that would do the scanning, while `claims` and
+`context` run and report it: an adapter not fitting is a fact about the project,
+and `requests` — which declares its canonical things as code shapes and numbers
+and has no module-level string constants at all — should still get its
+documentation checked.
+
 See `examples/ci-github-actions.yml` — including why a workflow file alone is
 still a reminder, and what promotes it to a catch.
 
@@ -358,7 +365,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **244 tests**, and
+The companion guard is a number with an oracle. This suite is **252 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 
@@ -729,8 +736,24 @@ characters and the minimum length for deriving an antipattern is four. Not frequ
 suppression — that was the first hypothesis and disabling it changed nothing. A user seeing one
 of two identical constructs reported would reasonably conclude the other was fine.
 
-Seven defects came out of this and are on the board rather than fixed here: a rule changed to
-improve the numbers of the corpus being measured is the corpus being fitted.
+Seven defects came out of this. They were **boarded rather than fixed inside the measurement** —
+a rule changed to improve the numbers of the corpus being measured is the corpus being fitted —
+and then fixed once the measurement was committed. The numbers above describe the version that
+produced them and are left alone.
+
+**After the fixes the same corpus reports one thing, and it is mine:** 753 claims, one report,
+a commit hash unresolvable because the clone was shallow. Say plainly what that is worth —
+those five shapes are no longer independent evidence, because they are the data the fix was made
+from. What it does establish is that each has a regression test carrying the token from the
+project that found it.
+
+**One fix changed a number rather than removing one.** `check` now prints how many declared
+entries carry no antipattern, and on httpie that was **18 of 21** — the scan was covering three
+of the twenty-one things the config declared. The single finding it reported was true, and the
+silence around it was the larger fact.
+
+The threshold that causes it has not moved: it was measured, and lowering it
+matches everything. What changed is that the silence says so.
 
 ## Documentation
 

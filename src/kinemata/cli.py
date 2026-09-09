@@ -120,6 +120,17 @@ def _target(args: argparse.Namespace, settings: Settings) -> Path:
     return target
 
 
+def _note_unfitted(settings: Settings) -> None:
+    """Say that a declared registry bound to nothing, then carry on.
+
+    This command does not need a registry, so a broken one is not its failure --
+    but staying silent would leave a reader thinking the whole config is doing
+    what it says. `check` still refuses, so nothing is lost from CI.
+    """
+    for message in settings.unfitted:
+        print(f"note: {message}", file=sys.stderr)
+
+
 def _max_sites(args: argparse.Namespace, settings: Settings) -> int | None:
     if args.max_sites is not None:
         return None if args.max_sites < 0 else args.max_sites
@@ -137,6 +148,11 @@ def _needs_registries(settings: Settings, doing: str) -> None:
     moves here rather than disappearing: scanning nothing and exiting 0 is the
     inert signal, and it reads exactly like a clean tree.
     """
+    if settings.unfitted:
+        # Deferred from load, not forgiven. A registry whose adapter recognized
+        # nothing would scan for nothing and pass, so the command that would do
+        # the scanning is exactly where this has to stop.
+        raise ConfigError(" ".join(settings.unfitted))
     if not settings.registries:
         raise ConfigError(
             f"no [[registry]] declared, so there is nothing to {doing}. "
@@ -210,6 +226,41 @@ def _strong(reports: list[tuple[str, Report]]) -> list[tuple[str, Bypass]]:
     return [(name, hit) for name, report in reports for hit in report.strong]
 
 
+def _silent(settings: Settings) -> tuple[int, int]:
+    """How many declared entries nothing can be reported about, and of how many.
+
+    An entry with no antipattern is in the projection and invisible to the
+    scan: a reader sees it declared and reasonably concludes the check covers
+    it. Measured on httpie, which declares ``HTTP_GET = 'GET'`` and
+    ``HTTP_POST = 'POST'`` on adjacent lines while a lexer writes both as
+    literals two lines apart -- ``check`` reports POST and says nothing about
+    GET, because three characters is under the minimum value length.
+
+    **The threshold is not the defect and does not move**; it was measured, and
+    lowering it matches everything. The defect was that the silence had no
+    voice, which is the same failure as an exemption list nobody prints.
+    """
+    total = quiet = 0
+    for registry in settings.registries:
+        for entry in registry.entries():
+            total += 1
+            if not entry.antipatterns:
+                quiet += 1
+    return quiet, total
+
+
+def _report_silent(settings: Settings) -> None:
+    """Printed by both scanning commands, and not suppressed by ``--quiet`` --
+    the same rule the exemption, gate and promise counts follow."""
+    quiet, total = _silent(settings)
+    if quiet:
+        print(
+            f"silent: {quiet} of {total} declared entry(s) carry no antipattern, "
+            "so no re-derivation of them can be reported. Usually a value too "
+            "short or too generic to match on."
+        )
+
+
 def cmd_review(args: argparse.Namespace) -> int:
     settings, reports = _run_review(args)
     _print_reports(settings, reports, verbose=args.verbose)
@@ -218,6 +269,7 @@ def cmd_review(args: argparse.Namespace) -> int:
     if not strong and not weak:
         if not args.quiet:
             print("Nothing already declared looks re-derived here.")
+        _report_silent(settings)
         return 0
     if not args.quiet:
         print()
@@ -225,6 +277,7 @@ def cmd_review(args: argparse.Namespace) -> int:
             f"{strong} thing(s) already exist that this code spells out. "
             f"Route through them rather than re-deriving."
         )
+    _report_silent(settings)
     return 0  # advisory, always
 
 
@@ -425,6 +478,7 @@ def cmd_claims(args: argparse.Namespace) -> int:
     regress. Folded into an existing gate, it runs wherever that gate does.
     """
     settings = _settings(args)
+    _note_unfitted(settings)
     found = verify(
         _target(args, settings),
         suffixes=settings.claim_suffixes,
@@ -624,6 +678,7 @@ def cmd_context(args: argparse.Namespace) -> int:
     measures an empty set and exits 0 is the inert signal again.
     """
     settings = _settings(args)
+    _note_unfitted(settings)
     if settings.context is None:
         raise ConfigError(
             "no [context] declared: nothing says what a session loads. "
@@ -689,6 +744,7 @@ def cmd_check(args: argparse.Namespace) -> int:
         for name, report in reports
     ]
     _print_reports(settings, filtered, verbose=args.verbose)
+    _report_silent(settings)
 
     # Printed on every run that has a baseline at all, and **not suppressed by
     # --quiet**: an exemption list nobody reads the size of is how an allowlist

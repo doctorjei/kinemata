@@ -110,6 +110,16 @@ class Settings:
     #: What a session loads, and what it may weigh. ``None`` when the project has
     #: not declared a ``[context]`` table -- distinct from a ceiling of zero.
     context: ContextBudget | None = None
+    #: Registries whose adapter recognized nothing in the source they name. Not
+    #: dropped and not fatal at load: a registry-shaped command refuses with
+    #: these, and `claims` or `context` runs while reporting them.
+    #:
+    #: `requests` declares its canonical things as code shapes and numbers and
+    #: has no module-level string constants at all, so `python-constants` bound
+    #: to nothing -- and refusing at load stopped its documentation from being
+    #: checked as well. The adapter not fitting is a fact about the project, not
+    #: a reason to withhold every other check.
+    unfitted: tuple[str, ...] = ()
 
 
 def find_config(start: str | Path = ".") -> Path | None:
@@ -278,6 +288,7 @@ def load(path: str | Path) -> Settings:
         )
 
     registries: list[BaseRegistry] = []
+    unfitted: list[str] = []
     for spec in declarations:
         kind = spec.get("kind")
         builder = BUILDERS.get(kind)
@@ -304,12 +315,13 @@ def load(path: str | Path) -> Settings:
         # string constants at all, so the projection was empty and `check`
         # exited 0 the whole time. The wrong adapter, not a clean tree.
         if not spec.get("allow_empty", False) and not any(True for _ in registry.entries()):
-            raise ConfigError(
+            unfitted.append(
                 f"registry {spec.get('name', '?')!r}: kind {kind!r} produced no "
                 "entries, so it would scan for nothing and pass. Point it at a "
                 "source it can read, or set allow_empty = true if it is "
                 "deliberately empty while being bootstrapped."
             )
+            continue
         # A registry declared `closed` promises that an undeclared identifier is
         # an error -- a promise it can only keep if it can recognize an
         # identifier at all. Every kind accepts `closed`; only `yaml-mapping`
@@ -350,6 +362,7 @@ def load(path: str | Path) -> Settings:
                              _commands(raw.get("command"), path)),
         baseline=root / project.get("baseline", BASELINE_NAME),
         gates=_build_gates(raw.get("gate", []), path),
+        unfitted=tuple(unfitted),
         context=_build_context(raw.get("context"), path),
     )
 

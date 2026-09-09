@@ -465,3 +465,65 @@ def test_a_server_refusing_head_is_asked_again_with_get(tmp_path, server):
     result = verify(tmp_path, external=True)
     assert not result.broken
     assert not [line for line in result.unavailable if "headless" in line]
+
+
+# -- shapes a foreign project reported, and this tree never had ---------------
+
+
+def test_a_windows_environment_path_is_not_a_claim(tmp_path):
+    """Found on httpie, whose documentation says where its config lives.
+
+    `%` joined the external prefixes and a backslash disqualifies a token
+    outright: neither spelling can be resolved against this tree, so both are
+    cases of *cannot settle* rather than cases of a broken claim.
+    """
+    write(
+        tmp_path,
+        "doc.md",
+        "On Windows, the config file is at `%APPDATA%\\httpie\\config.json`.\n",
+    )
+    assert not verify(tmp_path).broken
+
+
+def test_an_environment_variable_path_with_forward_slashes_is_not_a_claim(tmp_path):
+    """`%` earns its place in the prefix list separately from the backslash rule.
+
+    The corpus case had backslashes and both rules caught it, so removing `%`
+    changed no test -- an untested rule, which is the thing this project reports
+    in other people's code. This is the spelling only `%` catches.
+    """
+    write(tmp_path, "doc.md", "The config lives at `%APPDATA%/httpie/config.json`.\n")
+    assert not verify(tmp_path).broken
+
+
+def test_a_token_with_a_backslash_is_not_a_claim(tmp_path):
+    """`\\o/` sat in requests' changelog and was reported as a dead path."""
+    write(tmp_path, "doc.md", "-   Enhanced status codes experience `\\o/`\n")
+    assert not verify(tmp_path).broken
+
+
+def test_a_document_relative_path_resolves_against_the_tree(tmp_path):
+    """httpie's packaging README names `./get_release_artifacts.sh` and the
+    file sits beside it. The `./` survived into every lookup, so a correct
+    reference read as a dead one."""
+    write(tmp_path, "extras/README.md", "### `./get_release_artifacts.sh`\n")
+    write(tmp_path, "extras/get_release_artifacts.sh", "#!/bin/sh\n")
+    assert not verify(tmp_path).broken
+
+
+def test_a_capitalized_attribute_is_not_read_as_a_file(tmp_path):
+    """`Response.json` is an attribute in requests' changelog, read as a file
+    because `.json` is a known suffix.
+
+    The boundary is asserted in every direction, because the rule shipped with a
+    cost and then had it narrowed away: a capitalized *document* name is a
+    spelling projects actually use, while an attribute called `md` is one nobody
+    writes. The collision is real only where the tail is also a plausible method
+    name.
+    """
+    write(tmp_path, "doc.md", "-   New `Response.json` property.\n")
+    assert not verify(tmp_path).broken
+    write(tmp_path, "other.md", "See `README.md` and `Introduction.md` for the rest.\n")
+    assert broken(verify(tmp_path)) == {
+        ("path", "README.md"), ("path", "Introduction.md"),
+    }
