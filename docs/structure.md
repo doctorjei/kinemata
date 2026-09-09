@@ -36,9 +36,23 @@ prompt as a guarantee.
 
 **A catch must run where the agent cannot reach it.** This makes the sandbox/host boundary
 the trust boundary. A CI workflow file that lives in the repository is editable by the agent
-it constrains; branch protection with the job as a *required status check* is what promotes
-it from reminder to catch. Shipping the workflow and calling it a catch is the most common
-version of this error.
+it constrains; branch protection with the job as a *required status check* moves it toward a
+catch. Shipping the workflow and calling it a catch is the most common version of this error.
+
+**But name what the promotion actually covers, because "promoted to a catch" is itself the
+overstatement this section warns about.** A required status check catches the job
+*disappearing or being renamed* — the check goes missing, and a missing required check blocks.
+It does **not** catch a job that still exists and checks nothing: gut its steps and it passes
+trivially. A declared gate inventory has the mirror-image hole, catching a deleted or
+commented-out step but not a job nothing triggers. The pair covers more than either alone, and
+neither is the guarantee the phrase suggests.
+
+**And check who can push before spending anything here.** Where the constrained agent holds no
+credential for the remote, it cannot reach the workflow *or* the protection, and the boundary
+is already enforced by the credential's absence. What remains is narrower and worth stating
+plainly: an agent authors a commit that quietly drops a step, and a human pushes it without
+reading that far. Run the three factors of §2 on it — no incentive, partly visible, silent
+failure — and the case is one of three, which is a weak case by this document's own rule.
 
 **A catch scoped to one module is not a catch.** In the incident this project was validated
 against, the cleanup commit shipped its own tripwire — scoped to the module being fixed. It
@@ -342,7 +356,7 @@ What this project ships, read back against its own rules:
 
 | Principle | How the registry layer answers it |
 |---|---|
-| §1 reminder or catch | `ids`, `review` and `clusters` are reminders; `check` and `claims` are catches, and only in CI with branch protection; `baseline` is a catch with an escape hatch, below |
+| §1 reminder or catch | `ids`, `review`, `clusters` and `unused` are reminders; `check` and `claims` are catches only in CI, and only as far as branch protection reaches — which is the job existing, not the job checking anything; `baseline` is a catch with an escape hatch, below |
 | §1 one source | `review` and `check` run identical analysis; only the exit code differs |
 | §1 carrier | the baseline is stored in the tree the agent writes, so the ratchet cannot be a catch however it is wired — recorded below rather than papered over |
 | §2 spend test | duplication scores yes/no/no — cheap to commit, invisible in a diff, silent on landing |

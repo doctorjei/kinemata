@@ -685,7 +685,10 @@ now raises**, the machinery is declared data (`machinery` on a registry), and
   first 13 commits classified were the ones that looked most promising, and
   finishing the other 34 halved the figure.
 - A CI workflow lives in the repo, so an agent can edit it. Branch protection
-  with the job as a *required status check* is what makes it a catch.
+  with the job as a *required status check* narrows that, and by less than it
+  sounds: it catches the job disappearing or being renamed, not a job that
+  still runs and checks nothing. Where the agent holds no push credential, the
+  boundary is already the credential's absence and this buys little.
 - The duplication categories were derived from two codebases by one author.
 
 ## Against projects this did not grow up on

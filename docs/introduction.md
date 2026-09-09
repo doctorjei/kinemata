@@ -331,8 +331,10 @@ transforms, sum bytes, compare to `budget`. `-v` lists files largest-first.
 - **`context` bounds bytes, not attention.** It measures what you *declare* is loaded; the
   flattening is a model of a harness, not the harness.
 - **A CI workflow in the repository is editable by the agent it constrains.** Branch protection
-  with the jobs as required status checks, and bypass disallowed, is what promotes it from
-  reminder to catch.
+  with the jobs as required status checks, and bypass disallowed, narrows this — but it catches
+  a required job that **disappears or is renamed**, not one that still runs and checks nothing.
+  `[[gate]]` has the mirror-image hole. Neither is a guarantee, and where the agent has no push
+  credential at all, the credential's absence is already the stronger boundary.
 - **A dead external link is `404`/`410` and nothing else.** The `url` kind closed the gap where
   a scheme-carrying target was skipped entirely, but what replaced it is narrower than "the link
   works": a page that now redirects to a parking domain answers `200`, and a host that refuses
