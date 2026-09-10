@@ -85,7 +85,60 @@ only when the default is wrong for its data model.
 
 One required method, three defaulted. That is the whole surface. A project with a YAML
 manifest satisfies it in a few lines; a project with a type system or a database catalog
-satisfies it with a real adapter, and neither is privileged.
+satisfies it with a real adapter.
+
+⚑ **They were not equally reachable, and this section claimed they were.** For the project's
+whole life until 2026-09-09, a project-supplied adapter could only be used by importing kinemata
+as a library: `config.BUILDERS` was a fixed table of kinds with no plugin path, so `[[registry]]`
+could not name a class the project wrote. The first adopter hit it on the thing they most wanted
+to declare — a keyspace that is closed but not flat, whose membership is answered by six manifest
+sections, needing exactly the `declared()` override this table invites. **That was a gap, not a
+boundary**: the contract was right and the config surface had not caught up. It contradicted the
+pitch this project made to that adopter, which was that *a project supplies an implementation of
+the role rather than adopting our data model*.
+
+**Closed 2026-09-09 by `kind = "import"`.** A registry declaration names one module and one
+attribute in it:
+
+```toml
+[[registry]]
+name = "keyspace"
+kind = "import"
+target = "mypkg.registries:KeyspaceRegistry"
+```
+
+Four decisions, each of them a refusal to guess:
+
+- **The target is explicit.** No scan of the tree, no entry-point discovery, no inference from a
+  package name. What gets imported is legible in the diff that adds it; discovery would move that
+  decision somewhere nobody reviews.
+- **The class must satisfy the `Registry` protocol**, checked on the constructed object, and a
+  class that does not is a `ConfigError` naming the members it lacks — not a warning. So are a
+  malformed target, a module that will not import, a missing attribute, and an object that is not
+  a class. Every one of those refusals names the target *and* the config file, because a
+  traceback from deep inside somebody's package is not a usable error message, and because a
+  config found by walking up from the working directory is not necessarily one its reader knows
+  about.
+- **Every other key in the table is passed to the class as a keyword argument**, so a project can
+  parameterize its own adapter without this tool learning its vocabulary. A key the class will
+  not accept is refused rather than swallowed: silently building the adapter's default is how a
+  misspelled parameter stays green forever.
+- **Nothing is put on `sys.path`.** The class has to be importable by the interpreter running
+  kinemata. A config that could inject import paths could shadow a stdlib module from a line of
+  TOML, and *install the package* is a fix a person can carry out and verify.
+
+The guards that apply to every kind apply to this one and are not waived for being the project's
+own code — if anything the reverse, since a registry a project wrote is the one nobody else has
+ever run. An imported registry that recognizes nothing is refused like any other empty one, and
+one declared `closed` must still be able to recognize its own identifiers.
+
+**This makes `kinemata.toml` name code that gets executed, and that line was already crossed.**
+The `[[count]]` oracles name shell commands that `claims.py` runs through `subprocess` — which is
+how this repository settles the test count its own documentation states. The config has not been
+inert data since count oracles were built. What remains true, and is the distinction worth
+holding: **kinemata reads the code it *checks* with `ast` and never executes it.** The count
+oracle and a named adapter are the two declared exceptions, and both are explicit in the config
+file, where a reviewer reads them.
 
 ### 4.3 Declared properties
 
@@ -201,9 +254,12 @@ property of the syntax a project declares, not of anything kinemata supplies.** 
 adopting it should expect to tune that syntax and to record a baseline first, exactly as
 the duplication scan does.
 
-**Two limits that follow.** kinemata cannot dogfood Catch A — its own registries are
-`code-patterns` and `substitutions`, and neither can be closed, so `kinemata undeclared`
-run here refuses rather than reporting a false clean. And the catch is not yet wired to
+**Two limits that follow.** kinemata dogfoods Catch A only through its bibliography —
+`code-patterns` and `substitutions` cannot recognize their own identifiers and so cannot
+be closed, and until a bibliography was declared, `kinemata undeclared` run here refused
+rather than reporting a false clean. A reference key is recognizable because the stamp's
+delimiters were chosen to make it so, which is why that one registry can answer. And the
+catch is not yet wired to
 the ratchet, so there is no way to accept an existing population and fail only on new
 ones; on a mature codebase that is the difference between a usable gate and one that gets
 switched off.

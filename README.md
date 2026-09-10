@@ -125,7 +125,35 @@ kind = "code-patterns"
   id = "run_or_die"
   antipatterns = ['check\s*=\s*True']
   home = ["pkg/_run.py"]
+
+# Your own: a registry class you wrote, when no built-in adapter fits your data
+# model. One module, one attribute in it; every further key below is passed to
+# the class as a keyword argument.
+[[registry]]
+name = "keyspace"
+kind = "import"
+target = "mypkg.registries:KeyspaceRegistry"
+sections = ["core", "vault"]
 ```
+
+The built-in kinds — `python-constants`, `yaml-mapping`, `code-patterns`,
+`substitutions`, `bibliography` — are a convenience, **not the boundary of what a
+registry can be.** `import` is the extension point: subclass
+`kinemata.contract.BaseRegistry`, implement `entries()`, override `declared()`
+where membership cannot be enumerated, and name the class from your config. This
+existed as a contract from the start and was reachable only by importing kinemata
+as a library until 2026-09-09, when the first outside audit found it; see
+`docs/design.md` §4.2.
+
+The class has to be importable by the interpreter running kinemata — nothing is
+put on `sys.path` for you — and a target that is malformed, will not import, is
+missing, is not a class, or is not a `Registry` is refused by name rather than
+warned about.
+
+⚑ **A `target` is code your config causes to run.** So is a `[[count]]` oracle,
+which is a shell command `claims` runs; the config has not been inert data since
+those were built. kinemata still reads the code it *checks* with `ast` and never
+executes it. Those two are the exceptions, and both are explicit in the file.
 
 Then:
 
@@ -142,6 +170,9 @@ kinemata claims      # the gate, for documentation. Exits 1 on a dead claim.
 kinemata baseline    # what the gate already accepts. --record to change it.
 kinemata context     # the gate, for what a session loads. Exits 1 over the ceiling.
 kinemata init        # a starting config, and optionally the CI to run it.
+kinemata stamp       # mint a citation stamp, or decode one. Needs no config.
+kinemata cite        # resolve a reference key: what it points at, where it is
+                     # cited, or every key with its citation count.
 ```
 
 A config found by walking **up** from the working directory says so on stderr.
@@ -365,7 +396,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **261 tests**, and
+The companion guard is a number with an oracle. This suite is **483 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 
@@ -766,6 +797,29 @@ reported, and the silent count there falls to 15 of 21.
 were a single constant, `RW_PATH = "rw"`, matching the unrelated mount-binding key in
 `bindings["rw"]`. A two-character value collides across namespaces even as a whole literal. At
 three, that package is back to **14 with no adoption cost at all**, and `GET` is still found.
+
+### The third project audited back
+
+Both projects above are widely-used Python libraries with careful documentation — the easy case.
+The third was an adopter who ran this across three of their own repositories and then inventoried
+their **326-check conformance suite** against what these mechanisms can express. **291 were not
+expressible (89%)**, and the reasons were structural rather than gaps:
+
+- **This model is purely negative.** It says *a declared value must not be re-spelled elsewhere*.
+  Most conformance says the twin — *this row must equal what the code produces* — and under
+  negative polarity, agreement is a finding and disagreement is silence.
+- **This model is entirely static.** Checks about run-time behavior are outside it by
+  construction.
+
+Neither is a defect and neither is being fixed on reflex; both are recorded because a project
+adopting the first idea usually already owns a pile of the second. The full defect list from that
+audit, each item re-verified here, is in **`docs/introduction.md` § Known limits** — this section
+does not repeat it.
+
+**The result worth more than the inventory:** with no prompting, `check` rediscovered a duplicate
+that one of their hand-written conformance tests already guards, from six lines of config. A tool
+independently finding a guard somebody wrote by hand is the strongest evidence for the registry
+model this project has produced.
 
 ## Documentation
 
