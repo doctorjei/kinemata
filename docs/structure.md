@@ -124,6 +124,62 @@ optimizing for finishing.
 > whose constraints live only in its prose is a job description, and a job description does
 > not fail a build.
 
+### The second axis: a catch is still only as wide as what it can observe
+
+Reminder-versus-catch says who can disable a mechanism. It says nothing about *what the
+mechanism can see*, and that is a separate wall — the harder one.
+
+Every catch described in this document reads **source text at rest**. A rule about what a
+program does while running — which key paths a write funnel actually receives, what a request
+handler emits under load — is outside all of it, however well-declared. The first project to
+adopt this layer inventoried 326 conformance checks against it and found their largest single
+item was exactly that shape: a session-wide interposition on a write funnel, judging every path
+written during a test run. No amount of declaring reaches it.
+
+**Say which axis a proposal fails before arguing about it.** A check that a rogue agent could
+switch off is a reminder and may still be worth building. A check whose subject never appears in
+the source is not a weak catch — it is a different instrument, and calling it a gap in this one
+sends people looking for a config key that cannot exist.
+
+The honest pairing is that static checking and run-time assertion are complements: declare the
+fact once here, and let the run-time suite assert the behavior, rather than expecting either to
+cover the other.
+
+### The run-time half, and what makes the pairing possible
+
+Naming a boundary and leaving the far side empty is half an answer, so the far side is published.
+A registry declared in `kinemata.toml` becomes an ordinary Python object once loaded — carrying
+`declared`, `resolve` and `detect` — and the loader is importable. An adopting project's **own**
+test suite can therefore consult the declaration while its own code runs:
+
+```python
+from kinemata import registry
+
+keys = registry("keyspace")
+
+# ... inside the project's own write funnel, during its own test run:
+assert keys.declared(path), f"{path} is not a declared key"
+```
+
+The point is not the convenience. It is that the run-time assertion and the static scan read
+**the same declaration**. What an adopter reaches for otherwise is a list of valid key paths
+written out inside the test fixture — a second carrier of one fact, which is precisely the
+failure the registry layer exists to report, reintroduced by the check meant to complement it.
+
+**This is not a run-time instrument.** Kinemata does not interpose, instrument, monitor, trace,
+or execute anything belonging to the project. The interposition in the example is the project's
+own, in the project's own suite; the only thing crossing the boundary is a declaration being
+read. That is deliberate, and it is what keeps §1 honest — nothing here becomes a catch by being
+imported at run time. A test the constrained agent can edit is a reminder, whatever it asserts
+against.
+
+**It inherits the registry's limits, which are easy to forget on this side.** `declared` answers
+about what the adapter recognized in the source it was pointed at, not about the project's
+intent: a path the declaration never listed is undeclared, and so is one listed somewhere the
+adapter does not read. And a registry that cannot recognize its own identifiers refuses rather
+than answering, here as everywhere else (§3) — asking for a name nothing declares raises and
+says what *is* declared, because an assertion handed nothing back reports a clean run.
+
 ---
 
 ## 2. Spend mechanism only where a written norm fails
