@@ -1,0 +1,42 @@
+# The sources this project cites, as declared data rather than a table inside a
+# checker. A citation carries a stamp and a key; this file carries the volatile
+# half -- which path, which address -- so that a source moving is one edit here
+# instead of an edit at every mention.
+#
+# Data, and not a table in Python, for the reason the word list is data: a
+# hand-maintained list inside a checker is maintained by whoever remembers, and
+# nobody can see what it does or does not cover without reading the source.
+#
+# Numbers are chosen, not minted. Any unused number is valid, gaps are fine, and
+# a number is never reused -- renumbering breaks every cross-reference already
+# pointing into the sequence, which is the churn this scheme exists to prevent.
+#
+# Type codes: the reserved core is declared implicitly (Pa, Wb, Cm are
+# interpreted; Dc, Sp, Ru, Is, Pr, Rp, Bk, Ar are standardized). Codes this
+# project invents would go in a [types] table here, and an entry naming a code
+# nothing declares is refused rather than passed over.
+
+[[entry]]
+key = "Pa0001"
+target = "docs/structure.md"
+note = "the method: what a registry is for, and how a project adopts one"
+
+[[entry]]
+key = "Pa0002"
+target = "docs/citations.md"
+note = "the citation stamp and the reference key, with what settled each choice"
+
+[[entry]]
+key = "Pa0003"
+target = "docs/design.md"
+note = "the registry contract"
+
+[[entry]]
+key = "Sp0001"
+target = "https://spec.commonmark.org/"
+note = "CommonMark: what a bracket group, an angle bracket and a reference link do in a document"
+
+[[entry]]
+key = "Sp0002"
+target = "https://www.crockford.com/base32.html"
+note = "Crockford base32: the alphabet a stamp's timestamp is written in"
