@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import re
 import textwrap
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -108,6 +110,109 @@ def test_a_definition_is_not_a_bypass_of_itself(tmp_path):
 
     assert scan(reg, tmp_path, strings_only=True) == []       # scanned from root
     assert scan(reg, tmp_path / "src", strings_only=True) == []  # and from src/
+
+
+# -- constants: how a constant is written, and how it is read -----------------
+
+
+def test_a_module_qualified_constant_is_detected(tmp_path):
+    """Regression for the adopter's report of 2026-09-09, quoted verbatim.
+
+    The two lines below were run against this adapter, not reasoned about: the
+    first returned nothing and the second returned the constant. Four of that
+    project's constants were reported as unmentioned on the strength of it.
+    """
+    write(tmp_path, "consts.py", 'CHANNELS_PATH = "channels"\n')
+    reg = PythonConstants([tmp_path / "consts.py"], root=tmp_path)
+
+    assert reg.detect("_CHANNELROOT_LEAF = bootstrap.CHANNELS_PATH") == [
+        "CHANNELS_PATH"
+    ]
+    assert reg.detect("_CHANNELROOT_LEAF = CHANNELS_PATH") == ["CHANNELS_PATH"]
+
+
+def test_unused_does_not_report_a_constant_read_through_its_module(tmp_path):
+    write(tmp_path, "consts.py", 'CHANNELS_PATH = "channels"\n')
+    write(tmp_path, "app.py", "leaf = bootstrap.CHANNELS_PATH\n")
+    reg = PythonConstants([tmp_path / "consts.py"], root=tmp_path)
+    assert unused(reg, tmp_path) == []
+
+
+def test_an_unrelated_attribute_of_the_same_name_reads_as_a_mention(tmp_path):
+    """The false positive the narrower boundary buys, pinned rather than hidden.
+
+    Telling this apart from the real constant means resolving the receiver,
+    which is dataflow analysis and out of scope. In `unused` a spurious mention
+    suppresses a report, so the cost is a missed finding rather than a false
+    alarm against a live constant.
+    """
+    write(tmp_path, "consts.py", 'CHANNELS_PATH = "channels"\n')
+    reg = PythonConstants([tmp_path / "consts.py"], root=tmp_path)
+    assert reg.detect("x = unrelated.CHANNELS_PATH") == ["CHANNELS_PATH"]
+
+
+def test_an_annotated_constant_is_an_entry(tmp_path):
+    """195 bare-assign constants were readable and 32 annotated ones were not."""
+    write(
+        tmp_path,
+        "consts.py",
+        """
+        from typing import Final
+
+        BOX_META_FILE: Final[str] = "box.yaml"
+        """,
+    )
+    (entry,) = PythonConstants([tmp_path / "consts.py"], root=tmp_path).entries()
+    assert entry.id == "BOX_META_FILE"
+    assert entry.extra["value"] == "box.yaml"
+    assert entry.antipatterns == (re.escape("box.yaml"),)
+
+
+def test_an_annotation_without_a_value_declares_nothing(tmp_path):
+    write(tmp_path, "consts.py", "BOX_META_FILE: str\n")
+    assert list(PythonConstants([tmp_path / "consts.py"]).entries()) == []
+
+
+def test_a_chained_assignment_declares_every_name(tmp_path):
+    write(tmp_path, "consts.py", 'PRIMARY = FALLBACK = "workset.yaml"\n')
+    ids = {e.id for e in PythonConstants([tmp_path / "consts.py"]).entries()}
+    assert ids == {"PRIMARY", "FALLBACK"}
+
+
+def test_tuple_unpacking_pairs_each_name_with_its_own_value(tmp_path):
+    write(tmp_path, "consts.py", 'BOX_META, WORKSET_META = "box.yaml", "workset.yaml"\n')
+    got = {e.id: e.extra["value"] for e in PythonConstants([tmp_path / "consts.py"]).entries()}
+    assert got == {"BOX_META": "box.yaml", "WORKSET_META": "workset.yaml"}
+
+
+def test_unpacking_that_cannot_be_paired_declares_nothing(tmp_path):
+    """Guessing here files one constant's value under another one's name."""
+    write(
+        tmp_path,
+        "consts.py",
+        """
+        BOX_META, WORKSET_META = compute_defaults()
+        FIRST, *REST = "box.yaml", "workset.yaml", "other.yaml"
+        """,
+    )
+    assert list(PythonConstants([tmp_path / "consts.py"]).entries()) == []
+
+
+def test_enum_members_are_still_invisible(tmp_path):
+    """Documented, not fixed: recognizing an enum is a base-name match, and an
+    alias or an intermediate base class defeats it without saying so."""
+    write(
+        tmp_path,
+        "consts.py",
+        """
+        from enum import Enum
+
+
+        class Mode(str, Enum):
+            VM = "vm"
+        """,
+    )
+    assert list(PythonConstants([tmp_path / "consts.py"]).entries()) == []
 
 
 # -- strong vs weak -----------------------------------------------------------
@@ -887,6 +992,43 @@ def test_init_ci_declares_the_gates_its_workflow_runs(tmp_path):
     assert not inventory.absent
 
 
+def test_init_reports_a_destination_it_cannot_write_to(tmp_path, capsys):
+    """The first outside adopter's report, 2026-09-09: a directory that did not
+    exist produced a raw traceback out of the write, from the first command
+    anyone runs. Every reason the destination is unusable is a user error in
+    this CLI's own idiom -- named on stderr, exit 2, no traceback.
+
+    Not writable is checked in the same test because it is the same shape: the
+    write fails for a reason the caller can read off the command line.
+    """
+    missing = tmp_path / "nowhere"
+    assert main(["init", str(missing)]) == 2
+    assert "does not exist" in capsys.readouterr().err
+
+    a_file = write(tmp_path, "notadir", "")
+    assert main(["init", str(a_file)]) == 2
+    assert "is not a directory" in capsys.readouterr().err
+
+    locked = tmp_path / "locked"
+    locked.mkdir(mode=0o500)
+    try:
+        assert main(["init", str(locked)]) == 2
+        assert "is not writable" in capsys.readouterr().err
+    finally:
+        locked.chmod(0o700)
+
+
+def test_init_writes_nothing_when_the_destination_is_refused(tmp_path):
+    """Checked before the first write, not at each one: with ``--ci`` the
+    config lands before the workflow, so a refusal discovered halfway would
+    leave a half-scaffolded tree -- the state this command already refuses to
+    write over."""
+    a_file = write(tmp_path, "notadir", "")
+    assert main(["init", str(a_file), "--ci"]) == 2
+    assert a_file.read_text() == ""
+    assert not (tmp_path / ".github").exists()
+
+
 def test_init_refuses_to_overwrite(tmp_path):
     """A scaffold that silently replaced a config someone tuned would be the
     worst possible first impression for a tool arguing that declarations should
@@ -894,6 +1036,79 @@ def test_init_refuses_to_overwrite(tmp_path):
     write(tmp_path, "kinemata.toml", "# mine\n")
     assert main(["init", str(tmp_path)]) == 2
     assert (tmp_path / "kinemata.toml").read_text() == "# mine\n"
+
+
+# -- stamp: the one command that reads a token instead of a declaration -------
+
+
+def test_stamp_mints_a_token_that_reads_back(capsys):
+    """Minted and decoded through the command, not through the codec.
+
+    The round trip is covered in ``tests/test_stamps.py``; what this adds is
+    that the command is wired to it in both directions, which is the half a
+    codec test cannot see.
+    """
+    assert main(["stamp"]) == 0
+    body = capsys.readouterr().out.strip()
+    assert main(["stamp", body]) == 0
+    printed = datetime.fromisoformat(capsys.readouterr().out.strip())
+    # Not equality against a second clock reading: the two calls straddle a
+    # second boundary roughly once a run, and a test that fails on the clock
+    # teaches its reader to re-run rather than to look.
+    assert abs(datetime.now(UTC) - printed) < timedelta(minutes=1)
+
+
+def test_stamp_needs_no_config(tmp_path, monkeypatch):
+    """A stamp is most often met in somebody else's document.
+
+    Every other command reads a declaration and refuses without one. A decoder
+    that did the same would be unusable exactly where it is wanted, so this runs
+    from a directory with no config above it.
+    """
+    monkeypatch.chdir(tmp_path)
+    assert main(["stamp", "[0TMQDKB-Ty]"]) == 0
+
+
+def test_stamp_prints_the_moment_and_the_type(capsys):
+    assert main(["stamp", "[0TMQDKB-Ty]"]) == 0
+    assert capsys.readouterr().out.strip() == "2026-09-09T14:38:35+00:00 type Ty"
+
+
+def test_stamp_accepts_a_bare_body_and_then_names_no_type(capsys):
+    assert main(["stamp", "0TMQDKB"]) == 0
+    assert capsys.readouterr().out.strip() == "2026-09-09T14:38:35+00:00"
+
+
+def test_stamp_mints_without_a_type(capsys):
+    """The type says what kind of citation this annotates, which only the writer
+    knows. A default would be this command settling a question the specification
+    leaves to the adopting project."""
+    assert main(["stamp"]) == 0
+    minted = capsys.readouterr().out.strip()
+    assert "-" not in minted and "[" not in minted
+
+
+@pytest.mark.parametrize(
+    ("token", "reason"),
+    [
+        ("[0ZZZZZZ-Ty]", "malformed"),        # 22.4 days that name no time
+        ("[0TMQDKO-Ty]", "Crockford"),        # a confusable, refused not folded
+        ("[0TMQDKB-T]", "not a type"),
+        ("nonsense", "characters"),
+    ],
+)
+def test_stamp_refuses_rather_than_printing_a_plausible_moment(token, reason, capsys):
+    """The CLI's own refusal idiom: ``error:`` on stderr, non-zero exit.
+
+    Reached through ``main`` rather than through ``parse``, because the failure
+    that matters is a refusal raised where nothing catches it -- which would
+    reach the user as a traceback.
+    """
+    assert main(["stamp", token]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith("error: ")
+    assert reason in captured.err
 
 
 # -- what running over somebody else's code exposed ---------------------------

@@ -14,10 +14,10 @@ from __future__ import annotations
 
 import ast
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
 
-from ..contract import BaseRegistry, Entry
+from ..contract import _NAME_BOUNDARY, BaseRegistry, Entry
 from ..prose import parsed
 
 #: Below this, a value is matched **only as a whole literal**. ``"box_data"``
@@ -44,6 +44,66 @@ def _is_constant_name(name: str) -> bool:
     return name.isupper() or (name.startswith("_") and name[1:].isupper())
 
 
+def _unpacked(
+    target: ast.Tuple | ast.List, value: ast.expr
+) -> Iterator[tuple[str, ast.expr]]:
+    """Element-wise ``A, B = "x", "y"``, and only where it is unambiguous.
+
+    A starred element, or a right-hand side that is not a literal sequence of
+    matching length, cannot be paired without evaluating it. Nothing is yielded
+    in that case: attributing a value to the wrong name would put a real
+    constant's antipattern under somebody else's identifier, which reports a
+    bypass at a site that never touched it.
+    """
+    if not isinstance(value, (ast.Tuple, ast.List)):
+        return
+    if any(isinstance(element, ast.Starred) for element in target.elts):
+        return
+    if len(target.elts) != len(value.elts):
+        return
+    for element, item in zip(target.elts, value.elts, strict=True):
+        if isinstance(element, ast.Name):
+            yield element.id, item
+
+
+def _bindings(node: ast.stmt) -> Iterator[tuple[str, ast.expr]]:
+    """Every ``NAME = <expression>`` a module-level statement binds.
+
+    This read ``ast.Assign`` with exactly one plain target and nothing else,
+    which is not the whole of how a constant is written. Measured across an
+    adopting project's package on 2026-09-09: **195 bare-assign string
+    constants were readable and 32 annotated ones were not** -- ``NAME:
+    Final[str] = "..."`` is an ``ast.AnnAssign`` -- and the annotated ones
+    concentrated in exactly the module that project most wanted to declare. It
+    reached for a ``code-patterns`` registry instead of reshaping its source to
+    suit the tool. That preference is the right one and the tool should not
+    force it.
+
+    Chained targets (``A = B = "x"``) and tuple unpacking are read here for the
+    same reason: each is a spelling a project may already use, and being
+    invisible to the scan is indistinguishable from being clean.
+
+    **What is still invisible, stated rather than discovered later: enum
+    members.** They bind inside a class body, so recognizing them means first
+    deciding a class is an enum, and that decision is a base-name match -- which
+    an import alias, a project's own intermediate base class, or a metaclass
+    defeats without saying so. A recognizer that silently covers some enums and
+    not others reports clean over the rest, and a check that quietly stops
+    checking is worse than no check. Declare them with ``code-patterns``.
+    """
+    if isinstance(node, ast.AnnAssign):
+        if node.value is not None and isinstance(node.target, ast.Name):
+            yield node.target.id, node.value
+        return
+    if not isinstance(node, ast.Assign):
+        return
+    for target in node.targets:
+        if isinstance(target, ast.Name):
+            yield target.id, node.value
+        elif isinstance(target, (ast.Tuple, ast.List)):
+            yield from _unpacked(target, node.value)
+
+
 class PythonConstants(BaseRegistry):
     """Module-level string constants in one or more Python modules.
 
@@ -57,6 +117,31 @@ class PythonConstants(BaseRegistry):
     """
 
     name = "constants"
+
+    #: A Python constant does not contain a dot; it is *reached* through one.
+    #: With the dotted default, ``bootstrap.CHANNELS_PATH`` detected nothing at
+    #: all, and an adopting project's four module-qualified constants were
+    #: reported as unmentioned on 2026-09-09.
+    #:
+    #: **The false positive this accepts.** Letting a dot abut means any
+    #: attribute access spelled the same way counts: ``settings.CHANNELS_PATH``
+    #: on an unrelated object, or a same-named class attribute, is read as a
+    #: mention of this constant. Text matching cannot tell those apart -- doing
+    #: so means resolving the receiver, which is dataflow analysis and out of
+    #: scope here.
+    #:
+    #: Which direction that errs matters. In
+    #: :func:`~kinemata.bypass.unused` a spurious mention *suppresses* a report,
+    #: so the cost is a missed finding rather than a false alarm on a live
+    #: constant -- the better trade for a list a human reads. It is the wrong
+    #: trade for any future check that treats a mention as an accusation, and
+    #: such a check should set its own boundary rather than inherit this one.
+    #:
+    #: This is a **second, separate** cause from the weakness
+    #: :func:`~kinemata.bypass.unused` already documents. That one detects
+    #: mention rather than use and was measured at 0/3 against a labeled
+    #: incident; fixing the boundary does not touch it.
+    boundary = _NAME_BOUNDARY
 
     def __init__(
         self,
@@ -90,26 +175,22 @@ class PythonConstants(BaseRegistry):
             home = str(path)
 
         for node in tree.body:
-            if not isinstance(node, ast.Assign) or len(node.targets) != 1:
-                continue
-            target = node.targets[0]
-            if not isinstance(target, ast.Name):
-                continue
-            name = target.id
-            if not _is_constant_name(name):
-                continue
-            if name.startswith("_") and not self._include_private:
-                continue
-            value = node.value
-            if not (isinstance(value, ast.Constant) and isinstance(value.value, str)):
-                continue
+            for name, value in _bindings(node):
+                if not _is_constant_name(name):
+                    continue
+                if name.startswith("_") and not self._include_private:
+                    continue
+                if not (
+                    isinstance(value, ast.Constant) and isinstance(value.value, str)
+                ):
+                    continue
 
-            yield Entry(
-                id=name,
-                antipatterns=self._antipatterns_for(value.value),
-                home=(home,),
-                extra={"value": value.value},
-            )
+                yield Entry(
+                    id=name,
+                    antipatterns=self._antipatterns_for(value.value),
+                    home=(home,),
+                    extra={"value": value.value},
+                )
 
     def _antipatterns_for(self, value: str) -> tuple[str, ...]:
         """The value as a pattern, in one of three tiers.

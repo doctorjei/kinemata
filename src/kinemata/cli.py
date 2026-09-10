@@ -35,20 +35,26 @@ will.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
+from . import stamps
+from .adapters.bibliography import Bibliography, undeclared_key
 from .baseline import Baseline, BaselineError, record
 from .bypass import Bypass, crossings, strays, unused
-from .claims import verify
+from .citations import citations, index
+from .claims import ClaimsError, verify
 from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
+from .confirm import ConfirmError, apply, plan
 from .context import measure
-from .contract import BaseRegistry
+from .contract import BaseRegistry, Entry
 from .gates import WORKFLOW_DIR, enforced
 from .literals import clusters
 from .projection import project
 from .report import DEFAULT_MAX_SITES, Report, review
+from .stamps import StampError
 
 
 def _settings(args: argparse.Namespace) -> Settings:
@@ -74,7 +80,14 @@ def _settings(args: argparse.Namespace) -> Settings:
     if not args.config and path.parent != Path.cwd().resolve():
         print(f"warning: using config from {path}, above the current directory",
               file=sys.stderr)
-    return load(path)
+    settings = load(path)
+    # Printed by every command, because a notice is about the declarations
+    # rather than about one scan. **Not suppressed by ``--quiet``**, the same
+    # rule the exemption, gate and promise counts follow: this is what the
+    # config says, not one of a check's findings.
+    for message in settings.notices:
+        print(f"warning: {message}", file=sys.stderr)
+    return settings
 
 
 #: Roots already announced in this run. A root scanned once per registry would
@@ -357,7 +370,13 @@ def cmd_undeclared(args: argparse.Namespace) -> int:
             found = strays(
                 registry,
                 target,
-                suffixes=settings.suffixes,
+                # The registry's own file set wins, as it already does for
+                # `review` and `unused`. This command was the one that ignored
+                # it, which had no visible effect only because nothing closable
+                # declared its own suffixes: a bibliography does, and pointing
+                # a closed one at the project's `.py` default would find no
+                # citations anywhere and report a clean closed world.
+                suffixes=registry.suffixes or settings.suffixes,
                 exclude=settings.exclude,
             )
         except NotImplementedError:
@@ -482,6 +501,7 @@ def cmd_claims(args: argparse.Namespace) -> int:
     found = verify(
         _target(args, settings),
         suffixes=settings.claim_suffixes,
+        file_suffixes=settings.claim_file_suffixes,
         exclude=settings.exclude,
         historical=settings.historical,
         counts=settings.counts,
@@ -629,6 +649,35 @@ jobs:
 '''
 
 
+def _destination(path: str | None) -> Path:
+    """Resolve where ``init`` writes, refusing a place it cannot write to.
+
+    The first outside adopter reported this on 2026-09-09: a directory that did
+    not exist got a raw ``FileNotFoundError`` traceback out of the write, from
+    the first command anyone runs. A tool whose argument is that declarations
+    should be true cannot look like it crashed on a typo.
+
+    The three refusals are checked here rather than at each write because with
+    ``--ci`` two files are produced in sequence: failing partway through would
+    leave a half-scaffolded tree behind, which is the overwrite this command
+    already refuses to do, arrived at by another road.
+    """
+    root = Path(path or ".").resolve()
+    if not root.exists():
+        raise ConfigError(
+            f"{root} does not exist. Create it first -- this writes a config "
+            "into a project, it does not create the project."
+        )
+    if not root.is_dir():
+        raise ConfigError(
+            f"{root} is not a directory. Name the project root to write into, "
+            "not the file to write."
+        )
+    if not os.access(root, os.W_OK | os.X_OK):
+        raise ConfigError(f"{root} is not writable.")
+    return root
+
+
 def cmd_init(args: argparse.Namespace) -> int:
     """Write a config a project can run today, and optionally the CI to run it.
 
@@ -642,7 +691,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     tuned would be the worst possible first impression for a tool whose argument
     is that declarations should be true.
     """
-    root = Path(args.path or ".").resolve()
+    root = _destination(args.path)
     written: list[Path] = []
 
     config = root / CONFIG_NAMES[0]
@@ -698,6 +747,184 @@ def cmd_context(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
+    return 0
+
+
+def cmd_stamp(args: argparse.Namespace) -> int:
+    """Mint a citation stamp, or read one back.
+
+    The token is opaque by construction: seven characters buys compactness at
+    the cost of legibility, and the trade only pays at second precision -- at
+    day precision a plain date is three characters longer and needs no tooling
+    at all. That cost is accepted rather than denied, and this is the tooling.
+
+    **Minting emits the timestamp alone, without brackets and without a type.**
+    The type says what kind of citation this annotates, which only the writer
+    knows, and a default would be this command deciding a question section 5 of
+    ``docs/citations.md`` leaves to the adopting project.
+
+    Needs no config, and does not load one. Every other command here reads a
+    declaration; this one is a codec, and a decoder that refused to run outside
+    a configured project would be unusable in the place a stamp is most often
+    met, which is somebody else's document.
+    """
+    if not args.token:
+        print(stamps.encode(datetime.now(UTC)))
+        return 0
+    stamp = stamps.parse(args.token)
+    moment = stamp.moment.isoformat()
+    if stamp.type_code is None:
+        print(moment)
+        return 0
+    line = f"{moment} type {stamp.type_code.capitalize()}"
+    # The key is printed as well as the type rather than instead of it: the
+    # type is the half a reader can act on without a bibliography, and this
+    # command deliberately reads no configuration, so it cannot resolve the
+    # other half. `kinemata cite` does that.
+    if stamp.key is not None:
+        line += f" key {stamps.canonical_key(stamp.key)}"
+    print(line)
+    return 0
+
+
+def _bibliographies(settings: Settings) -> list[Bibliography]:
+    """The declared bibliographies, or a refusal naming what to declare."""
+    found = [r for r in settings.registries if isinstance(r, Bibliography)]
+    if not found:
+        raise ConfigError(
+            "no bibliography is declared, so no reference key resolves to "
+            'anything. Declare one: a [[registry]] with kind = "bibliography" '
+            "and a `source` file holding its entries."
+        )
+    return found
+
+
+def _known(text: str, declared: dict[str, Entry]) -> str:
+    """One key, canonically spelled, or a refusal.
+
+    A citation naming a key no entry declares is a finding, not a lookup that
+    returns nothing -- section 5.3 puts that failure and the duplicate key
+    together as the two this scheme is built to catch. Answering with silence
+    here would be the tool declining to report the thing it exists for.
+    """
+    key = stamps.reference_key(text)
+    if key not in declared:
+        raise ConfigError(undeclared_key(key))
+    return key
+
+
+def cmd_cite(args: argparse.Namespace) -> int:
+    """Resolve a reference key, in either direction.
+
+    **Forward** -- what a key points at -- is how a reader gets the readable
+    form of a citation that stands alone, which is the whole reason a key may
+    stand alone at all.
+
+    **Reverse** (``--where``) is every place a key is cited, and it is what
+    makes accompanying affordable: without it, moving a source means finding
+    every mention by hand. Its output is bare ``file:line`` because it is meant
+    to be fed to an editor or to ``sed`` -- a worklist, not a report.
+
+    **With no argument**, every key and how often it is cited. A key nothing
+    cites gets no separate machinery here; it is a declared entry nothing
+    mentions, which ``kinemata unused`` already describes.
+    """
+    settings = _settings(args)
+    _note_unfitted(settings)
+    if args.where and args.keys:
+        raise ConfigError(
+            "give keys to resolve, or --where to find citations of one -- not "
+            "both. The two directions answer different questions and print "
+            "different things."
+        )
+
+    books = _bibliographies(settings)
+    declared = {entry.id: entry for book in books for entry in book.entries()}
+
+    if args.keys:
+        for text in args.keys:
+            entry = declared[_known(text, declared)]
+            target = str(entry.extra["target"])
+            print(f"{entry.id}  {target}  -- {entry.extra['note']}")
+            if entry.extra.get("foreign"):
+                print(f"{' ' * len(entry.id)}  known elsewhere as "
+                      f"{entry.extra['foreign']}")
+            # The accompany threshold, reported and never enforced. Whether a
+            # sentence reads better with its target spelled beside the key is a
+            # judgment about that sentence; what a tool can offer is the
+            # measurement the judgment needs.
+            if args.verbose and len(target) > settings.accompany_max:
+                print(f"{' ' * len(entry.id)}  {len(target)} characters, over "
+                      f"the declared {settings.accompany_max}: long enough that "
+                      "the key reads better standing alone")
+        return 0
+
+    suffixes = tuple(dict.fromkeys(
+        suffix for book in books for suffix in (book.suffixes or settings.suffixes)
+    ))
+    found = index(citations(_target(args, settings), suffixes=suffixes,
+                            exclude=settings.exclude))
+
+    if args.where:
+        key = _known(args.where, declared)
+        here = found.get(key, [])
+        for citation in here:
+            print(citation)
+        if not here and not args.quiet:
+            # To stderr, so a worklist piped onward stays a worklist. An empty
+            # answer and a key nobody cites read identically on stdout.
+            print(f"note: nothing cites {key}", file=sys.stderr)
+        return 0
+
+    for key in sorted(declared):
+        print(f"{key}  {len(found.get(key, ()))}")
+    return 0
+
+
+def cmd_confirm(args: argparse.Namespace) -> int:
+    """Verify what the documents cite, and record the ones that held.
+
+    **The one command here that writes into prose**, which is why it describes
+    the edit by default and makes it only when asked. Section 7 of
+    ``docs/citations.md`` draws the boundary: the gate only ever reports, an
+    explicit command writes, and it writes only what it confirmed in that run.
+    ``baseline`` already has this shape for the same reason -- a command whose
+    normal mode changes a file somebody else has to review should say what it
+    would do first.
+
+    **It never gates, and exits 0 on any run that completed.** The exit code is
+    what a project would wire into CI, and a check that rewrites the tree it is
+    judging can make itself pass. Refusals and dead targets are in the report,
+    which is where a writer's findings belong.
+    """
+    settings = _settings(args)
+    _note_unfitted(settings)
+    books = _bibliographies(settings)
+    suffixes = tuple(dict.fromkeys(
+        suffix for book in books for suffix in (book.suffixes or settings.suffixes)
+    ))
+    made = plan(
+        _target(args, settings),
+        books,
+        suffixes=suffixes,
+        exclude=settings.exclude,
+        historical=settings.historical,
+        external=settings.external,
+        timeout=settings.external_timeout,
+    )
+    print(made.text(verbose=args.verbose, quiet=args.quiet))
+
+    if not args.write:
+        if made.writes and not args.quiet:
+            print("\nNothing written. Re-run with --write to record these "
+                  "confirmations.")
+        return 0
+
+    written = apply(made)
+    for rel, count in written:
+        print(f"wrote {rel} ({count} stamp(s))")
+    if not written:
+        print("nothing to write")
     return 0
 
 
@@ -980,6 +1207,30 @@ def build_parser() -> argparse.ArgumentParser:
                      help="also write a workflow, and declare it as a gate")
     ini.set_defaults(func=cmd_init)
 
+    stm = sub.add_parser("stamp", parents=[common],
+                         help="mint a citation stamp, or decode one")
+    stm.add_argument("token", nargs="?",
+                     help="a stamp to read (default: mint one for now)")
+    stm.set_defaults(func=cmd_stamp)
+
+    cit = sub.add_parser("cite", parents=[common],
+                         help="resolve a reference key: what it points at, "
+                              "where it is cited, or every key with its count")
+    cit.add_argument("keys", nargs="*",
+                     help="keys to resolve (default: every key and its "
+                          "citation count)")
+    cit.add_argument("--where", metavar="KEY",
+                     help="every file:line citing this key, one per line")
+    cit.set_defaults(func=cmd_cite)
+
+    con = sub.add_parser("confirm", parents=[common],
+                         help="verify what the documents cite, and date the "
+                              "citations that held (writes only with --write)")
+    con.add_argument("path", nargs="?", help="limit the run to this path")
+    con.add_argument("--write", action="store_true",
+                     help="record the confirmations in the documents themselves")
+    con.set_defaults(func=cmd_confirm)
+
     base = sub.add_parser("baseline", parents=[common],
                           help="the ratchet: findings accepted as pre-existing")
     base.add_argument("path", nargs="?", help="limit the scan to this path")
@@ -999,12 +1250,14 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    for attr in ("path", "strict", "record", "prune", "until", "by", "note"):
+    for attr in ("path", "strict", "record", "prune", "until", "by", "note",
+                 "token", "keys", "where"):
         if not hasattr(args, attr):
             setattr(args, attr, None)
     try:
         return args.func(args)
-    except (ConfigError, BaselineError) as exc:
+    except (ClaimsError, ConfigError, BaselineError, StampError,
+            ConfirmError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 

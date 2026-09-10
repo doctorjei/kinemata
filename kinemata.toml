@@ -30,7 +30,7 @@ historical = ["archives/"]
 # its reader to skim a red gate.
 external = true
 
-# A number in prose, and the command that settles it. Opt-in, because settling
+# A value in prose, and the command that settles it. Opt-in, because settling
 # it means running a command named in a config file -- a trust decision worth
 # making deliberately. Declared here because the failure is real: this project's
 # notes claimed 74 tests while the true number went 76, 88, 103.
@@ -39,6 +39,27 @@ label = "test count"
 pattern = '\*\*(\d+) tests?\*\*|\b(\d+) tests? pass\b|\*\*Tests:\*\* (\d+) pass\b|\b(\d+) tests? collected\b'
 command = ["{python}", "-m", "pytest", "--collect-only", "-q"]
 extract = '(\d+) tests collected'
+
+# The projection budget, against the one document that states it as a byte
+# count. This is the in-tree case for settling values rather than only counts:
+# the number is declared once in contract.py and restated in three documents,
+# and until this declaration existed, raising the constant left every gate green
+# while all three documents went stale. The registries cannot catch it -- they
+# are negative, and report a *second* spelling rather than a disagreeing one.
+#
+# The oracle imports the constant deliberately. It is not a consumer
+# re-deriving the value, it is the thing that checks the documents against it,
+# and it lives in a config rather than in scanned source.
+#
+# "a 16 KB budget" in the other two documents is knowingly left unsettled: the
+# comparison is exact and converts nothing, so that spelling would need its own
+# entry with its own oracle. Accepted, because a normalization that is wrong
+# does not fail -- it passes.
+[[count]]
+label = "projection budget"
+pattern = 'projection budget `(\d+)` B'
+command = ["{python}", "-c", "from kinemata.contract import DEFAULT_BUDGET; print(f'budget={DEFAULT_BUDGET}')"]
+extract = 'budget=(\d+)'
 
 # The checks that must run, and the workflow that must run them. Deleting a
 # step from CI now fails this gate instead of quietly passing; the only way to
@@ -171,3 +192,16 @@ name = "spelling"
 kind = "substitutions"
 source = "docs/american-english.toml"
 suffixes = [".md", ".py"]
+
+# Where the sources this project cites actually live. A citation carries a stamp
+# and a reference key; the key's entry carries the path or the address, so a
+# source that moves is edited once here rather than at every mention.
+#
+# Open, not closed. `docs/citations.md` illustrates the form with a key this
+# project has no entry for, and closing would turn an example in a specification
+# into a failing gate. `kinemata undeclared` reports it as the advisory finding
+# it is.
+[[registry]]
+name = "sources"
+kind = "bibliography"
+source = "docs/bibliography.toml"

@@ -343,6 +343,21 @@ def test_a_count_that_runs_an_undeclared_command_is_refused(tmp_path):
         load(config)
 
 
+def test_a_value_count_without_its_oracle_is_refused(tmp_path):
+    """Half-declared is the worst outcome available: it looks configured and
+    settles nothing. As true of a value as of a number -- a `pattern` with no
+    `extract` names something to find in the prose and nothing to check it
+    against, and skipping it would print the same green as settling it."""
+    config = _count_config(tmp_path, """
+        [[count]]
+        label = "default mode"
+        pattern = 'default mode is `(\\w+)`'
+        command = ["{python}", "-c", "print('mode=strict')"]
+        """)
+    with pytest.raises(ConfigError, match="is missing extract"):
+        load(config)
+
+
 def test_a_count_cannot_name_its_oracle_twice(tmp_path):
     """`command` and `run` are two answers to one question, and a config that
     gives both has not decided which oracle is authoritative."""

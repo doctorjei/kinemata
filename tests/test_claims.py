@@ -14,7 +14,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
-from kinemata.claims import CLAIM_KINDS, Promise, verify
+from kinemata.claims import CLAIM_KINDS, ClaimsError, Promise, verify
+from kinemata.config import ConfigError, load
 
 
 def write(tmp_path, rel, body):
@@ -67,6 +68,33 @@ def test_a_dead_relative_link_is_reported(tmp_path):
 def test_an_external_link_is_not_ours_to_falsify(tmp_path):
     write(tmp_path, "doc.md", "[spec](https://example.org/a.md) and [anchor](#section)\n")
     assert verify(tmp_path).broken == []
+
+
+def test_a_citation_stamp_is_never_link_text(tmp_path):
+    """The residual `docs/citations.md` states, closed.
+
+    A stamp is a bracket group, so `[0TMQDKB-Ty](see below)` parsed as a link
+    and `see` was reported as a dead path. A space between the two prevented it
+    and was rejected as the fix: whitespace is invisible, survives editing
+    poorly, and a rule that holds only while nobody deletes a character is not
+    a rule. Both spellings are asserted here, because the point is that the
+    behavior no longer depends on which one was written.
+    """
+    write(tmp_path, "doc.md",
+          "[0TMQDKB-Ty](see below)\n\n[0TMQDKB-Ty] (see below)\n")
+    assert verify(tmp_path).broken == []
+
+
+def test_a_stamp_beside_a_real_link_does_not_disturb_it(tmp_path):
+    """The other half: taught not to over-report, still reporting.
+
+    A filter that suppressed the whole line, or the following group, would pass
+    the test above and quietly stop checking every link a stamp sits next to.
+    """
+    write(tmp_path, "doc.md",
+          "[the design](./real.md) [0TMQDKB-Ty] and [gone](./missing.md)\n")
+    write(tmp_path, "real.md", "x\n")
+    assert broken(verify(tmp_path)) == {("link", "./missing.md")}
 
 
 # -- over-reporting: what is discussed rather than asserted ------------------
@@ -211,6 +239,129 @@ def test_a_count_pattern_may_use_alternation(tmp_path):
         pattern=r"\*\*(\d+) tests\*\*|\b(\d+) tests pass\b",
         command=("{python}", "-c", "print('7 tests collected')"),
         extract=r"(\d+) tests collected",
+    )
+    assert verify(tmp_path, counts=[spec]).broken == []
+
+
+#: The four branches this project's own config carries. Kept here so a change to
+#: how the claimed value is picked out of a multi-branch match is caught against
+#: the real shape rather than a two-branch simplification of it.
+TEST_COUNT_PATTERN = (
+    r"\*\*(\d+) tests?\*\*|\b(\d+) tests? pass\b"
+    r"|\*\*Tests:\*\* (\d+) pass\b|\b(\d+) tests? collected\b"
+)
+
+
+def test_the_numeric_form_is_unchanged_by_settling_values(tmp_path):
+    """A number is a value, and generalizing must not move the numeric case.
+
+    Both directions, against the live four-branch pattern: agreement is silent
+    and disagreement carries the true number in the finding.
+    """
+    from kinemata.claims import Counted
+
+    oracle = ("{python}", "-c", "print('7 tests collected')")
+    spec = Counted(
+        pattern=TEST_COUNT_PATTERN,
+        command=oracle,
+        extract=r"(\d+) tests collected",
+        label="test count",
+    )
+    write(tmp_path, "doc.md", "**Tests:** 7 pass, and 7 tests collected.\n")
+    assert verify(tmp_path, counts=[spec]).broken == []
+
+    write(tmp_path, "doc.md", "**Tests:** 4 pass\n")
+    result = verify(tmp_path, counts=[spec])
+    assert [claim.kind for claim in result.broken] == ["test count"]
+    assert "actually 7" in result.broken[0].text
+
+
+def test_a_value_that_is_not_a_number_is_settled(tmp_path):
+    """The whole point of the generalization, and the polarity it adds.
+
+    An adopting project could not express 291 of 326 conformance checks against
+    this tool, and the largest structural reason was that every mechanism here
+    is negative: a registry reports a *second* spelling of a declared value and
+    says nothing when the document and the code disagree. 125 of those checks
+    assert the opposite shape -- a documented row equals what the code produces.
+    """
+    from kinemata.claims import Counted
+
+    write(tmp_path, "doc.md", "The default mode is `strict`.\n")
+    spec = Counted(
+        pattern=r"default mode is `(\w+)`",
+        command=("{python}", "-c", "print('mode=lenient')"),
+        extract=r"mode=(\w+)",
+        label="default mode",
+    )
+    result = verify(tmp_path, counts=[spec])
+    assert [claim.kind for claim in result.broken] == ["default mode"]
+    assert "actually lenient" in result.broken[0].text
+
+
+def test_a_value_that_agrees_is_silent(tmp_path):
+    """Agreement passes. Under the negative mechanism this rides beside, a
+    document spelling a declared value is itself the finding -- which is the
+    inversion that made a whole class of conformance check inexpressible."""
+    from kinemata.claims import Counted
+
+    write(tmp_path, "doc.md", "The default mode is `strict`.\n")
+    spec = Counted(
+        pattern=r"default mode is `(\w+)`",
+        command=("{python}", "-c", "print('mode=strict')"),
+        extract=r"mode=(\w+)",
+        label="default mode",
+    )
+    assert verify(tmp_path, counts=[spec]).broken == []
+
+
+def test_a_value_is_compared_exactly_and_never_converted(tmp_path):
+    """The documented limit, pinned so nobody "fixes" it into a normalizer.
+
+    "16 KB" and the byte count are different spellings of one budget, and this
+    settles the spelling it was given. Reporting the mismatch is the safe
+    direction: the alternative is a unit conversion that, when wrong, passes.
+    """
+    from kinemata.claims import Counted
+
+    write(tmp_path, "doc.md", "Projections get a 16 KB budget.\n")
+    spec = Counted(
+        pattern=r"a (\d+ KB) budget",
+        command=("{python}", "-c", "print('budget=16384')"),
+        extract=r"budget=(\S+)",
+        label="budget",
+    )
+    result = verify(tmp_path, counts=[spec])
+    assert [claim.kind for claim in result.broken] == ["budget"]
+    assert "actually 16384" in result.broken[0].text
+
+
+def test_edge_whitespace_does_not_decide_a_comparison(tmp_path):
+    """Stripped on both sides, and only there.
+
+    A command's output ends in a newline and a pattern written to swallow one
+    would otherwise fail a comparison that agrees -- silent wrongness inside the
+    check that exists to refuse it. Interior spacing is left alone: the value
+    below carries a space and is settled as written.
+    """
+    from kinemata.claims import Counted
+
+    write(
+        tmp_path,
+        "doc.md",
+        """
+        | key | value |
+        |---|---|
+        | stamp | sealed copy |
+        """,
+    )
+    spec = Counted(
+        # A table cell arrives padded, which is formatting rather than anything
+        # the document asserts -- and the oracle's output ends in a newline.
+        pattern=r"\| stamp \|([^|]+)\|",
+        command=("{python}", "-c", "print('sealed copy')"),
+        extract=r"^(.*)$",
+        label="stamp",
     )
     assert verify(tmp_path, counts=[spec]).broken == []
 
@@ -447,11 +598,41 @@ def test_external_links_are_counted_when_the_check_is_off(tmp_path, server):
             "set external = true under [claims])") in result.unavailable
 
 
-def test_an_archive_may_cite_a_url_that_has_since_died(tmp_path, server):
-    """A record citing a page that later went away is a record, not a defect."""
+def test_a_dead_url_in_an_archive_is_still_dead(tmp_path, server):
+    """`historical` exempts claims about the *tree*, and a URL is not one.
+
+    An archive citing a path that has since been deleted was right when it was
+    written, so checking it reports the archive for being an archive. There is
+    no equivalent for an address: the reader who follows a dead link out of a
+    changelog gets the same nothing they would get anywhere else, and "it worked
+    when this was written" does not help them.
+
+    Measured on an adopting project 2026-09-09, whose two historical fragments
+    took 17 of its 36 URLs out of the check -- including both of the genuine
+    404s it had. The exemption was removing exactly the findings it exists to
+    keep.
+    """
     write(tmp_path, "archives/old.md", f"We used {server}/gone-404 at the time.\n")
     result = verify(tmp_path, external=True, historical=["archives/"])
-    assert not result.broken
+    assert ("url", f"{server}/gone-404") in broken(result)
+
+
+def test_an_archive_is_still_exempt_from_claims_about_the_tree(tmp_path, server):
+    """The other half of the same edit, asserted so it cannot be lost.
+
+    Turning the URL kind's `current_only` off must not turn it off for the kinds
+    that report the tree's present state -- the skip is per kind, and one line
+    in the same table would have made the exemption vanish for all of them.
+    """
+    write(
+        tmp_path,
+        "archives/old.md",
+        f"The loader is `src/removed.py`, see {server}/gone-404.\n",
+    )
+    assert ("path", "src/removed.py") in broken(verify(tmp_path))
+
+    result = verify(tmp_path, external=True, historical=["archives/"])
+    assert broken(result) == {("url", f"{server}/gone-404")}
 
 
 def test_a_server_refusing_head_is_asked_again_with_get(tmp_path, server):
@@ -527,3 +708,201 @@ def test_a_capitalized_attribute_is_not_read_as_a_file(tmp_path):
     assert broken(verify(tmp_path)) == {
         ("path", "README.md"), ("path", "Introduction.md"),
     }
+
+
+# -- what an adopting project measured, 2026-09-09 ----------------------------
+
+
+def test_a_url_elided_in_prose_is_not_an_address(tmp_path):
+    """Nothing invents a claim, least of all one that then gets a request.
+
+    Prose writes a scheme and an ellipsis to mean "an address goes here". The
+    strip that removes sentence punctuation from a real address reduced that to
+    a bare scheme, which was asked over the network and reported. The filter is
+    on the empty authority rather than on the ellipsis: anything the strip can
+    reduce to a scheme has the same defect, and matching the symptom leaves the
+    next spelling of it to be found the same way.
+    """
+    write(tmp_path, "doc.md", "Write it as http://... in the config.\n")
+    result = verify(tmp_path, external=True)
+    assert not result.broken
+    assert result.checked == 0
+
+
+def test_a_scheme_with_no_host_is_never_asked(tmp_path, server):
+    """The general case, stated separately from the ellipsis that found it."""
+    write(tmp_path, "doc.md", f"Compare https:// with {server}/here-200\n")
+    result = verify(tmp_path, external=True)
+    assert result.checked == 1
+    assert not result.broken
+
+
+def test_neither_and_nor_read_as_the_denial_they_are(tmp_path):
+    """Their example, and the document was right.
+
+    A sentence reporting that a cited test file and its test name have both
+    stopped existing is a report about an absence. The word list had `formerly`
+    and not the bare `former`, `missing` and not `dead`, `no` and not `neither`
+    -- which is the shape a hand-written vocabulary fails in.
+    """
+    write(
+        tmp_path,
+        "doc.md",
+        "The note cited `tests/test_prefs.py`, and neither that path nor that "
+        "test name exists in the tree.\n",
+    )
+    assert verify(tmp_path).broken == []
+
+
+def test_dead_and_former_negate_a_path(tmp_path):
+    write(tmp_path, "one.md", "The dead `src/old_loader.py` is worth deleting.\n")
+    write(tmp_path, "two.md", "Its former home, `src/attic.py`, is empty now.\n")
+    assert verify(tmp_path).broken == []
+
+
+def test_a_generic_stand_in_filename_is_not_a_claim(tmp_path):
+    """`file.py` is the most generic name a document can write.
+
+    A one-letter stem was already read as an example; the word *file* itself was
+    not, and produced findings on prose teaching a shape.
+    """
+    write(tmp_path, "doc.md", "Run it as `kinemata check file.py` to see.\n")
+    assert verify(tmp_path).broken == []
+
+
+def test_a_digit_stand_in_is_not_a_claim(tmp_path):
+    """A requirement identifier written with n's for its digits names a form.
+
+    There is no document called that, and reporting it teaches readers that the
+    check does not understand the convention they are writing in.
+    """
+    write(tmp_path, "doc.md", "Each requirement gets its own `Rnnn.md`.\n")
+    assert verify(tmp_path).broken == []
+    write(tmp_path, "real.md", "The first one is `R001.md`.\n")
+    assert broken(verify(tmp_path)) == {("path", "R001.md")}
+
+
+def test_an_all_digit_number_is_not_a_commit_hash(tmp_path):
+    """Hex is a superset of decimal, so every backticked number was a hash.
+
+    An eleven-digit byte count in an adopter's notes was reported as a dead
+    commit. Git does not mint all-decimal short hashes often enough for that
+    catch to be worth the class of finding it produces, and a number in
+    backticks is the commonest token in prose there is.
+    """
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    for key, value in (("user.email", "t@example.org"), ("user.name", "T")):
+        subprocess.run(["git", "-C", str(tmp_path), "config", key, value], check=True)
+    write(tmp_path, "a.txt", "x\n")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "commit", "-qm", "first"], check=True)
+
+    write(tmp_path, "doc.md", "The corpus weighs `31130589017` bytes; see `deadbee1`.\n")
+    assert broken(verify(tmp_path)) == {("commit", "deadbee1")}
+
+
+# -- the allowlist a project can extend ---------------------------------------
+
+
+def test_a_project_may_declare_the_suffixes_that_name_its_files(tmp_path):
+    """Fourteen extensions chosen here are wrong for most repositories.
+
+    On one adopter's tree the only two content files -- a container definition
+    carrying a dotted project name, and a terminal configuration ending in
+    `.conf` -- were cited five times in backticks and seen zero times. The scan
+    came back four of twenty-seven and looked nearly green while being
+    structurally unable to see what the repository is about.
+    """
+    write(tmp_path, "doc.md", "Built from `Containerfile.kanibako`, and `tmux.conf`.\n")
+    assert verify(tmp_path).broken == []  # invisible, which is the defect
+
+    result = verify(tmp_path, file_suffixes=[".conf", ".kanibako"])
+    assert broken(result) == {
+        ("path", "Containerfile.kanibako"), ("path", "tmux.conf"),
+    }
+
+
+def test_declared_suffixes_add_to_the_built_in_set(tmp_path):
+    """Extension, not replacement. A knob that replaced the default would let
+    one added suffix silently switch off the other fourteen, which is the same
+    failure -- a check quietly narrowing -- in the fix for it."""
+    write(tmp_path, "doc.md", "See `src/ghost.py` and `tmux.conf`.\n")
+    assert broken(verify(tmp_path, file_suffixes=[".conf"])) == {
+        ("path", "src/ghost.py"), ("path", "tmux.conf"),
+    }
+
+
+def test_a_file_suffix_without_its_dot_is_refused(tmp_path):
+    """It would match nothing, and match nothing quietly."""
+    (tmp_path / "kinemata.toml").write_text(
+        '[claims]\nfile_suffixes = ["conf"]\n'
+    )
+    with pytest.raises(ConfigError, match="would match nothing"):
+        load(tmp_path / "kinemata.toml")
+
+
+def test_declared_file_suffixes_reach_the_settings(tmp_path):
+    (tmp_path / "kinemata.toml").write_text(
+        '[claims]\nfile_suffixes = [".conf", ".kanibako"]\n'
+    )
+    assert load(tmp_path / "kinemata.toml").claim_file_suffixes == (
+        ".conf", ".kanibako",
+    )
+
+
+# -- declarations that were present and doing nothing -------------------------
+
+
+def test_a_suffix_that_yields_no_claims_says_so(tmp_path):
+    """The trap, and the one worth naming loudest.
+
+    Every extractor here reads markdown syntax. An adopter added a YAML suffix
+    and got byte-identical output -- no extra claims, no note, and a green run
+    that meant less than the one before it. A warning rather than a failure,
+    because a suffix may honestly match nothing; silence is what is not
+    allowed.
+    """
+    write(tmp_path, "doc.md", "See `src/app.py`.\n")
+    write(tmp_path, "src/app.py", "x = 1\n")
+    write(tmp_path, "compose.yml", "services:\n  app:\n    image: x\n")
+
+    result = verify(tmp_path, suffixes=[".md", ".yml"])
+    assert [line for line in result.warnings if ".yml" in line and "yielded no" in line]
+    assert not [line for line in result.warnings if ".md" in line]
+    assert not result.failed  # a warning, deliberately
+
+
+def test_a_suffix_that_matches_nothing_is_a_different_message(tmp_path):
+    """Two mistakes with two fixes: a typo or a tree without those documents,
+    against documents that were read and could not be seen into."""
+    write(tmp_path, "doc.md", "See `src/app.py`.\n")
+    write(tmp_path, "src/app.py", "x = 1\n")
+
+    result = verify(tmp_path, suffixes=[".md", ".rst"])
+    assert [line for line in result.warnings if ".rst" in line and "no files" in line]
+
+
+def test_a_warning_reaches_stderr(tmp_path, capsys):
+    """Kept on the result *and* printed. A caller that never reads the result
+    object is the one this was invisible to."""
+    write(tmp_path, "doc.md", "See `src/app.py`.\n")
+    write(tmp_path, "src/app.py", "x = 1\n")
+
+    verify(tmp_path, suffixes=[".md", ".rst"])
+    assert ".rst" in capsys.readouterr().err
+
+
+def test_a_resolve_in_tree_that_is_not_there_refuses(tmp_path):
+    """It failed open, and open was invisible.
+
+    An adopter compared a run declaring a missing sibling tree against a run
+    declaring nothing: identical bytes, same findings, same exit code, no note
+    on stderr. In CI, where the sibling is usually not checked out, that is
+    every claim it was meant to settle going unchecked while the run reads
+    clean. A warning was considered and rejected -- the steady state it would
+    have to tolerate is "the tree I resolve against is often absent", and a
+    project in that state is asking for a check it is not getting.
+    """
+    write(tmp_path, "doc.md", "The loader is `loader/src/app.py`.\n")
+    with pytest.raises(ClaimsError, match="not a directory"):
+        verify(tmp_path, resolve_in=["../loader"])

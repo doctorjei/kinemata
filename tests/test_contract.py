@@ -6,6 +6,7 @@ import pytest
 
 from kinemata import BaseRegistry, Entry, project, undeclared
 from kinemata.adapters.mapping import MappingRegistry
+from kinemata.contract import _NAME_BOUNDARY
 
 
 class Tiny(BaseRegistry):
@@ -58,6 +59,29 @@ def test_detect_prefers_the_longest_declared_identifier():
 def test_detect_deduplicates_but_keeps_order():
     r = Tiny(["a.one", "a.two"])
     assert r.detect("a.two a.one a.two") == ["a.two", "a.one"]
+
+
+def test_the_boundary_is_a_property_of_the_registry_not_the_matcher():
+    """One module-level boundary decided this for every registry, and the two
+    kinds want opposite answers: a dotted key contains its separator, a Python
+    constant is reached through one."""
+
+    class Reached(Tiny):
+        boundary = _NAME_BOUNDARY
+
+    assert Tiny(["CHANNELS_PATH"]).detect("bootstrap.CHANNELS_PATH") == []
+    assert Reached(["CHANNELS_PATH"]).detect("bootstrap.CHANNELS_PATH") == [
+        "CHANNELS_PATH"
+    ]
+
+
+def test_the_narrower_boundary_still_refuses_a_longer_name():
+    class Reached(Tiny):
+        boundary = _NAME_BOUNDARY
+
+    r = Reached(["CHANNELS_PATH"])
+    assert r.detect("CHANNELS_PATHS = 1") == []
+    assert r.detect("OLD_CHANNELS_PATH = 1") == []
 
 
 def test_detect_only_ever_finds_declared_entries():

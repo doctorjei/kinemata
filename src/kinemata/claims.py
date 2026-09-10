@@ -36,6 +36,7 @@ import re
 import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -43,6 +44,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path, PurePosixPath
 
+from . import stamps
 from .bypass import GIT_DIR, _tree, _walk, git_ignored
 
 #: How far back from a claim to look for a word that turns it into a mention.
@@ -61,9 +63,18 @@ NEGATION_WINDOW = 45
 CLAUSE_BOUNDARY = re.compile(r"[;:]|\bbut\b|\bhowever\b|\bwhereas\b|\bwhile\b", re.I)
 
 #: Words that mean a path is being discussed rather than claimed to exist.
+#:
+#: ``neither``, ``dead`` and ``former`` were added 2026-09-09 from an adopting
+#: project's run: each produced a finding on prose that says, in plain English,
+#: that the path is not there. Their case was a sentence reporting that a cited
+#: test file and its test name both stopped existing -- the document was right
+#: and this reported it anyway. ``formerly`` was already here and the bare
+#: adjective was not, which is the shape a hand-written word list fails in.
 NEGATION = re.compile(
-    r"\b(no|not|never|without|absent|missing|removed|deleted|dropped|gone|"
-    r"initially|formerly|previously|was|were|had|used to|instead of|rather than|"
+    r"\b(no|not|never|neither|nor|without|absent|missing|removed|deleted|"
+    r"dropped|gone|dead|"
+    r"initially|formerly|former|previously|was|were|had|used to|instead of|"
+    r"rather than|"
     # The vocabulary of describing a change. A changelog naming what a file
     # used to be called is a record, not a claim that the old name still works.
     r"stale|renamed|retired|superseded|replaced|corrected|obsolete|old)\b",
@@ -72,9 +83,18 @@ NEGATION = re.compile(
 
 #: Names that mark an example rather than a file in this tree. ``src/pkg/x.py``
 #: in a docstring is teaching a shape, not asserting a path.
+#:
+#: Two shapes joined it 2026-09-09, both from an adopter's findings. A stem that
+#: is literally the word *file* is the most generic stand-in a document can
+#: write, and a run of three or more n's is how a document spells "any number
+#: goes here" -- a requirement identifier written as R-n-n-n names a form, not a
+#: document. Neither has a word boundary to hang the list on, so they are
+#: alternatives rather than entries in it.
 PLACEHOLDER = re.compile(
     r"\b(pkg|foo|bar|baz|qux|example|examples?/your|OWNER|REPO|YOUR|myproj|"
-    r"nosuch|placeholder|somewhere|your[-_]?\w*)\b",
+    r"nosuch|placeholder|somewhere|your[-_]?\w*)\b"
+    r"|(?:^|/)file\.[a-z0-9]+$"
+    r"|n{3,}",
     re.I,
 )
 
@@ -123,13 +143,29 @@ REMOTE_MARKER = "@"
 
 #: Extensions that make a bare filename a claim about a file. Without an
 #: allowlist, ``config.data`` and ``system.agent`` read as filenames.
+#:
+#: **A closed list of fourteen is wrong for most repositories**, and silently:
+#: an adopter's run on 2026-09-09 came back four claims of twenty-seven and
+#: looked nearly green on a repository whose only two content files are a
+#: container definition and a terminal multiplexer configuration -- cited five
+#: times in backticks, and invisible here because one carries a dotted project
+#: name for a suffix and the other ends in .conf. The scan was structurally
+#: unable to see what that repository is about.
+#:
+#: So a project may **extend** this through ``[claims] file_suffixes``. Extend
+#: rather than replace: the default set is not a preference this project holds,
+#: it is the floor below which the check reports nothing, and a knob that
+#: replaced it would let one added suffix silently turn off the other fourteen.
 FILE_SUFFIXES = frozenset({
     ".py", ".md", ".toml", ".yaml", ".yml", ".cfg", ".json", ".txt", ".sh",
     ".ini", ".rst", ".lock", ".in", ".mk",
 })
 
 _BACKTICKED = re.compile(r"`([^`\s]+)`")
-_LINK = re.compile(r"\[[^\]]*\]\(([^)#\s]+)[^)]*\)")
+#: The bracket text is captured as well as the target, so that
+#: :func:`_link_claims` can tell a link from something that merely precedes a
+#: parenthesis. It is group 1; the target is group 2.
+_LINK = re.compile(r"\[([^\]]*)\]\(([^)#\s]+)[^)]*\)")
 _SHA = re.compile(r"`([0-9a-f]{7,12})`")
 #: A web address, whether it sits in a link target, in backticks, or bare in
 #: prose. All three spellings appear in this project's own documents.
@@ -147,6 +183,17 @@ HEAD_REFUSED = frozenset({405, 501})
 USER_AGENT = "kinemata-claims/1.0 (documentation link check)"
 
 EXTERNAL_TIMEOUT = 10.0
+
+
+class ClaimsError(Exception):
+    """A claims declaration that cannot be honored.
+
+    The same refusal ``config`` raises for a registry pointed at a file that is
+    not there, raised from here because only the caller of :func:`verify` knows
+    the root a relative declaration is measured from: the scanned tree is not
+    always the config's own root, so validating at load time would settle the
+    wrong path.
+    """
 
 
 @dataclass(frozen=True)
@@ -185,6 +232,24 @@ class Tree:
         a bare ``cli.py`` naming a module the reader can find. A checker that
         demands one spelling reports correct prose, which is the fastest way to
         be ignored.
+
+        **Known cost, held deliberately: a path that exists only in an ignored
+        copy still resolves.** The filesystem is asked before the index, and the
+        index is the only half that drops what git ignores. So a build tree, a
+        vendored copy or any other ignored duplicate keeps a path alive here
+        after the real one is deleted -- reported by an adopting project on
+        2026-09-09, where a stale packaging copy would have concealed a defect
+        they had already found by hand.
+
+        It is held because the two cases are one case from here. The behavior
+        was put in for a gitignored corpus directory sitting in the tree,
+        several megabytes of it, which notes describe truthfully; suppressing
+        that reported honest prose as dead. Ignored-and-present is the whole
+        signal available, and it says "deliberately kept out of version control"
+        for the corpus and "left over from a build" for the copy with equal
+        confidence. Separating them needs something this does not have -- a
+        notion of which ignored trees shadow tracked ones -- and guessing would
+        trade a quiet miss for a loud false report on prose that is correct.
         """
         target = claim.strip().rstrip("/.,;:")
         # `./name` anchors to the document's own directory. Stripping it lets
@@ -245,6 +310,13 @@ class Verification:
     #: canceled or never started: the document still cites the path, so coverage
     #: cannot tell, and nothing else ever goes red.
     overdue: list[str] = field(default_factory=list)
+    #: Declared configuration that ran and settled nothing. **Not a failure**,
+    #: and deliberately: a suffix that legitimately matches no file is a normal
+    #: state, so gating on it would make the check red for a reason its reader
+    #: cannot always fix. Kept here as well as printed so a caller can assert on
+    #: it, and left out of :meth:`text` on purpose -- these already went to
+    #: stderr, and repeating them on stdout prints each one twice.
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def failed(self) -> bool:
@@ -272,6 +344,19 @@ class Verification:
         for kind in self.unavailable:
             out.append(f"  NOT CHECKED: {kind}")
         return "\n".join(out)
+
+
+def _warn(found: Verification, message: str) -> None:
+    """Say it once, on stderr, and keep it on the result.
+
+    Not an exception and not a finding. Some declarations can do nothing for a
+    legitimate reason, and the useful answer to those is a sentence in front of
+    a reader rather than a red gate -- but the useless answer, and the one this
+    package exists to refuse, is the byte-identical output an adopter got on
+    2026-09-09 from a knob that matched nothing at all.
+    """
+    found.warnings.append(message)
+    print(f"warning: {message}", file=sys.stderr)
 
 
 # -- the network, asked once and in one place --------------------------------
@@ -388,15 +473,25 @@ def _negated(line: str, start: int, end: int, previous: str = "") -> bool:
     return bool(NEGATION.search(ahead[:boundary.start()] if boundary else ahead))
 
 
-def _path_claims(line: str, previous: str = "") -> Iterator[str]:
+def _path_claims(
+    line: str, previous: str = "", file_suffixes: frozenset[str] = FILE_SUFFIXES
+) -> Iterator[str]:
     for match in _BACKTICKED.finditer(line):
         token = match.group(1)
         if SCHEME in token or token.startswith(EXTERNAL_PREFIXES):
             continue
         if WINDOWS_SEPARATOR in token:
             continue
-        if ATTRIBUTE_REFERENCE.match(token) and not token.endswith(
-            ATTRIBUTE_EXEMPT_SUFFIXES
+        # The last clause: a suffix the *project* declared is one it has already
+        # said names a file, so the collision this rule guards against cannot
+        # arise. Without it a container definition carrying a dotted project
+        # name reads as an attribute of a class, and declaring its extension
+        # bought nothing -- which is how an adopter's two content files stayed
+        # invisible after the knob for them was added.
+        if (
+            ATTRIBUTE_REFERENCE.match(token)
+            and not token.endswith(ATTRIBUTE_EXEMPT_SUFFIXES)
+            and PurePosixPath(token).suffix in FILE_SUFFIXES
         ):
             continue
         if any(character in token for character in PATTERN_CHARACTERS):
@@ -409,7 +504,7 @@ def _path_claims(line: str, previous: str = "") -> Iterator[str]:
         # and `owner/project` is a sentence; reporting them teaches readers to
         # skim the report. The cost is a dead *directory* reference going
         # unnoticed, which is the direction worth losing in.
-        if not token.endswith("/") and PurePosixPath(token).suffix not in FILE_SUFFIXES:
+        if not token.endswith("/") and PurePosixPath(token).suffix not in file_suffixes:
             continue
         if PLACEHOLDER.search(token) or EXAMPLE_STEM.search(token):
             continue
@@ -418,31 +513,70 @@ def _path_claims(line: str, previous: str = "") -> Iterator[str]:
         yield token
 
 
-def _link_claims(line: str, previous: str = "") -> Iterator[str]:
+def _link_claims(
+    line: str, previous: str = "", file_suffixes: frozenset[str] = FILE_SUFFIXES
+) -> Iterator[str]:
+    """Link targets, minus the one thing that is never link text.
+
+    A citation stamp is a bracket group, so ``[0TMQDKB-Ty](see below)`` read as
+    a link and reported ``see`` as a dead path. A space between the two
+    prevented it, and relying on that was rejected: whitespace is invisible,
+    survives editing poorly, and a rule that holds only while nobody deletes a
+    character is not a rule. The extractor is taught the stamp's shape instead,
+    so the behavior no longer depends on what follows -- which is this project's
+    argument everywhere else, that precision belongs to declared syntax rather
+    than to incidental formatting.
+    """
     for match in _LINK.finditer(line):
-        target = match.group(1)
+        if stamps.CONTENT.fullmatch(match.group(1)):
+            continue
+        target = match.group(2)
         if SCHEME in target or target.startswith(LINK_PREFIXES):
             continue
         yield target
 
 
-def _commit_claims(line: str, previous: str = "") -> Iterator[str]:
+def _commit_claims(
+    line: str, previous: str = "", file_suffixes: frozenset[str] = FILE_SUFFIXES
+) -> Iterator[str]:
     for match in _SHA.finditer(line):
-        yield match.group(1)
+        sha = match.group(1)
+        # Hex is a superset of decimal, so every seven-to-twelve digit number a
+        # document quotes matched this. An adopter's byte count of eleven digits
+        # was reported as a dead commit on 2026-09-09; git does not mint
+        # all-decimal short hashes often enough for the catch to be worth the
+        # class of finding it produces, and a number in prose is the commonest
+        # backticked token there is.
+        if sha.isdigit():
+            continue
+        yield sha
 
 
-def _url_claims(line: str, previous: str = "") -> Iterator[str]:
+def _url_claims(
+    line: str, previous: str = "", file_suffixes: frozenset[str] = FILE_SUFFIXES
+) -> Iterator[str]:
     """Web addresses, wherever a document put them.
 
     Deliberately not restricted to markdown link targets. The dead
     OpenFastTrace link that motivated this kind was a bare URL in a list, and a
     checker that only reads ``[text](target)`` would have walked past it -- which
     is what happened for the whole life of the project.
+
+    **A token with no authority is not an address.** Prose that elides a URL --
+    scheme, separator, then an ellipsis -- lost its dots to the punctuation
+    strip below and became a bare scheme, which then got a real network request
+    and a place in the report. Filtered on the empty authority rather than on
+    the ellipsis: the ellipsis was how it was found, but anything the strip can
+    reduce to a scheme has the same defect, and matching the symptom would leave
+    the next spelling of it to be found the same way.
     """
     seen: dict[str, None] = {}
     for match in _URL.finditer(line):
         # Trailing sentence punctuation belongs to the prose, not the address.
-        seen.setdefault(match.group(0).rstrip(".,;:!?"), None)
+        address = match.group(0).rstrip(".,;:!?")
+        if not urllib.parse.urlsplit(address).netloc:
+            continue
+        seen.setdefault(address, None)
     yield from seen
 
 
@@ -478,7 +612,7 @@ def _resolve_url(text: str, tree: Tree, document: Path) -> bool:
 
 @dataclass(frozen=True)
 class Counted:
-    """A number the documentation states, and the command that settles it.
+    """A value the documentation states, and the command that settles it.
 
     The only claim kind whose oracle is outside the tree, and the only one that
     is **opt-in**: settling it means running a command from a config file. That
@@ -489,12 +623,53 @@ class Counted:
     Worth the cost because the failure is common and invisible: this project's
     notes claimed 74 tests through three separate sessions in which the true
     number went 76, 88, 103.
+
+    **A number is the special case; a value is the general one.** Everything
+    else here is negative in polarity: a registry says a declared value must not
+    be re-spelled outside its home, so a second spelling is a finding and
+    agreement is silence. An adopting project inventoried 326 conformance checks
+    against this tool on 2026-09-09 and could not express 291 of them, and the
+    largest single structural reason was that polarity -- **125 test functions**
+    across four manifest-parity suites assert the opposite shape, *this
+    documented row equals what the code produces*. Under a negative mechanism
+    that shape comes out inverted: agreement produces the finding and
+    disagreement produces silence.
+
+    This tree carries the same inversion. The projection budget is declared once
+    in ``contract.py`` and three documents restate the number; raising the
+    constant leaves every gate green while all three documents go stale, because
+    until this settled values there was nothing that compared a documented value
+    against the one the code holds.
+
+    **The comparison is exact, and nothing is normalized.** A document saying
+    "16 KB" is not settled by an oracle that emits the byte count, and that is a
+    **known and accepted limit, not an oversight**: a project that wants both
+    spellings checked declares two entries, each with its own ``pattern`` and
+    its own ``extract``. No unit conversion, no numeric coercion between unlike
+    spellings, no rounding, no fuzzy match -- because a normalization that is
+    wrong does not fail, it *passes*, and a check that passes wrongly is the
+    exact failure this package exists to prevent.
+
+    **Edge whitespace is stripped from both sides, and nothing else is.** What
+    sits at the ends of a capture belongs to the regex that captured it -- the
+    newline a command's output ends in, a loosely written ``\\s*`` -- and is not
+    something either the document or the oracle asserts; letting it decide the
+    comparison would be silent wrongness of its own, in a check whose whole
+    argument is against that. Interior spacing and surrounding punctuation are
+    kept verbatim: ``a b`` and ``a  b`` are different spellings, and what falls
+    inside the capture group is the declaration's decision rather than this
+    comparison's.
+
+    **There is one oracle form, the subprocess.** Reading the value out of the
+    source with ``ast`` was considered and dropped: the constant that motivated
+    this is an arithmetic expression rather than a literal, so
+    ``ast.literal_eval`` cannot read the very value at issue.
     """
 
-    #: Group 1 is the claimed number.
+    #: The first matching group is the claimed value.
     pattern: str
     command: tuple[str, ...]
-    #: Group 1 is the true number, read from the command's output.
+    #: Group 1 is the true value, read from the command's output.
     extract: str
     label: str = "count"
     #: Where to run, relative to the scanned root. Documents and the thing they
@@ -503,19 +678,20 @@ class Counted:
     directory: str = "."
 
 
-def counted_claims(text: str, spec: Counted) -> Iterator[tuple[int, str]]:
-    """The numbers a line states, however the pattern chose to capture them.
+def counted_claims(text: str, spec: Counted) -> Iterator[tuple[str, str]]:
+    """The values a line states, however the pattern chose to capture them.
 
-    The first *matching* group, not group 1. A count claim is naturally written
-    as alternation -- "**103 tests**" or "103 tests pass" -- and every branch
-    but the one that matched captures ``None``. Reading group 1 blindly crashes
-    on the second phrasing, which is how this was found.
+    The first *matching* group, not group 1. A claim like this is naturally
+    written as alternation -- "**103 tests**" or "103 tests pass" -- and every
+    branch but the one that matched captures ``None``. Reading group 1 blindly
+    crashes on the second phrasing, which is how this was found; this project's
+    own test-count pattern now carries four branches.
     """
     for match in re.finditer(spec.pattern, text):
-        number = next((group for group in match.groups() if group), None)
-        if number is None:
+        value = next((group for group in match.groups() if group), None)
+        if value is None:
             continue
-        yield int(number), match.group(0)
+        yield value.strip(), match.group(0)
 
 
 #: Stands for the interpreter kinemata is running under. A config file cannot
@@ -525,8 +701,12 @@ def counted_claims(text: str, spec: Counted) -> Iterator[tuple[int, str]]:
 INTERPRETER = "{python}"
 
 
-def actual_count(spec: Counted, root: Path) -> int | None:
-    """Run the oracle. ``None`` when it cannot be reached -- never a pass."""
+def actual_count(spec: Counted, root: Path) -> str | None:
+    """Run the oracle. ``None`` when it cannot be reached -- never a pass.
+
+    The value comes back as the text the oracle printed, stripped at the edges
+    only; see :class:`Counted` for why nothing further is done to it.
+    """
     command = [
         sys.executable if part == INTERPRETER else part for part in spec.command
     ]
@@ -538,7 +718,7 @@ def actual_count(spec: Counted, root: Path) -> int | None:
     except (OSError, ValueError):
         return None
     found = re.search(spec.extract, result.stdout + result.stderr)
-    return int(found.group(1)) if found else None
+    return found.group(1).strip() if found else None
 
 
 @dataclass(frozen=True)
@@ -550,6 +730,9 @@ class ClaimKind:
     resolve: Callable[[str, Tree, Path], bool]
     #: Kinds that report the tree's *current* state are wrong to run over
     #: superseded records: an archive cites what was true when it was written.
+    #: A kind whose oracle is **outside** the tree does not get this: there is
+    #: no "was true then" for it to appeal to, and switching it off inside an
+    #: archive removes real findings rather than false ones.
     current_only: bool = True
     #: This kind cannot be settled from the file tree alone. The loop asks the
     #: row rather than testing its name, so a fourth kind needing git costs a
@@ -576,7 +759,17 @@ CLAIM_KINDS: tuple[ClaimKind, ...] = (
     # the one claim in these documents nothing could falsify: `_link_claims`
     # skips any target carrying a scheme, so a dead OpenFastTrace link sat in
     # `CONVENTIONS.md` until a reader noticed it. Off unless asked.
-    ClaimKind("url", _url_claims, _resolve_url, needs_network=True),
+    #
+    # And **not** current_only, which it was until 2026-09-09. That flag exempts
+    # a record from being judged against the tree's present state, because an
+    # archive cites what was true when it was written. A URL is not about the
+    # tree, so there is nothing for the record to have been right about at the
+    # time: a dead link in a changelog is a dead link, and the reader following
+    # it gets the same nothing either way. Measured on an adopting project,
+    # whose two historical fragments took 17 of its 36 URLs out of the check --
+    # including both of the genuine 404s it had.
+    ClaimKind("url", _url_claims, _resolve_url, current_only=False,
+              needs_network=True),
 )
 
 
@@ -683,6 +876,43 @@ def _index(root: Path, exclusions: Sequence[str]) -> tuple[set[str], set[str]]:
     return files, directories
 
 
+def _report_inert_suffixes(
+    read: dict[str, int], yielded: dict[str, int], root: Path, found: Verification
+) -> None:
+    """Say which declared document suffix settled nothing, and which kind of nothing.
+
+    ``[claims] suffixes`` reads as "scan these documents", and every extractor
+    behind it is bound to markdown syntax: a single-backticked token, a bracket
+    and parenthesis link, a backticked hex run. A format that happens to share
+    that syntax works by coincidence -- a double-backticked literal in
+    reStructuredText contains a markdown span, and the path inside it is found.
+    A format sharing none of it contributes nothing. An adopter added a YAML
+    suffix on 2026-09-09 and got byte-identical output: no extra claims, no
+    note, and a green run that meant less than the one before it.
+
+    A warning rather than a failure, because a suffix matching no files is a
+    thing a shared config legitimately does. The two messages are kept apart
+    because the fixes are: nothing matched is usually a typo or a tree without
+    those documents, while files matched and yielded nothing is the trap -- the
+    documents were read and this could not see anything in them.
+    """
+    for suffix, count in read.items():
+        if not count:
+            _warn(
+                found,
+                f"claim suffix {suffix} matched no files under {root}. Nothing "
+                "was read for it, so it settles nothing.",
+            )
+        elif not yielded[suffix]:
+            _warn(
+                found,
+                f"claim suffix {suffix} matched {count} file(s) and yielded no "
+                "claims. Every extractor here reads markdown syntax -- a "
+                "backticked token, a bracket-and-parenthesis link -- so a "
+                "document in another format is read and contributes nothing.",
+            )
+
+
 def verify(
     root: str | Path,
     *,
@@ -691,6 +921,7 @@ def verify(
     historical: Iterable[str] = (),
     kinds: Sequence[ClaimKind] = CLAIM_KINDS,
     counts: Sequence[Counted] = (),
+    file_suffixes: Iterable[str] = (),
     resolve_in: Iterable[str] = (),
     commits_in: Iterable[str] = (),
     promised: Iterable[Promise] = (),
@@ -722,6 +953,12 @@ def verify(
         ``docs/plan.md`` that also silenced every other ``plan.md`` in the tree
         would suppress claims nobody chose to defer. Two spellings mean two
         entries.
+    :param file_suffixes: extensions that make a backticked bare filename a
+        path claim, **added to** :data:`FILE_SUFFIXES` rather than replacing
+        it. Without this the allowlist is fourteen names chosen here, and a
+        repository whose content is a container definition and a shell
+        configuration is one the check cannot see at all -- measured on an
+        adopter, four claims of twenty-seven, looking nearly green.
     :param commits_in: further repositories whose commits may be cited. Notes
         that review another project name its commits, and settling those
         against only this repository reports honest citations as dead.
@@ -729,6 +966,22 @@ def verify(
         that live beside a repository rather than inside it describe *that*
         tree, and resolving them only against their own is how a correct
         reference reads as a dead one.
+
+        **A directory named here and not present raises.** It fails open
+        otherwise, and open is invisible: an adopter compared a run declaring a
+        missing sibling tree against a run declaring nothing and got identical
+        bytes -- same findings, same exit code, no note. In CI, where the
+        sibling is usually not checked out, that is every claim it was meant to
+        settle going unchecked while the run reads clean. A warning was
+        considered and rejected: the steady state this would have to tolerate is
+        "the tree I resolve against is often absent", and a project in that
+        state is asking for a check it is not getting.
+
+        Note that these trees are also searched for cited commits, so declaring
+        one turns on commit resolution against it. That is deliberate --
+        ``_known_commits`` exists because notes beside a repository cite its
+        history and their own directory is not a repository -- but it does mean
+        a path knob has a second effect, which is why it is written down here.
     """
     root = Path(root)
     archives = tuple(fragment for fragment in historical if fragment)
@@ -753,19 +1006,30 @@ def verify(
     roots = [root]
     for other in resolve_in:
         elsewhere = (root / other).resolve()
-        if elsewhere.is_dir():
-            roots.append(elsewhere)
-            more_files, more_directories = _index(elsewhere, git_ignored(elsewhere))
-            # Indexed twice: bare, and under the tree's own name. Notes beside a
-            # repository call it by name -- `workspace/docs/design.md` -- and
-            # indexing only the inside of that tree reports the reference dead.
-            label = elsewhere.name
-            files |= more_files | {f"{label}/{rel}" for rel in more_files}
-            directories |= more_directories | {f"{label}/{rel}" for rel in more_directories}
+        if not elsewhere.is_dir():
+            raise ClaimsError(
+                f"resolve_in names {other!r}, which is not a directory here "
+                f"({elsewhere}). Every claim it was to settle would go "
+                "unchecked and the run would still read clean."
+            )
+        roots.append(elsewhere)
+        more_files, more_directories = _index(elsewhere, git_ignored(elsewhere))
+        # Indexed twice: bare, and under the tree's own name. Notes beside a
+        # repository call it by name -- `workspace/docs/design.md` -- and
+        # indexing only the inside of that tree reports the reference dead.
+        label = elsewhere.name
+        files |= more_files | {f"{label}/{rel}" for rel in more_files}
+        directories |= more_directories | {f"{label}/{rel}" for rel in more_directories}
     tree = Tree(root=root, files=files, directories=directories, roots=tuple(roots))
 
     found = Verification()
     pending: list[tuple[ClaimKind, str, Claim]] = []
+    known_suffixes = FILE_SUFFIXES | {str(suffix) for suffix in file_suffixes}
+    # Per declared document suffix, so a suffix that is present and inert can be
+    # told apart from one that is present and working. Both halves are needed:
+    # zero files and zero claims are different mistakes with different fixes.
+    read: dict[str, int] = dict.fromkeys((str(s) for s in suffixes), 0)
+    yielded: dict[str, int] = dict.fromkeys(read, 0)
 
     for path in _walk(root, suffixes):
         rel = path.relative_to(root).as_posix()
@@ -776,15 +1040,20 @@ def verify(
             source = path.read_text(errors="ignore")
         except OSError:
             continue
+        read[path.suffix] += 1
+        before = len(pending)
 
         previous = ""
         for number, line in enumerate(source.splitlines(), start=1):
             for kind in kinds:
                 if historic and kind.current_only:
                     continue
-                for text in kind.extract(line, previous):
+                for text in kind.extract(line, previous, known_suffixes):
                     pending.append((kind, text, Claim(kind.name, text, rel, number)))
             previous = line
+        yielded[path.suffix] += len(pending) - before
+
+    _report_inert_suffixes(read, yielded, root, found)
 
     commit_roots = roots + [
         (root / other).resolve() for other in commits_in
@@ -865,14 +1134,14 @@ def _verify_counts(
     counts: Sequence[Counted],
     found: Verification,
 ) -> None:
-    """Numbers the prose states, against what the oracle actually reports."""
+    """Values the prose states, against what the oracle actually reports."""
     for spec in counts:
         truth = actual_count(spec, root)
         if truth is None:
             # Declared and unreachable is a failure, not a note. The project
             # asked for this check; a broken oracle means it is not running.
             found.blocked.append(
-                f"{spec.label}: {' '.join(spec.command)} produced no number"
+                f"{spec.label}: {' '.join(spec.command)} produced no value"
             )
             continue
         for path in _walk(root, suffixes):
