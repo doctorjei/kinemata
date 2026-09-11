@@ -355,8 +355,9 @@ class Tree:
         target = claim.strip().rstrip("/.,;:")
         # `./name` anchors to the document's own directory. Stripping it lets
         # the fallbacks below answer: httpie's packaging README names
-        # `./get_release_artifacts.sh`, the file sits beside it, and this
-        # reported it dead because the prefix survived into every lookup.
+        # `./get_release_artifacts.sh` [0TMVXHC-Pa0005], the file sits beside
+        # it, and this reported it dead because the prefix survived into every
+        # lookup.
         if target.startswith("./"):
             target = target[2:]
         if not target:
@@ -398,6 +399,34 @@ class Verification:
     #: the project intends to produce, and it does not exist yet. Reported on
     #: every run, never a failure -- that is what declaring it bought.
     deferred: list[Claim] = field(default_factory=list)
+    #: Claims a bibliography says are about **another project's tree**: the
+    #: citation stands beside a reference key whose entry names a foreign
+    #: source. Reported on every run, never a failure -- the same bargain a
+    #: promise strikes, and for the same reason. The alternative shapes were
+    #: both worse: leaving them broken makes the gate permanently red over
+    #: honest citations, and dropping the readable target so no claim is
+    #: extracted hides the evidence in a second file, against section 5.6.
+    #:
+    #: Counted in the report, the way a promise and an illustration are, and
+    #: for the same reason: a suppression nobody can see the size of is an
+    #: allowlist with a good story. The sites are not repeated there because
+    #: this is the one suppression that already has a resolver -- the key is
+    #: declared, so ``kinemata cite --where`` lists every place it is cited
+    #: and ``unused`` names an entry nothing cites any more.
+    foreign: list[Claim] = field(default_factory=list)
+    #: Claims that did not fail and were not confirmed either: the oracle was
+    #: off, absent, or unable to answer. **Never a failure** -- that is
+    #: :attr:`ClaimKind.settled`'s whole argument, and gating on weather is what
+    #: the three-way reading exists to avoid.
+    #:
+    #: ``unavailable`` already names the *oracle* that could not answer; this
+    #: names the **claims** that went unconfirmed because of it, which is the
+    #: half a reader cannot reconstruct from the other: one unreachable address
+    #: cited from four documents is one line there and four sites here.
+    #:
+    #: Read by :mod:`kinemata.confirm`, which needs the opposite reading: a
+    #: document with an unsettled claim in it is one this run cannot date.
+    unsettled: list[Claim] = field(default_factory=list)
     #: Promises the tree has since kept. A **failure**, and the only kind here
     #: that fires on something going right: the declaration is now false, and
     #: an exemption list nobody prunes is an allowlist with a good story.
@@ -740,6 +769,21 @@ def _resolve_commit(text: str, tree: Tree, document: Path) -> bool:
     return tree.commits is None or text in tree.commits
 
 
+def _settled_commit(text: str, tree: Tree, document: Path) -> bool:
+    """Did the history answer, or is there no history here to ask?"""
+    return tree.commits is not None
+
+
+def _settled_url(text: str, tree: Tree, document: Path) -> bool:
+    """Did the address answer at all?
+
+    False when the network check is off and false when the request came back
+    unreadable -- a timeout, a 5xx, the 403 a bot-hostile host returns. Both are
+    passes for the gate and neither is a confirmation.
+    """
+    return tree.reachable is not None and tree.reachable.get(text) is not None
+
+
 def _resolve_url(text: str, tree: Tree, document: Path) -> bool:
     """A URL is false only when something said so.
 
@@ -887,6 +931,19 @@ class ClaimKind:
     needs_network: bool = False
     #: What to report when the kind cannot be checked. Named, never dropped.
     when_unavailable: str = ""
+    #: Did the oracle actually answer *yes*, or did it merely fail to say no?
+    #: Absent for a kind whose oracle always answers -- a path is in the index
+    #: or it is not.
+    #:
+    #: **The gate deliberately conflates the two and this is where the two come
+    #: apart.** ``resolve`` treats a claim as false only when something said so,
+    #: because a check that went red on a timeout would teach its reader to skim
+    #: a red gate. That reading is right for gating and wrong for *writing*: a
+    #: run that could not reach an address has not confirmed it, and
+    #: :mod:`kinemata.confirm` must not date a document on the strength of a
+    #: question nobody answered. One extra function per kind, rather than a
+    #: second resolver that would eventually disagree with the first.
+    settled: Callable[[str, Tree, Path], bool] | None = None
 
 
 #: Adding a kind is a row here. The verification loop never learns their names.
@@ -897,6 +954,7 @@ CLAIM_KINDS: tuple[ClaimKind, ...] = (
         "commit", _commit_claims, _resolve_commit,
         needs_git=True,
         when_unavailable="commit hashes (not a git repository)",
+        settled=_settled_commit,
     ),
     # A URL is a claim about the world rather than about the tree, and it was
     # the one claim in these documents nothing could falsify: `_link_claims`
@@ -912,7 +970,7 @@ CLAIM_KINDS: tuple[ClaimKind, ...] = (
     # whose two historical fragments took 17 of its 36 URLs out of the check --
     # including both of the genuine 404s it had.
     ClaimKind("url", _url_claims, _resolve_url, current_only=False,
-              needs_network=True),
+              needs_network=True, settled=_settled_url),
 )
 
 
@@ -1096,6 +1154,7 @@ def verify(
     file_suffixes: Iterable[str] = (),
     resolve_in: Iterable[str] = (),
     commits_in: Iterable[str] = (),
+    foreign: Callable[[Claim], bool] | None = None,
     promised: Iterable[Promise] = (),
     today: date | None = None,
     external: bool = False,
@@ -1134,6 +1193,31 @@ def verify(
     :param commits_in: further repositories whose commits may be cited. Notes
         that review another project name its commits, and settling those
         against only this repository reports honest citations as dead.
+
+        **A path named here that is absent, or present and not a repository,
+        raises** -- the same refusal ``resolve_in`` makes, for the same reason
+        and one layer deeper. ``_known_commits`` keeps only the roots that are
+        repositories, so either mistake used to vanish into that filter: the
+        declaration contributed nothing and said nothing, and the run stayed
+        green while every citation it was meant to settle was judged against
+        this repository alone. The shape bites hardest where it is least
+        visible -- a corpus checked out on a developer's machine and gitignored
+        in CI settles the citations locally and silently stops settling them
+        where the gate actually runs.
+    :param foreign: asked of a claim this tree could not settle, and answers
+        whether the project has *declared* it to be about somebody else's tree.
+        A predicate rather than a bibliography, because this module must not
+        learn what a registry is: documentation checking works on a repository
+        that declares no registry at all, and wiring the two together here
+        would make the claims gate need one. The caller that knows about both
+        builds it -- :func:`kinemata.provenance.declared_foreign`.
+
+        **The evidence this exists for is a docstring citing another
+        repository.** This package's own source names commits and paths in the
+        projects it was validated against; they are real citations of real
+        artifacts, permanently unresolvable here because those trees are not
+        this one. Left unhandled they are dead claims forever, which is a gate
+        that can never go green over text nobody should change.
     :param resolve_in: further trees a claim may resolve against. Process notes
         that live beside a repository rather than inside it describe *that*
         tree, and resolving them only against their own is how a correct
@@ -1236,9 +1320,24 @@ def verify(
 
     _report_inert_suffixes(read, yielded, root, found)
 
-    commit_roots = roots + [
-        (root / other).resolve() for other in commits_in
-    ]
+    commit_roots = list(roots)
+    for other in commits_in:
+        elsewhere = (root / other).resolve()
+        # Refuse precisely what `_known_commits` would drop, so a declaration
+        # that survives this loop is one that will actually be consulted.
+        if not elsewhere.is_dir():
+            raise ClaimsError(
+                f"commits_in names {other!r}, which is not a directory here "
+                f"({elsewhere}). Every commit it was to settle would be "
+                "reported against this repository alone."
+            )
+        if not _is_repository(elsewhere):
+            raise ClaimsError(
+                f"commits_in names {other!r}, which is not a git repository "
+                f"({elsewhere}). Naming it settles nothing and says nothing, "
+                "which is the failure resolve_in was taught to refuse."
+            )
+        commit_roots.append(elsewhere)
     tree.commits = _known_commits(
         commit_roots, (text for kind, text, _ in pending if kind.needs_git)
     )
@@ -1250,6 +1349,24 @@ def verify(
         )
 
     cited = {text for kind, text, _ in pending if kind.needs_network}
+    if external and not cited:
+        # The mirror of the branch below, and it went unwritten while that one
+        # was being argued for. Declared and reaching nothing reads exactly like
+        # declared and checking twelve: the run is green either way and the
+        # network was never touched. Measured here on 2026-09-11 -- excluding
+        # two documents this project carries without authoring took the
+        # population from five addresses to none, all five of which had been
+        # somebody else's, so the check had been settling no link of this
+        # project's at all while looking like a network gate.
+        #
+        # A warning rather than a failure, the same call `_report_inert_suffixes`
+        # makes: a tree that legitimately cites no address is a normal tree.
+        _warn(
+            found,
+            "[claims] external is on and no document cites an address, so the "
+            "network check settles nothing. Green here means it found no links "
+            "to check, not that the links check out.",
+        )
     if external:
         tree.reachable = _reach_all(cited, timeout)
         # Named one at a time rather than counted. An unanswerable address is
@@ -1272,6 +1389,17 @@ def verify(
     for kind, text, claim in pending:
         found.checked += 1
         if kind.resolve(text, tree, root / claim.path):
+            # Resolving is the gate's answer and not always the writer's: ask
+            # the row whether anything actually said yes.
+            if kind.settled is not None and \
+                    not kind.settled(text, tree, root / claim.path):
+                found.unsettled.append(claim)
+            continue
+        # Asked only once the tree has failed to settle it. A citation that
+        # resolves here is about here, whatever a key beside it says -- so a
+        # foreign declaration can never take a live claim out of the check.
+        if foreign is not None and foreign(claim):
+            found.foreign.append(claim)
             continue
         if kind.name in PROMISABLE and _normalize(text) in promised_paths:
             found.deferred.append(claim)

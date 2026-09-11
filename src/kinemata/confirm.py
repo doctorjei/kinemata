@@ -44,20 +44,39 @@ to insert and nothing to move. The timestamp is overwritten in place, the
 replacement is the same length as what it replaces, and every other byte of the
 document -- line endings, trailing spaces, the final newline, the order of
 anything -- is the byte it was.
+
+**There is a second thing to date, and it is not prose.** A user-facing
+document cannot carry a stamp, so its date lives in a declared resource list and
+this module writes that too -- see :func:`dating` and :func:`redate`. The three
+rules above hold there unchanged: the gate never reaches it, only ``--write``
+does, and only a document whose every citation this run settled is dated. What
+differs is that a first date has to be *inserted*, which prose never needs and
+which is admissible in a list the tool maintains.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from . import stamps
 from .adapters.bibliography import INTERPRETED, Bibliography, undeclared_key
 from .bypass import _walk, git_ignored
-from .claims import EXTERNAL_TIMEOUT, Tree, _index, _known_commits, _normalize, _reach_all
+from .claims import (
+    EXTERNAL_TIMEOUT,
+    Tree,
+    Verification,
+    _index,
+    _known_commits,
+    _normalize,
+    _reach_all,
+)
 from .contract import Entry
+from .prose import UNFENCED_FILTERS
+from .resources import RESOURCE_TABLE, Resource
 
 
 class ConfirmError(Exception):
@@ -390,8 +409,30 @@ def plan(
         # will. Offsets are only meaningful against the text they were measured
         # in, and `read_text` would have translated a CRLF document into
         # something the file on disk does not say.
-        for number, line in enumerate(source.splitlines(keepends=True), start=1):
-            for stamp in stamps.find(line):
+        lines = source.splitlines(keepends=True)
+        # **Stamps are read from what the file says, never from what it shows.**
+        # Found by running this command after `.py` came into scope: this
+        # package's own `stamps` module illustrates a malformed key to explain
+        # why the width is fixed, and read raw that is not an illustration, it
+        # is a malformed citation -- so `confirm` refused outright, exit 2,
+        # before examining a single real one. The identical break had already
+        # been found and fixed in `unused`; nothing checked the third reader.
+        #
+        # The reductions blank in place, preserving every line's length, so a
+        # span found here is a span in the file. That is asserted rather than
+        # assumed: a filter that dropped a character would move every offset
+        # after it, and the writer would date the wrong seven bytes.
+        filtered = UNFENCED_FILTERS.get(path.suffix)
+        shown = filtered(source).splitlines() if filtered is not None else None
+        if shown is not None and len(shown) != len(lines):
+            raise ConfirmError(
+                f"{rel}: reducing the file to what it says changed its line "
+                "count, so no offset read from it can be trusted against the "
+                "file on disk. Nothing was written."
+            )
+        for number, line in enumerate(lines, start=1):
+            said = line if shown is None else shown[number - 1]
+            for stamp in stamps.find(said):
                 if stamp.key is None:
                     continue
                 sites.append(
@@ -481,6 +522,20 @@ def _judge(
 
     entry = declared[key]
     code, target = str(entry.extra["type"]), str(entry.extra["target"])
+    # A source the project has declared to be in somebody else's tree is asked
+    # about before an oracle here is. Every oracle here answers about *this*
+    # tree, so a foreign commit reads as "the history does not know it" and a
+    # foreign path as "no such path" -- both true statements that say the source
+    # is gone, when what is true is that this is not the repository that can
+    # tell. Eight of them were being reported that way, which is a report a
+    # reader would act on by deleting real citations.
+    if entry.extra.get("foreign"):
+        return Outcome(
+            site.path, site.line, key, UNSETTLED,
+            f"declared foreign to {entry.extra['foreign']}, which is the tree "
+            "that can settle it",
+            body, body, at,
+        )
     settler = _BY_CODE.get(code)
     if settler is None:
         return Outcome(
@@ -525,6 +580,275 @@ def _refusal(site: _Site, key: str, declared: dict[str, Entry]) -> str | None:
             "One of them is wrong, and nothing here can tell which."
         )
     return None
+
+
+@dataclass(frozen=True)
+class Dating:
+    """One declared resource, and what this run could say about its citations.
+
+    The verdicts are the ones a keyed citation gets, read one level up: a
+    document is confirmed when *everything it cites* was, gone when one of them
+    was falsified, unsettled when one of them could not be reached.
+    """
+
+    path: str
+    verdict: str
+    #: Why, for everything that is not a plain confirmation.
+    detail: str = ""
+    #: The date as the entry stands, and what would replace it. ``old`` is empty
+    #: for a resource no run has ever dated.
+    old: str = ""
+    new: str = ""
+
+    @property
+    def writes(self) -> bool:
+        return self.verdict == CONFIRMED
+
+    def __str__(self) -> str:
+        if self.writes:
+            return f"  {self.path}  {self.old or '(never)'} -> {self.new}  {self.detail}"
+        return f"  {self.path}  {self.verdict}: {self.detail}"
+
+
+@dataclass(frozen=True)
+class Listing:
+    """What a confirmation run found about the declared resources, and nothing
+    it did.
+
+    The resource half of ``kinemata confirm``, separate from :class:`Plan` for
+    the same reason that is separate from :func:`apply`: the default behavior of
+    the one writing command in this package is to describe the edit.
+    """
+
+    source: Path
+    when: datetime
+    datings: tuple[Dating, ...] = ()
+
+    @property
+    def writes(self) -> tuple[Dating, ...]:
+        return tuple(dating for dating in self.datings if dating.writes)
+
+    def counts(self) -> dict[str, int]:
+        tally = dict.fromkeys(VERDICTS, 0)
+        for dating in self.datings:
+            tally[dating.verdict] += 1
+        return tally
+
+    def text(self, *, verbose: bool = False, quiet: bool = False) -> str:
+        out: list[str] = []
+        if not quiet:
+            out.extend(
+                str(dating) for dating in self.datings
+                if verbose or dating.verdict != CURRENT
+            )
+            if out:
+                out.append("")
+        tally = self.counts()
+        total = sum(tally.values())
+        parts = [f"{count} {SUMMARY[verdict]}"
+                 for verdict, count in tally.items() if count]
+        out.append(
+            f"{total} declared resource(s)" + (f": {', '.join(parts)}" if parts else "")
+        )
+        return "\n".join(out)
+
+
+#: Why a run cannot date a document, in the order a reader wants to hear them.
+#: A falsified citation first, because that is the one somebody has to fix; the
+#: rest are all "nothing here answered", differing only in what did not.
+#:
+#: Read off :class:`~kinemata.claims.Verification` by attribute name rather than
+#: tested for one at a time, so a later bucket of claims-this-run-did-not-settle
+#: costs a row here instead of a branch nobody remembers to add.
+BLOCKING: tuple[tuple[str, str, str], ...] = (
+    ("broken", GONE, "does not resolve"),
+    ("unsettled", UNSETTLED, "could not be settled by this run"),
+    ("deferred", UNSETTLED, "is held open by a promise"),
+    ("foreign", UNSETTLED, "is declared to be in another project's tree"),
+)
+
+
+def dating(
+    resources: Sequence[Resource],
+    found: Verification,
+    *,
+    source: str | Path,
+    when: datetime | None = None,
+) -> Listing:
+    """Which declared resources this run verified, and which it could not.
+
+    Reads. Writes nothing.
+
+    **The oracle is ``claims``, deliberately, and not the citation survey.** The
+    question a resource's date answers is *does everything this document cites
+    still hold*, which is the question ``claims`` settles -- including inside
+    fenced blocks, which the citation policy does not read because a fenced
+    citation is a picture of one. Two mechanisms answering "is this document
+    sound" differently is the failure this package reports in other people's
+    records, so there is one answer and this is not a second copy of it.
+
+    **Nothing short of a settled yes dates a document.** A falsified citation, a
+    citation no oracle could reach, one held open by a promise and one declared
+    to live in another project's tree are all citations this run did not
+    confirm; the first is a defect and the rest are honest, and none of them is
+    a verification. A declared oracle that would not run at all stops the whole
+    pass, because a date written under it would record a check that was
+    skipped.
+    """
+    when = when or datetime.now(UTC)
+    blocked = "; ".join(found.blocked)
+    reasons: dict[str, tuple[str, str]] = {}
+    for attribute, verdict, why in BLOCKING:
+        for claim in getattr(found, attribute):
+            reasons.setdefault(
+                claim.path,
+                (verdict, f"{claim.path}:{claim.line}: {claim.text} {why}"),
+            )
+
+    datings: list[Dating] = []
+    for resource in resources:
+        old = resource.confirmed.isoformat() if resource.confirmed else ""
+        if blocked:
+            datings.append(Dating(
+                resource.path, REFUSED,
+                f"a declared oracle did not run ({blocked}), so nothing this "
+                "run says about any document is a check that happened",
+                old, old,
+            ))
+            continue
+        if resource.path in reasons:
+            verdict, why = reasons[resource.path]
+            datings.append(Dating(resource.path, verdict, why, old, old))
+            continue
+        if resource.confirmed == when.date():
+            datings.append(Dating(resource.path, CURRENT, "", old, old))
+            continue
+        datings.append(Dating(
+            resource.path, CONFIRMED, "every citation resolved",
+            old, when.date().isoformat(),
+        ))
+    return Listing(source=Path(source), when=when, datings=tuple(datings))
+
+
+#: The entry's own line, and the two pieces a rewrite keeps around it.
+_CONFIRMED_LINE = re.compile(
+    r'^(?P<before>\s*confirmed\s*=\s*")(?P<date>[^"]*)(?P<after>".*)$'
+)
+_PATH_LINE = re.compile(r'^(?P<indent>\s*)path\s*=\s*"(?P<path>[^"]*)"')
+
+
+def _blocks(lines: Sequence[str]) -> dict[str, tuple[int, int]]:
+    """Each declared resource's path, and the line range its entry occupies.
+
+    Line-based rather than by re-serializing the parsed document. ``tomllib``
+    reads and does not write, and a round trip through any writer that does
+    would reformat a file whose comments are half its value -- the same reason
+    :func:`apply` edits prose in place instead of regenerating it.
+    """
+    spans: dict[str, tuple[int, int]] = {}
+    start: int | None = None
+    path: str | None = None
+    for number, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("["):
+            if start is not None and path is not None:
+                spans[path] = (start, number)
+            start, path = (number, None) if stripped == f"[[{RESOURCE_TABLE}]]" else (None, None)
+            continue
+        if start is None:
+            continue
+        found = _PATH_LINE.match(line)
+        if found:
+            path = PurePosixPath(found.group("path").strip()).as_posix()
+    if start is not None and path is not None:
+        spans[path] = (start, len(lines))
+    return spans
+
+
+def redate(listing: Listing) -> int:
+    """Write the confirmations in ``listing`` into the resource file.
+
+    Returns how many entries were written. **The only other function here that
+    touches a file**, and it touches exactly one: the list, never a document.
+    That is the whole point of the list -- the date moves and the prose does
+    not.
+
+    An entry that already carries a date has its ten date characters replaced
+    in place, the same fixed-width edit :func:`apply` makes to a stamp. An entry
+    that carries none has one line inserted directly under its ``path``, at that
+    line's indentation. Insertion is admitted here and refused in prose for a
+    reason that is not squeamishness: this file is a list the tool maintains,
+    and a document is somebody's writing.
+
+    Refuses when an entry cannot be found, or when its ``confirmed`` line is not
+    one this function wrote. Searching for where the entry went is the guess
+    this module does not make.
+    """
+    source = listing.source
+    original = source.read_bytes()
+    text = original.decode("utf-8")
+    lines = text.splitlines(keepends=True)
+    spans = _blocks(lines)
+
+    # Bottom-up, so an insertion never moves a span this loop has yet to use.
+    ordered = sorted(
+        listing.writes,
+        key=lambda dating: spans.get(dating.path, (-1, -1))[0],
+        reverse=True,
+    )
+    for dating in ordered:
+        span = spans.get(dating.path)
+        if span is None:
+            raise ConfirmError(
+                f"{source}: no [[{RESOURCE_TABLE}]] entry declares "
+                f"{dating.path}, though the run read one from this file. "
+                "Nothing was written to it."
+            )
+        start, end = span
+        for number in range(start, end):
+            written = _CONFIRMED_LINE.match(lines[number])
+            if written is None:
+                continue
+            if written.group("date") != dating.old:
+                raise ConfirmError(
+                    f"{source}:{number + 1} no longer reads the way it did when "
+                    f"this run examined it ({dating.path}). Nothing was written "
+                    "to it. Run the check again."
+                )
+            lines[number] = (
+                written.group("before") + dating.new + written.group("after")
+            )
+            break
+        else:
+            lines.insert(*_inserted(lines, span, dating))
+
+    updated = "".join(lines).encode("utf-8")
+    if updated == original:
+        return 0
+    source.write_bytes(updated)
+    return len(listing.writes)
+
+
+def _inserted(
+    lines: list[str], span: tuple[int, int], dating: Dating
+) -> tuple[int, str]:
+    """Where a first ``confirmed`` line goes, and what it says.
+
+    Under the entry's ``path``, because that is the line a reader looks at to
+    know which document the date belongs to, and a field that drifts to the
+    bottom of a growing entry stops reading as part of the same statement.
+    """
+    start, end = span
+    for number in range(start, end):
+        found = _PATH_LINE.match(lines[number])
+        if found is None:
+            continue
+        ending = "\n" if not lines[number].endswith("\r\n") else "\r\n"
+        return number + 1, f'{found.group("indent")}confirmed = "{dating.new}"{ending}'
+    raise ConfirmError(
+        f"the entry for {dating.path} declares no path line to write beneath, "
+        "which the loader would have refused. Nothing was written."
+    )
 
 
 def apply(made: Plan) -> tuple[tuple[str, int], ...]:

@@ -48,7 +48,7 @@ import inspect
 import tomllib
 from dataclasses import dataclass, field
 from datetime import date
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .adapters.bibliography import Bibliography, duplicate_keys
@@ -59,7 +59,7 @@ from .adapters.substitutions import Substitutions
 from .baseline import BASELINE_NAME
 from .bypass import MODE_FILTERS, git_ignored
 from .citations import DEFAULT_ACCOMPANY_MAX
-from .claims import CLAIMS_REGISTRY, EXTERNAL_TIMEOUT, Counted, Promise
+from .claims import CLAIMS_REGISTRY, EXTERNAL_TIMEOUT, Counted, Promise, _excluded
 from .context import STRIPPERS
 from .contract import (
     BaseRegistry,
@@ -70,6 +70,12 @@ from .contract import (
 )
 from .gates import Gate
 from .provenance import DEFAULT_STALE_AFTER, PROVENANCE_REGISTRY
+from .resources import (
+    RESOURCE_TABLE,
+    Resource,
+    ResourceError,
+)
+from .resources import declared as declared_resources
 
 CONFIG_NAMES = ("kinemata.toml", ".kinemata.toml")
 
@@ -114,6 +120,9 @@ class Settings:
     suffixes: tuple[str, ...] = (".py",)
     max_sites: int | None = None
     claim_suffixes: tuple[str, ...] = DEFAULT_CLAIM_SUFFIXES
+    #: Which files the citation policy reads. Defaults to the claims scope --
+    #: see :func:`_citation_suffixes` for why a project may want it narrower.
+    citation_suffixes: tuple[str, ...] = DEFAULT_CLAIM_SUFFIXES
     #: Extensions that make a backticked bare filename a path claim, **added
     #: to** the built-in set rather than replacing it. Declared because the
     #: built-in fourteen are wrong for most repositories and wrong invisibly:
@@ -184,6 +193,14 @@ class Settings:
     #: it. Advisory and never a gate: section 6 keeps provenance and staleness
     #: on separate axes.
     stale_after: int = DEFAULT_STALE_AFTER
+    #: Documents whose citations are dated in a list instead of in the prose.
+    #: Empty unless declared: a project that has not said which of its documents
+    #: are user-facing has not asked for the distinction.
+    resources: tuple[Resource, ...] = ()
+    #: Where that list is declared. Carried because ``confirm`` writes it, and a
+    #: writer that recomputed the path from the config would be a second answer
+    #: to where the file is.
+    resources_path: Path | None = None
 
 
 def find_config(start: str | Path = ".") -> Path | None:
@@ -713,13 +730,21 @@ def load(path: str | Path) -> Settings:
     # What git ignores is not this project's material, and every check here asks
     # that same question. Answered once, in the one place settings come from.
     exclude = tuple(project.get("exclude", ())) + git_ignored(root)
+    claim_suffixes = tuple(claims.get("suffixes", DEFAULT_CLAIM_SUFFIXES))
+    citation_suffixes = _citation_suffixes(
+        raw.get("citations"), claim_suffixes, path
+    )
+    listed, resources_path = _resources(
+        raw.get("citations"), root, claim_suffixes, citation_suffixes, exclude, path
+    )
     return Settings(
         root=root,
         registries=registries,
         exclude=exclude,
         suffixes=tuple(project.get("suffixes", (".py",))),
         max_sites=project.get("max_sites"),
-        claim_suffixes=tuple(claims.get("suffixes", DEFAULT_CLAIM_SUFFIXES)),
+        claim_suffixes=claim_suffixes,
+        citation_suffixes=citation_suffixes,
         claim_file_suffixes=_claim_file_suffixes(claims, path),
         historical=tuple(claims.get("historical", ())),
         resolve_in=tuple(claims.get("resolve_in", ())),
@@ -740,12 +765,108 @@ def load(path: str | Path) -> Settings:
         accompany_max=_accompany_max(raw.get("citations"), path),
         provenance=_provenance(raw.get("citations"), path),
         stale_after=_stale_after(raw.get("citations"), path),
+        resources=listed,
+        resources_path=resources_path,
         context=_build_context(raw.get("context"), path),
     )
 
 
 #: What a ``[citations]`` table may say.
-CITATION_KEYS = frozenset({"accompany_max", "provenance", "stale_after"})
+CITATION_KEYS = frozenset(
+    {"accompany_max", "provenance", "resources", "stale_after", "suffixes"}
+)
+
+#: What a resource file may declare at the top level.
+RESOURCE_FILE_KEYS = frozenset({RESOURCE_TABLE})
+
+
+def _resources(
+    spec: dict[str, Any] | None,
+    root: Path,
+    claim_suffixes: tuple[str, ...],
+    citation_suffixes: tuple[str, ...],
+    exclude: tuple[str, ...],
+    path: Path,
+) -> tuple[tuple[Resource, ...], Path | None]:
+    """``[citations] resources`` -- the list that dates user-facing documents.
+
+    A file of its own, never inline, for the reason a bibliography is: it is the
+    file a reader of a citation goes looking for and the file a confirmation run
+    writes, and a config touched by every run is a config nobody reviews.
+
+    **Refused when the catch is off**, the call ``suffixes`` and ``stale_after``
+    both make. Nothing dates anything with the policy off, so the list would sit
+    in the config reading as a decision and covering nothing.
+
+    **Refused when a declared document is somewhere the checks cannot see it**,
+    and this is the one that earns its keep. A resource the citation policy does
+    not read covers no citation; a resource ``claims`` does not read cannot be
+    confirmed at all, because the confirmation oracle *is* ``claims`` -- and it
+    would be dated on every run, having had nothing to falsify it. That is a
+    green entry certifying a document nobody checked, which is the precise
+    shape of inert signal this package exists to refuse.
+    """
+    table = _citations(spec, path)
+    if "resources" not in table:
+        return (), None
+    if not _provenance(spec, path):
+        raise ConfigError(
+            f"{path}: [citations] declares resources but not provenance = true. "
+            "The list dates citations that would otherwise need a stamp, and "
+            "with the stamp requirement off there is nothing for it to answer."
+        )
+    declared = table["resources"]
+    if not isinstance(declared, str) or not declared:
+        raise ConfigError(
+            f"{path}: [citations] resources is the file the list is declared in "
+            f"and {declared!r} is not one."
+        )
+    source = root / declared
+    if not source.is_file():
+        raise ConfigError(f"{path}: [citations] resources: no such file: {source}")
+    try:
+        document = tomllib.loads(source.read_text())
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise ConfigError(
+            f"{path}: [citations] resources: cannot read {source}: {exc}"
+        ) from exc
+    unknown = set(document) - RESOURCE_FILE_KEYS
+    if unknown:
+        raise ConfigError(
+            f"{path}: {declared} declares {', '.join(sorted(unknown))}, which "
+            f"means nothing here (known: {', '.join(sorted(RESOURCE_FILE_KEYS))})."
+        )
+    try:
+        listed = declared_resources(
+            document.get(RESOURCE_TABLE, ()), root=root, where=str(declared)
+        )
+    except ResourceError as exc:
+        raise ConfigError(str(exc)) from exc
+
+    for resource in listed:
+        suffix = PurePosixPath(resource.path).suffix
+        if suffix not in citation_suffixes:
+            raise ConfigError(
+                f"{path}: {declared} declares {resource.path}, which the "
+                f"citation policy does not read ([citations] suffixes = "
+                f"{list(citation_suffixes)}). Its citations are not findings, "
+                "so dating them buys nothing and the entry reads as coverage."
+            )
+        if suffix not in claim_suffixes:
+            raise ConfigError(
+                f"{path}: {declared} declares {resource.path}, which the claims "
+                f"check does not read ([claims] suffixes = {list(claim_suffixes)}). "
+                "Confirmation asks whether everything a document cites still "
+                "holds, and a document nothing extracts claims from would be "
+                "dated by every run for having nothing to falsify it."
+            )
+        if _excluded(resource.path, exclude):
+            raise ConfigError(
+                f"{path}: {declared} declares {resource.path}, which "
+                "[project] exclude (or git) keeps out of every scan here. "
+                "Nothing reads it, so nothing can date it honestly."
+            )
+    return listed, source
 
 
 def _citations(spec: dict[str, Any] | None, path: Path) -> dict[str, Any]:
@@ -786,6 +907,56 @@ def _provenance(spec: dict[str, Any] | None, path: Path) -> bool:
             "section 6 of docs/citations.md admits none."
         )
     return declared
+
+
+def _citation_suffixes(
+    spec: dict[str, Any] | None, claim_suffixes: tuple[str, ...], path: Path
+) -> tuple[str, ...]:
+    """``[citations] suffixes`` -- which files the stamp requirement reads.
+
+    **Defaults to the claims scope, and exists because the two are not the same
+    question.** A documentation claim is checked wherever a document makes one,
+    including the first page a reader of the project sees. A citation stamp is
+    apparatus: it says when a developer's checker last confirmed a reference,
+    and in user-facing prose it is a token the reader has to learn to ignore.
+    Without this knob the only way to keep stamps out of a README was to drop
+    the README from claims entirely, which throws away the check that catches a
+    dead path in the most-read file in the repository.
+
+    Narrowing it is therefore not a suppression: the citations in the files
+    left out are not exempted findings, they are **not findings**, because the
+    project has said the policy does not reach there. That is the difference
+    between this and a baseline record, and it is why it is a scope rather than
+    an ignore list.
+
+    Refused when the catch is off, the same call ``stale_after`` makes: a scope
+    for a policy nobody declared is a line in a config file that reads as a
+    decision and changes nothing.
+    """
+    table = _citations(spec, path)
+    if "suffixes" not in table:
+        return claim_suffixes
+    if not _provenance(spec, path):
+        raise ConfigError(
+            f"{path}: [citations] declares suffixes but not provenance = true. "
+            "Scoping a policy that is off narrows nothing, and reads in this "
+            "file as though a decision had been made."
+        )
+    declared = table["suffixes"]
+    if not isinstance(declared, list) or not declared:
+        raise ConfigError(
+            f"{path}: [citations] suffixes is a non-empty list of file "
+            f"extensions and {declared!r} is not one. An empty list would turn "
+            "the policy off while leaving it declared."
+        )
+    for suffix in declared:
+        if not isinstance(suffix, str) or not suffix.startswith("."):
+            raise ConfigError(
+                f"{path}: [citations] suffixes holds {suffix!r}, which is not "
+                "a file extension. Extensions carry their dot, so that they "
+                "match what the walk compares them against."
+            )
+    return tuple(declared)
 
 
 def _stale_after(spec: dict[str, Any] | None, path: Path) -> int:

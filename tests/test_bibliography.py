@@ -10,6 +10,7 @@ configured is the inert signal this package exists to catch.
 
 from __future__ import annotations
 
+import subprocess
 import textwrap
 
 import pytest
@@ -671,3 +672,96 @@ def test_a_citation_below_a_fence_is_still_found_at_its_own_line(tmp_path):
     """)
     found = citations(tmp_path)
     assert [str(one) for one in found] == ["spec.md:5"]
+
+
+# -- foreign evidence, end to end ---------------------------------------------
+
+
+def test_a_foreign_entry_settles_a_citation_the_gate_would_otherwise_fail(tmp_path):
+    """From `kinemata.toml` to the exit code, through the command.
+
+    The unit tests prove the predicate. This proves the *wiring*: a config that
+    declares a foreign source has to reach ``verify``, and the way that stops
+    being true is one dropped keyword argument in ``_verify`` -- which is how
+    the equivalent gap was found in ``[claims] file_suffixes``. Deleting
+    ``foreign=`` there fails this and nothing else.
+    """
+    config = project(tmp_path, bibliography="""
+        [[entry]]
+        key = "Cm0001"
+        target = "42ece1296223babf896f00c514b2f0dc40d9e158"
+        foreign = "doctorjei/kanibako-cli"
+        note = "their tripwire, scoped to one module"
+    """, document=f"""
+        Their tripwire failed by being scoped to one module,
+        `42ece129` [{STAMP}-Cm0001].
+    """, config="""
+        [project]
+        root = "."
+
+        [claims]
+        suffixes = [".md"]
+
+        [[registry]]
+        name = "sources"
+        kind = "bibliography"
+        source = "docs/bibliography.toml"
+    """)
+    # Without this the tree is not a repository, commit checking reports itself
+    # unavailable, and the assertion below passes over a run that judged
+    # nothing -- the exact green-and-inert reading this package exists to
+    # refuse. It cost this test a first draft.
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    assert main(["claims", "-c", str(config)]) == 0
+
+
+def test_unused_does_not_count_an_illustration_in_a_source_file(tmp_path):
+    """A docstring that shows the notation has not cited anything.
+
+    ``detect`` blanks markdown fences itself and cannot blank what it cannot
+    see the suffix of, so the walk applies the ``unfenced`` table per file. Read
+    raw instead, this refuses outright rather than over-counting: a malformed
+    key inside an illustration is a malformed key.
+    """
+    write(tmp_path, "docs/bibliography.toml", """
+        [[entry]]
+        key = "Pa0003"
+        target = "docs/design.md"
+        note = "the registry contract"
+    """)
+    write(tmp_path, "mod.py", f'''
+        """Shown, not cited: :shown:`[{STAMP}-Pa0003]`, and :shown:`[{STAMP}-Ru169]`."""
+    ''')
+    registry = Bibliography([book()], home="docs/bibliography.toml")
+    assert registry.match_mode == "unfenced"
+    assert unused(registry, root=tmp_path, suffixes=[".py"]) == ["Pa0003"]
+
+
+def test_the_same_citation_fails_when_the_entry_is_not_foreign(tmp_path):
+    """The negative control, and the reason it is a separate test.
+
+    Without it the one above passes on a tree where commit checking was simply
+    unavailable -- which is exactly how a green run that checked nothing reads.
+    """
+    config = project(tmp_path, bibliography="""
+        [[entry]]
+        key = "Cm0001"
+        target = "42ece1296223babf896f00c514b2f0dc40d9e158"
+        note = "no foreign field: this project's own commit"
+    """, document=f"""
+        Their tripwire failed by being scoped to one module,
+        `42ece129` [{STAMP}-Cm0001].
+    """, config="""
+        [project]
+        root = "."
+
+        [claims]
+        suffixes = [".md"]
+
+        [[registry]]
+        name = "sources"
+        kind = "bibliography"
+        source = "docs/bibliography.toml"
+    """)
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    assert main(["claims", "-c", str(config)]) == 1

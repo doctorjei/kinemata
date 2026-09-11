@@ -40,9 +40,9 @@ See :data:`SEPARATORS`.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Container, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
 from . import stamps
@@ -54,6 +54,7 @@ from .claims import (
     _URL,
     CLAIM_KINDS,
     FILE_SUFFIXES,
+    Claim,
     ClaimKind,
     _excluded,
 )
@@ -76,6 +77,13 @@ FINDING_PREFIX = "provenance:"
 #: ``[citations] stale_after`` because a project reading its own documents on a
 #: different rhythm has a different answer, and a number nobody chose enforced
 #: as though somebody had is what this package refuses everywhere else.
+#:
+#: **Kept as a knob when the clock's population narrowed**, rather than retired
+#: with the part of it that went. What it governs now is undeclared inline
+#: pointers -- addresses a document tells a reader to go and read -- because a
+#: source declared with a ``confirmed`` date is a record and :meth:`Survey.
+#: clocked` leaves records alone. That is a smaller population than it was and
+#: still a real one, so the threshold is still somebody's to choose.
 DEFAULT_STALE_AFTER = 7
 
 #: What may stand between a citation and the stamp that dates it: nothing, or
@@ -162,6 +170,11 @@ if set(_BY_KIND) != {kind.name for kind in CLAIM_KINDS}:
         "reporting a clean tree."
     )
 
+#: A claim kind by the name a :class:`~kinemata.claims.Claim` records. The
+#: claim carries its kind as text, because that is what a baseline record and a
+#: report have to spell; placing it on a line needs the kind itself.
+_KIND_BY_NAME: dict[str, ClaimKind] = {kind.name: kind for kind in CLAIM_KINDS}
+
 
 @dataclass(frozen=True)
 class Sighting:
@@ -184,10 +197,22 @@ class Sighting:
     source: str
     #: The stamp standing immediately after the citation, or ``None``.
     stamp: stamps.Stamp | None = None
+    #: The day a declared resource says this document's citations were
+    #: verified, when the document is one that cannot carry a stamp. The
+    #: date lives in a list and reaches every citation in the file; see
+    #: :mod:`kinemata.resources`.
+    covered: date | None = None
 
     @property
     def dated(self) -> bool:
-        return self.stamp is not None
+        """Does anything say when this citation was last confirmed?
+
+        **Two ways, and a stamp beside the citation wins.** An entry dates a
+        whole document and a stamp dates one line, so a document that is listed
+        *and* stamps a citation inline has said something more precise about
+        that one; taking the coarser answer would report the stale of the two.
+        """
+        return self.stamp is not None or self.covered is not None
 
     @property
     def entry_id(self) -> str:
@@ -204,13 +229,22 @@ class Sighting:
         )
 
     def age(self, now: datetime) -> timedelta:
-        if self.stamp is None:
-            raise ProvenanceError(
-                f"{self.path}:{self.line}: {self.text!r} carries no stamp, so "
-                "nothing here has an age. An undated citation is the catch's "
-                "finding, not the clock's."
-            )
-        return now - self.stamp.moment
+        """How long since this citation was confirmed, by whatever dates it.
+
+        A resource entry carries a day and a stamp carries a moment, and the day
+        is read as its first instant: a resource confirmed today is zero days
+        old rather than some hours into tomorrow. Rounding the other way would
+        let the clock call a citation stale before the threshold it declares.
+        """
+        if self.stamp is not None:
+            return now - self.stamp.moment
+        if self.covered is not None:
+            return now - datetime.combine(self.covered, time.min, tzinfo=UTC)
+        raise ProvenanceError(
+            f"{self.path}:{self.line}: {self.text!r} carries no stamp and sits "
+            "in no declared resource, so nothing here has an age. An undated "
+            "citation is the catch's finding, not the clock's."
+        )
 
 
 @dataclass(frozen=True)
@@ -237,10 +271,31 @@ class Survey:
     archived: tuple[str, ...] = ()
     #: Documents read.
     scanned: int = 0
+    #: Reference keys whose bibliography entry carries a verified date. These
+    #: are records rather than live pointers, so the clock leaves them alone --
+    #: see :meth:`clocked`. Injected rather than looked up, for the reason
+    #: :func:`declared_foreign` is: this module must not learn what a registry
+    #: is, or the citation policy would need one declared before it could run.
+    recorded: frozenset[str] = frozenset()
 
     @property
     def undated(self) -> tuple[Sighting, ...]:
         return tuple(seen for seen in self.sightings if not seen.dated)
+
+    @property
+    def listed(self) -> tuple[Sighting, ...]:
+        """Citations dated by a declared resource rather than by a stamp.
+
+        Counted on every run for the reason every other suppression here is:
+        a citation the policy stopped reporting because a list dates it reads,
+        in silence, exactly like a citation that carries a stamp. The number is
+        what tells a reader how much of the tree's provenance rests on four
+        entries in a file they have not opened.
+        """
+        return tuple(
+            seen for seen in self.sightings
+            if seen.stamp is None and seen.covered is not None
+        )
 
     def findings(self) -> list[tuple[str, Bypass]]:
         """Undated citations, tagged the way the ratchet expects them."""
@@ -249,11 +304,30 @@ class Survey:
         ]
 
     def clocked(self) -> tuple[Sighting, ...]:
-        """Dated citations the clock applies to. See :data:`CLOCKED`."""
+        """Dated citations the clock applies to. See :data:`CLOCKED`.
+
+        **A declared source is a record and drops out here.** The clock exists
+        because an address has to leave the machine, so a date on one is worth
+        keeping and worth refreshing. That reasoning holds of a citation written
+        inline and undeclared -- *go and read this* -- and not of a source the
+        project has entered in a bibliography with the day it was verified.
+        Section 5.2 calls a key this project's number for another's work, the
+        way reference 12 of a paper is; a journal reorganizing its site does not
+        invalidate the reference, and a weekly reminder to re-read it is noise.
+
+        Re-running a record is deliberate rather than scheduled: ``confirm``
+        carries a network oracle and re-dates what it settles, which is the same
+        act done when somebody asks for it instead of every seventh day.
+        """
         return tuple(
             seen for seen in self.sightings
-            if seen.dated and seen.kind in CLOCKED
+            if seen.dated and seen.kind in CLOCKED and not self._recorded(seen)
         )
+
+    def _recorded(self, seen: Sighting) -> bool:
+        """Is this citation's key declared as a source with a verified date?"""
+        key = seen.stamp.key if seen.stamp else None
+        return key is not None and stamps.canonical_key(key) in self.recorded
 
     def unclocked(self) -> tuple[Sighting, ...]:
         """Citations the clock is meant to cover and cannot, being undated.
@@ -270,10 +344,15 @@ class Survey:
     def stale(
         self, *, after: timedelta, now: datetime | None = None
     ) -> tuple[Sighting, ...]:
-        """Clocked citations not confirmed within ``after``, oldest first."""
+        """Clocked citations not confirmed within ``after``, oldest first.
+
+        Sorted by age rather than by the stamp's moment, because a citation
+        dated by a resource entry has no stamp to sort on and reading one off
+        the other would have been the second spelling of "how old is this".
+        """
         moment = now or datetime.now(UTC)
         past = [seen for seen in self.clocked() if seen.age(moment) > after]
-        past.sort(key=lambda seen: (seen.stamp.moment, seen.path, seen.line))  # type: ignore[union-attr]
+        past.sort(key=lambda seen: (-seen.age(moment), seen.path, seen.line))
         return tuple(past)
 
 
@@ -328,6 +407,49 @@ def _dating(line: str, end: int, marks: Sequence[stamps.Stamp]) -> stamps.Stamp 
     return None
 
 
+def declared_foreign(keys: Container[str]) -> Callable[[Claim], bool]:
+    """Is this claim declared to be about another project's tree?
+
+    True when every occurrence of the cited token on its line stands beside a
+    reference key that a bibliography entry marks ``foreign``. Built here
+    because this is where the adjacency rule lives: a citation and the token
+    that annotates it are the same relation :data:`SEPARATORS` already
+    describes, read for a different purpose, and a second spelling of it would
+    eventually disagree with this one about a line.
+
+    **Every, not any, and that asymmetry is the whole safety argument.** A line
+    naming one path twice -- once as this project's and once as somebody
+    else's -- has a live claim in it, and the conservative reading keeps it.
+    The same holds when the token cannot be placed at all: an unplaceable
+    token returns False and stays checked, so a pattern this module cannot
+    locate costs a false finding rather than a silent exemption. Getting this
+    backwards would make a declaration able to switch off a real claim, which
+    is the thing every mechanism here refuses.
+
+    The predicate never sees a claim the tree settled -- :func:`claims.verify`
+    asks only after resolution has failed -- so a key beside a path that does
+    exist here cannot take it out of the check.
+    """
+    def foreign(claim: Claim) -> bool:
+        kind = _KIND_BY_NAME.get(claim.kind)
+        if kind is None:
+            return False
+        marks = [mark for mark in stamps.find(claim.source) if mark.key]
+        if not marks:
+            return False
+        here = _placed(claim.source, kind, {claim.text}).get(claim.text, [])
+        if not here:
+            return False
+        return all(
+            (mark := _dating(claim.source, end, marks)) is not None
+            and mark.key is not None
+            and stamps.canonical_key(mark.key) in keys
+            for _, end in here
+        )
+
+    return foreign
+
+
 def survey(
     root: str | Path,
     *,
@@ -336,6 +458,8 @@ def survey(
     historical: Iterable[str] = (),
     file_suffixes: Iterable[str] = (),
     kinds: Sequence[ClaimKind] = CLAIM_KINDS,
+    recorded: Iterable[str] = (),
+    covered: Mapping[str, date] | None = None,
 ) -> Survey:
     """Every citation under ``root``, and whether a stamp stands beside it.
 
@@ -357,6 +481,16 @@ def survey(
         archive is still a dead link a reader will follow; here, the archive's
         citations were dated when they were written and re-dating them would
         overwrite the record.
+    :param covered: document -> the day a declared resource says its citations
+        were verified. A plain map rather than the resource list itself, for the
+        reason ``recorded`` is a set of keys: this module must not learn what a
+        resource list is, or the citation policy would need one declared before
+        it could run. :func:`kinemata.resources.coverage` builds it.
+
+        **A document listed without a date is absent from the map**, so its
+        citations stay findings. Declaring where a date will live is not the
+        same as having checked, and a policy that accepted the declaration would
+        make the whole list writable by anyone with a text editor and no oracle.
     """
     root = Path(root)
     exclusions = tuple(fragment.rstrip("/") for fragment in exclude if fragment)
@@ -388,6 +522,7 @@ def survey(
         except OSError:
             continue
         scanned += 1
+        listed = (covered or {}).get(rel)
         # Blanked rather than dropped, so a reported line number still points
         # at the line the reader has to edit.
         filtered = UNFENCED_FILTERS.get(path.suffix)
@@ -404,7 +539,8 @@ def survey(
                 spans = _placed(line, kind, tokens)
                 for token in sorted(tokens):
                     here = spans.get(token, [])
-                    seen = Sighting(kind.name, token, rel, number, line)
+                    seen = Sighting(kind.name, token, rel, number, line,
+                                    covered=listed)
                     if not here:
                         unlocatable.append(seen)
                         continue
@@ -413,7 +549,8 @@ def survey(
                         ambiguous.append(seen)
                         continue
                     sightings.append(
-                        Sighting(kind.name, token, rel, number, line, dating[0])
+                        Sighting(kind.name, token, rel, number, line, dating[0],
+                                 covered=listed)
                     )
             previous = line
 
@@ -424,4 +561,5 @@ def survey(
         unlocatable=tuple(unlocatable),
         archived=tuple(archived),
         scanned=scanned,
+        recorded=frozenset(stamps.canonical_key(key) for key in recorded),
     )

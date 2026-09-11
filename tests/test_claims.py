@@ -598,6 +598,45 @@ def test_external_links_are_counted_when_the_check_is_off(tmp_path, server):
             "set external = true under [claims])") in result.unavailable
 
 
+def test_an_address_that_answered_nothing_is_not_a_confirmation(tmp_path, server):
+    """Resolving is the gate's answer, and it is not always the writer's.
+
+    A 403 resolves here on purpose -- nothing said the page is gone -- and that
+    reading was the whole of what this module recorded, so a run could report
+    every claim resolving while none of its addresses had been reached.
+    ``unavailable`` named the address; nothing named the *claims* resting on it,
+    which is what a writer deciding whether to date a document has to ask.
+    """
+    write(tmp_path, "doc.md", f"See {server}/refused-403.\n")
+    result = verify(tmp_path, external=True)
+    assert not result.broken and not result.failed
+    assert [claim.text for claim in result.unsettled] == [f"{server}/refused-403"]
+
+
+def test_a_live_address_is_settled_and_not_merely_unfalsified(tmp_path, server):
+    """The positive control: a yes is a yes, and stays out of this bucket."""
+    write(tmp_path, "doc.md", f"See {server}/here-200.\n")
+    assert verify(tmp_path, external=True).unsettled == []
+
+
+def test_an_address_nobody_asked_about_is_unsettled(tmp_path, server):
+    """With the network check off, every address resolves and none is confirmed."""
+    write(tmp_path, "doc.md", f"See {server}/here-200.\n")
+    assert len(verify(tmp_path).unsettled) == 1
+
+
+def test_a_commit_outside_a_repository_is_unsettled(tmp_path):
+    """The same shape one oracle over: no history to ask means no confirmation.
+
+    ``unavailable`` already says the tree is not a repository. This says how
+    many citations were riding on the answer it could not give.
+    """
+    write(tmp_path, "doc.md", "Fixed in `abcdef12`.\n")
+    result = verify(tmp_path)
+    assert not result.broken
+    assert [claim.text for claim in result.unsettled] == ["abcdef12"]
+
+
 def test_a_dead_url_in_an_archive_is_still_dead(tmp_path, server):
     """`historical` exempts claims about the *tree*, and a URL is not one.
 
@@ -906,3 +945,107 @@ def test_a_resolve_in_tree_that_is_not_there_refuses(tmp_path):
     write(tmp_path, "doc.md", "The loader is `loader/src/app.py`.\n")
     with pytest.raises(ClaimsError, match="not a directory"):
         verify(tmp_path, resolve_in=["../loader"])
+
+
+def test_external_on_with_nothing_to_reach_says_so(tmp_path, capsys):
+    """Declared and reaching nothing reads exactly like declared and working.
+
+    Found on this project's own tree: excluding two documents it carries but did
+    not author took the address population from five to none -- and all five had
+    been somebody else's, so the network check had been settling no link of this
+    project's while looking every inch like a network gate.
+    """
+    write(tmp_path, "doc.md", "See `src/app.py`.\n")
+    write(tmp_path, "src/app.py", "x = 1\n")
+
+    result = verify(tmp_path, external=True)
+    assert result.broken == []
+    assert any("settles nothing" in note for note in result.warnings)
+    assert "external is on" in capsys.readouterr().err
+
+
+def test_external_on_with_something_to_reach_is_silent(tmp_path, capsys):
+    """The negative control: the note is about an empty population, not about
+    the flag being set. Without this the assertion above passes on any tree."""
+    write(tmp_path, "doc.md", "See <https://example.invalid/x>.\n")
+
+    result = verify(tmp_path, external=True, timeout=0.01)
+    assert not any("settles nothing" in note for note in result.warnings)
+
+
+def _repository(path):
+    """A tiny git repository, returning the short hash of its one commit.
+
+    Two hazards, both met the hard way, both deterministic once named.
+
+    The file carries the directory's name because two repositories built here
+    in the same second, from the same content and the same identity, get the
+    *same* commit hash -- and a test whose two trees share a hash proves nothing
+    about which one settled it.
+
+    The commit is re-made until its short hash is not all digits, because
+    ``_commit_claims`` skips those on purpose: hex is a superset of decimal, so
+    an all-decimal run in backticks is a number in prose far more often than it
+    is a hash. Roughly one short hash in forty is all digits, which is a flake
+    rate high enough to be seen and low enough to be blamed on something else.
+    """
+    path.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init", "-q", str(path)], check=True)
+    for key, value in (("user.email", "t@example.org"), ("user.name", "T")):
+        subprocess.run(["git", "-C", str(path), "config", key, value], check=True)
+    for attempt in range(20):
+        (path / "a.txt").write_text(f"{path.name} {attempt}\n")
+        subprocess.run(["git", "-C", str(path), "add", "-A"], check=True)
+        subprocess.run(
+            ["git", "-C", str(path), "commit", "-q", "--allow-empty",
+             "-m", f"first {attempt}"],
+            check=True,
+        )
+        short = subprocess.run(
+            ["git", "-C", str(path), "rev-parse", "--short=8", "HEAD"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        if not short.isdigit():
+            return short
+    raise AssertionError("twenty all-digit short hashes is not chance")
+
+
+def test_a_commits_in_tree_that_is_not_there_refuses(tmp_path):
+    """The same fail-open `resolve_in` was taught to refuse, one layer deeper.
+
+    A corpus checked out beside a developer's tree and gitignored in CI is the
+    live case: the citations settle locally, the declaration silently stops
+    settling them where the gate actually runs, and both runs are green.
+    """
+    write(tmp_path, "notes/doc.md", "Commit `deadbee1` did it.\n")
+    with pytest.raises(ClaimsError, match="not a directory"):
+        verify(tmp_path / "notes", commits_in=["../corpus"])
+
+
+def test_a_commits_in_tree_that_is_not_a_repository_refuses(tmp_path):
+    """Present and inert is the same failure as absent, and looks healthier.
+
+    `_known_commits` keeps only the roots that are repositories, so a directory
+    that is merely *there* disappears into that filter exactly as a missing one
+    does -- while a reader checking the declaration by eye sees a real path.
+    """
+    (tmp_path / "corpus").mkdir()
+    write(tmp_path, "notes/doc.md", "Commit `deadbee1` did it.\n")
+    with pytest.raises(ClaimsError, match="not a git repository"):
+        verify(tmp_path / "notes", commits_in=["../corpus"])
+
+
+def test_commits_in_settles_a_hash_from_the_named_repository(tmp_path):
+    """The refusals above are worth nothing if the feature never worked.
+
+    Negative control in the same test: the same hash is a finding when the
+    repository holding it is not declared.
+    """
+    real = _repository(tmp_path / "corpus")
+    # The scanned tree is a repository too, or commit checking reports itself
+    # unavailable and the control below would pass for the wrong reason.
+    _repository(tmp_path / "notes")
+    write(tmp_path, "notes/doc.md", f"Their commit `{real}` did it.\n")
+
+    assert verify(tmp_path / "notes", commits_in=["../corpus"]).broken == []
+    assert broken(verify(tmp_path / "notes")) == {("commit", real)}

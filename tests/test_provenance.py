@@ -26,6 +26,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from kinemata.adapters.bibliography import Bibliography
 from kinemata.baseline import record
 from kinemata.claims import CLAIM_KINDS
 from kinemata.cli import main
@@ -496,3 +497,135 @@ def test_what_could_not_be_judged_is_printed(tmp_path, capsys):
     )
     assert main(["check", "-c", str(config), "--quiet"]) == 0
     assert "unjudged: 1 citation(s)" in capsys.readouterr().out
+
+
+# -- where the policy reaches --------------------------------------------------
+
+
+def test_the_policy_can_be_scoped_away_from_user_facing_prose(tmp_path):
+    """`[citations] suffixes`, and why it is a scope and not an ignore list.
+
+    A dead path in a README is a defect wherever it appears, so claims keeps
+    reading it. A stamp beside that path is apparatus -- it records when a
+    checker last confirmed the reference -- and in the first page a reader of
+    the project sees it is a token they have to learn to skip. Without this, the
+    only way to keep stamps out of a README was to drop the README from claims
+    entirely, which throws away the more valuable of the two checks.
+    """
+    write(tmp_path, "docs/design.md", "# Design\n")
+    write(tmp_path, "README.md", "The contract is `docs/design.md`.\n")
+    write(tmp_path, "mod.py", '"""Also the contract: `docs/design.md`."""\n')
+    config = write(tmp_path, "kinemata.toml", """
+        [project]
+        root = "."
+
+        [claims]
+        suffixes = [".md", ".py"]
+
+        [citations]
+        provenance = true
+        suffixes = [".py"]
+    """)
+
+    settings = load(config)
+    assert settings.citation_suffixes == (".py",)
+    assert settings.claim_suffixes == (".md", ".py")
+
+    assert [seen.path for seen in survey(
+        tmp_path, suffixes=settings.citation_suffixes).undated] == ["mod.py"]
+    # The negative control: unscoped, the README citation is a finding too.
+    # Without it this passes on a tree whose README was never read at all.
+    assert len(survey(tmp_path, suffixes=settings.claim_suffixes).undated) == 2
+
+
+def test_scoping_a_policy_that_is_off_is_refused(tmp_path):
+    """Half a declaration reads in the file as though a decision were made."""
+    config = write(tmp_path, "kinemata.toml", """
+        [project]
+        root = "."
+
+        [claims]
+        suffixes = [".md"]
+
+        [citations]
+        suffixes = [".py"]
+    """)
+    with pytest.raises(ConfigError, match="not provenance = true"):
+        load(config)
+
+
+def test_a_declared_source_is_a_record_and_the_clock_leaves_it_alone(tmp_path):
+    """The distinction the design was missing: a pointer versus a record.
+
+    A citation written inline and undeclared says *go and read this*, so it has
+    to keep resolving and a weekly reminder to look again is the point. A source
+    entered in a bibliography with the day it was verified is the sense §5.2
+    means by *"reference 12 in one paper"* -- a journal reorganizing its site
+    does not invalidate the reference, and nagging about it weekly is noise.
+    """
+    # Bare rather than angle-bracketed: a closing `>` between the address and
+    # the stamp is two characters, and the association rule allows nothing or
+    # one space. The rule is right; the first draft of this fixture was not.
+    write(tmp_path, "notes.md", f"""
+        Declared: https://example.invalid/a [{OLD}-Wb0001]
+        Inline: https://example.invalid/b [{OLD}-Wb]
+    """)
+    found = survey(tmp_path, recorded=["Wb0001"])
+
+    clocked = {seen.text for seen in found.clocked()}
+    assert clocked == {"https://example.invalid/b"}
+    # The negative control: with nothing declared as a record, both are clocked.
+    assert len(survey(tmp_path).clocked()) == 2
+    assert len(found.stale(after=timedelta(days=7), now=NOW)) == 1
+
+
+def test_a_confirmed_date_is_read_off_the_entry(tmp_path):
+    (entry,) = Bibliography(
+        [{"key": "Wb0001", "target": "https://example.invalid/a",
+          "note": "a source", "confirmed": "2026-09-11"}]
+    ).entries()
+    assert entry.extra["confirmed"] == "2026-09-11"
+
+
+@pytest.mark.parametrize("value", ["soon", "2026-13-01", "", "11/09/2026"])
+def test_a_confirmed_date_that_is_not_a_date_is_refused(value):
+    """A source verified on an unreadable day is one nothing can say was
+    verified. Empty is in the list because a blank field reads as declared."""
+    record = {"key": "Wb0001", "target": "x", "note": "y", "confirmed": value}
+    if value == "":
+        # Falsy, so it is simply absent rather than malformed -- pinned so the
+        # distinction is deliberate rather than an accident of truthiness.
+        assert "confirmed" not in Bibliography([record]).entries()[0].extra
+        return
+    with pytest.raises(ValueError, match="not one"):
+        Bibliography([record])
+
+
+def test_a_confirmation_in_the_future_is_refused():
+    """The one thing a provenance record must never be able to say.
+
+    The purpose is telling *true when written* from *wrong when written*, and a
+    date nobody could have checked at settles neither.
+    """
+    ahead = (datetime.now(UTC).date() + timedelta(days=1)).isoformat()
+    with pytest.raises(ValueError, match="has not happened yet"):
+        Bibliography([{"key": "Wb0001", "target": "x", "note": "y",
+                       "confirmed": ahead}])
+
+
+@pytest.mark.parametrize("declared", ["[]", '".py"', '["py"]'])
+def test_a_citation_scope_that_is_not_a_list_of_extensions_is_refused(
+    tmp_path, declared
+):
+    """An empty list would turn the policy off while leaving it declared, and a
+    bare word never matches what the walk compares it against."""
+    config = write(tmp_path, "kinemata.toml", f"""
+        [project]
+        root = "."
+
+        [citations]
+        provenance = true
+        suffixes = {declared}
+    """)
+    with pytest.raises(ConfigError):
+        load(config)

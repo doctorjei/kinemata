@@ -31,6 +31,7 @@ from kinemata.confirm import (
     apply,
     plan,
 )
+from kinemata.stamps import StampError
 
 #: A stamp from 2020, so that "was this confirmed today" is answered by the
 #: mechanism rather than by what day the suite happens to run on.
@@ -480,3 +481,75 @@ def test_the_report_names_the_file_the_line_and_both_stamps(tmp_path, capsys):
     assert "notes.md" in out
     assert f"{OLD} ->" in out
     assert "1 keyed citation(s): 1 confirmed" in out
+
+
+# -- reading a source file: what it says, not what it shows -------------------
+
+
+ILLUSTRATED = '''
+    """A module that displays a malformed key to explain the width rule.
+
+    The width is fixed, so :shown:`[0TMQDKB-Ru169]` matches nothing at all.
+    The contract is `docs/design.md` [{stamp}-Pa0003].
+    """
+'''
+
+
+def test_an_illustrated_key_does_not_stop_the_run(tmp_path):
+    """Found by running this command after `.py` came into scope, not by a test.
+
+    This package's own ``stamps`` module illustrates a malformed key to explain
+    why the width is fixed. Read raw that is not an illustration, it is a
+    malformed citation -- so ``confirm`` refused outright, exit 2, before
+    examining a single real one. The identical break had already been found and
+    fixed in ``unused`` a few hours earlier; nothing checked the third reader.
+    """
+    write(tmp_path, "docs/design.md", "the contract\n")
+    write(tmp_path, "module.py", ILLUSTRATED.format(stamp=OLD))
+    made = plan(tmp_path, books(), suffixes=(".py",), when=NOW)
+    assert only(made, CONFIRMED).key == "Pa0003"
+
+
+def test_an_unmarked_malformed_key_still_refuses(tmp_path):
+    """The negative control, because the fix must not have widened into silence.
+
+    A malformed key nobody marked as shown is a malformed citation, and the
+    reduction is what tells the two apart -- not the file's extension.
+    """
+    write(tmp_path, "docs/design.md", "the contract\n")
+    write(tmp_path, "module.py", '"""The key is [0TMQDKB-Ru169], allegedly."""\n')
+    with pytest.raises(StampError):
+        plan(tmp_path, books(), suffixes=(".py",), when=NOW)
+
+
+def test_a_stamp_in_executable_code_is_not_a_citation(tmp_path):
+    """``shown_python`` keeps the prose and drops the code, and both halves
+    matter here: a literal that happens to contain a stamp is data, not a
+    sentence citing anything."""
+    write(tmp_path, "docs/design.md", "the contract\n")
+    write(tmp_path, "module.py", f'EXAMPLE = "[{OLD}-Pa0003]"\n')
+    assert plan(tmp_path, books(), suffixes=(".py",), when=NOW).outcomes == ()
+
+
+# -- evidence in somebody else's tree -----------------------------------------
+
+
+def test_a_foreign_source_is_unsettled_rather_than_gone(tmp_path):
+    """Every oracle here answers about *this* tree.
+
+    A foreign commit therefore reads as "the history does not know it" and a
+    foreign path as "no such path" -- true statements that say the source is
+    gone, when what is true is that this is not the repository that can tell.
+    Eight of this project's own citations were reported that way, which is a
+    report a reader would act on by deleting real evidence.
+    """
+    book = Bibliography([{
+        "key": "Pa0009",
+        "target": "src/theirs/module.py",
+        "foreign": "doctorjei/kanibako-cli",
+        "note": "the module their tripwire scanned",
+    }], home="docs/bibliography.toml")
+    tree(tmp_path, f"Their module is `src/theirs/module.py` [{OLD}-Pa0009].\n")
+    outcome = only(plan(tmp_path, [book], when=NOW), UNSETTLED)
+    assert "doctorjei/kanibako-cli" in outcome.detail
+    assert outcome.old == outcome.new

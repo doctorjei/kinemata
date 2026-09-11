@@ -50,15 +50,22 @@ from .bypass import Bypass, crossings, strays, unused
 from .citations import citations, index
 from .claims import CLAIMS_REGISTRY, ClaimsError, Verification, verify
 from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
-from .confirm import ConfirmError, apply, plan
+from .confirm import ConfirmError, apply, dating, plan, redate
 from .context import measure
 from .contract import BaseRegistry, Entry
 from .gates import WORKFLOW_DIR, enforced
 from .literals import clusters
 from .projection import project
 from .prose import ILLUSTRATION_ROLE
-from .provenance import PROVENANCE_REGISTRY, ProvenanceError, Survey, survey
+from .provenance import (
+    PROVENANCE_REGISTRY,
+    ProvenanceError,
+    Survey,
+    declared_foreign,
+    survey,
+)
 from .report import DEFAULT_MAX_SITES, Report, review
+from .resources import coverage
 from .stamps import StampError
 
 
@@ -268,14 +275,64 @@ def _run_review(
 
 
 def _survey(args: argparse.Namespace, settings: Settings) -> Survey:
-    """Every citation in the documents, over the same files ``claims`` reads."""
+    """Every citation the citation policy reaches.
+
+    Scoped by `[citations] suffixes`, which defaults to the claims scope and is
+    declared separately when a project wants stamps out of its user-facing
+    prose. The two questions differ: a dead path in a README is a defect wherever
+    it appears, while a stamp beside it is apparatus a reader has to learn to
+    skip.
+    """
     return survey(
         _target(args, settings),
-        suffixes=settings.claim_suffixes,
+        suffixes=settings.citation_suffixes,
         file_suffixes=settings.claim_file_suffixes,
         exclude=settings.exclude,
         historical=settings.historical,
+        recorded=_entries_carrying(settings, "confirmed"),
+        covered=coverage(settings.resources),
     )
+
+
+def _relative(path: Path, root: Path) -> str:
+    """A path as the project spells it, falling back to what it is.
+
+    Every other line this command prints names a file the way the tree does, and
+    a bare basename would be the one place a reader has to guess which directory
+    it meant.
+    """
+    try:
+        return path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def _report_resources(settings: Settings, found: Survey | None) -> None:
+    """How much of this tree's provenance rests on the resource list.
+
+    Printed whenever a list is declared, and not suppressed by ``--quiet`` --
+    the rule the baseline size, the gate count and the illustration count all
+    follow. A citation the policy stopped reporting because four entries in a
+    file date it reads, in silence, exactly like a citation carrying a stamp.
+
+    **A declared document that dates no citation is named**, for the same reason
+    ``unused`` names a declared entry nothing mentions: it may be a document
+    that has not started citing anything yet, and it may be a rename that left
+    the entry pointing somewhere harmless. Never a failure, because only the
+    reader can tell those apart.
+    """
+    if found is None or not settings.resources:
+        return
+    dating = {seen.path for seen in found.listed}
+    where = (_relative(settings.resources_path, settings.root)
+             if settings.resources_path else "the list")
+    print(f"resources: {len(found.listed)} citation(s) in "
+          f"{len(dating)} document(s) dated by {where}")
+    idle = [resource.path for resource in settings.resources
+            if resource.path not in dating]
+    if idle:
+        print(f"  {len(idle)} declared resource(s) date no citation: "
+              f"{', '.join(sorted(idle))}")
 
 
 def _report_unassociated(found: Survey | None) -> None:
@@ -373,6 +430,7 @@ def cmd_review(args: argparse.Namespace) -> int:
         if not args.quiet:
             print("Nothing already declared looks re-derived here.")
         _report_silent(settings)
+        _report_resources(settings, found)
         _report_unassociated(found)
         return 0
     if not args.quiet:
@@ -382,6 +440,7 @@ def cmd_review(args: argparse.Namespace) -> int:
             f"Route through them rather than re-deriving."
         )
     _report_silent(settings)
+    _report_resources(settings, found)
     _report_unassociated(found)
     return 0  # advisory, always
 
@@ -574,6 +633,36 @@ def cmd_unused(args: argparse.Namespace) -> int:
     return 0  # advisory, always
 
 
+def _foreign_keys(settings: Settings) -> frozenset[str]:
+    """Reference keys whose entry names a source outside this tree.
+
+    Read off the built registries rather than re-parsing the config, so a key
+    the bibliography refused never reaches here. Asked of every registry by
+    what its entries carry, not by class: a project that supplies its own
+    adapter through ``kind = "import"`` and declares foreign evidence the same
+    way gets the same behavior, which is what publishing the field means.
+    """
+    return _entries_carrying(settings, "foreign")
+
+
+def _entries_carrying(settings: Settings, field: str) -> frozenset[str]:
+    """Reference keys whose entry declares ``field``.
+
+    One reader for both of the fields a check acts on, because two would drift:
+    ``foreign`` says a citation is about another project's tree, ``confirmed``
+    says a source was verified on a day and is a record rather than a live
+    pointer. Asked of every registry by what its entries carry rather than by
+    class, so a project supplying its own adapter through ``kind = "import"``
+    gets the same behavior -- which is what publishing a field means.
+    """
+    return frozenset(
+        entry.id
+        for registry in settings.registries
+        for entry in registry.entries()
+        if entry.extra.get(field)
+    )
+
+
 def _verify(args: argparse.Namespace, settings: Settings) -> Verification:
     """Every claim the documents make, over the files the config declares.
 
@@ -581,6 +670,10 @@ def _verify(args: argparse.Namespace, settings: Settings) -> Verification:
     Held in one function for the reason ``_run_review`` is -- the gate and the
     thing that writes the gate's exemption list must not be able to disagree
     about what a finding is.
+
+    This is also where the two halves of a foreign citation are joined, and the
+    only place that knows both: a bibliography is a registry, a claim is prose,
+    and neither module is allowed to import the other's world.
     """
     return verify(
         _target(args, settings),
@@ -591,6 +684,7 @@ def _verify(args: argparse.Namespace, settings: Settings) -> Verification:
         counts=settings.counts,
         resolve_in=settings.resolve_in,
         commits_in=settings.commits_in,
+        foreign=declared_foreign(_foreign_keys(settings)),
         promised=settings.promised,
         external=settings.external,
         timeout=settings.external_timeout,
@@ -688,6 +782,22 @@ def cmd_claims(args: argparse.Namespace) -> int:
     if found.shown:
         print(f"illustrations: {found.shown} span(s) marked `:{ILLUSTRATION_ROLE}:` "
               "and not read as claims")
+
+    # And again, for the suppression that is a declaration rather than a
+    # marker: these citations were not checked here because the project said
+    # they are somebody else's. `cite --where` resolves any one of them to its
+    # sites, which is why the number is the reading and the list is not.
+    if found.foreign:
+        print(f"external evidence: {len(found.foreign)} citation(s) declared "
+              "foreign, checked by the project that owns them")
+
+    # Not a suppression this time but its neighbor: claims nothing falsified and
+    # nothing confirmed either. `unavailable` above names the oracle that would
+    # not answer; this says how much of the documentation is resting on it, and
+    # an unreachable address cited from four files is four of these.
+    if found.unsettled:
+        print(f"unsettled: {len(found.unsettled)} claim(s) resolved because "
+              "nothing contradicted them, not because an oracle confirmed them")
 
     # Same rule once more, and the one this command had no voice for until the
     # ratchet reached it: an exemption list nobody reads the size of is how an
@@ -987,10 +1097,18 @@ def cmd_stamp(args: argparse.Namespace) -> int:
     return 0
 
 
-def _bibliographies(settings: Settings) -> list[Bibliography]:
-    """The declared bibliographies, or a refusal naming what to declare."""
+def _bibliographies(settings: Settings, *, required: bool = True) -> list[Bibliography]:
+    """The declared bibliographies, or a refusal naming what to declare.
+
+    ``required`` is false for the one caller that has a second thing to date: a
+    project may declare a resource list and no bibliography at all -- it has
+    user-facing documents whose citations need confirming and writes no keyed
+    citations of its own -- and refusing there would have made the list
+    unusable without machinery it does not need. ``confirm`` still refuses when
+    neither is declared, because then there is nothing to confirm.
+    """
     found = [r for r in settings.registries if isinstance(r, Bibliography)]
-    if not found:
+    if not found and required:
         raise ConfigError(
             "no bibliography is declared, so no reference key resolves to "
             'anything. Declare one: a [[registry]] with kind = "bibliography" '
@@ -1096,10 +1214,17 @@ def cmd_confirm(args: argparse.Namespace) -> int:
     what a project would wire into CI, and a check that rewrites the tree it is
     judging can make itself pass. Refusals and dead targets are in the report,
     which is where a writer's findings belong.
+
+    **Two things get dated and they are read by different oracles.** A keyed
+    citation is dated where it stands, and its key names the one source to
+    settle. A user-facing document is dated in the resource list, and what has
+    to hold is *everything it cites* -- which is the question ``claims``
+    answers, so this runs the same verification that command does rather than a
+    second opinion about the same tree.
     """
     settings = _settings(args)
     _note_unfitted(settings)
-    books = _bibliographies(settings)
+    books = _bibliographies(settings, required=not settings.resources)
     suffixes = tuple(dict.fromkeys(
         suffix for book in books for suffix in (book.suffixes or settings.suffixes)
     ))
@@ -1114,8 +1239,20 @@ def cmd_confirm(args: argparse.Namespace) -> int:
     )
     print(made.text(verbose=args.verbose, quiet=args.quiet))
 
+    listing = None
+    if settings.resources and settings.resources_path is not None:
+        listing = dating(
+            settings.resources,
+            _verify(args, settings),
+            source=settings.resources_path,
+            when=made.when,
+        )
+        print()
+        print(listing.text(verbose=args.verbose, quiet=args.quiet))
+
+    pending = bool(made.writes) or bool(listing and listing.writes)
     if not args.write:
-        if made.writes and not args.quiet:
+        if pending and not args.quiet:
             print("\nNothing written. Re-run with --write to record these "
                   "confirmations.")
         return 0
@@ -1123,7 +1260,11 @@ def cmd_confirm(args: argparse.Namespace) -> int:
     written = apply(made)
     for rel, count in written:
         print(f"wrote {rel} ({count} stamp(s))")
-    if not written:
+    if listing is not None and listing.writes:
+        entries = redate(listing)
+        print(f"wrote {_relative(listing.source, settings.root)} "
+              f"({entries} resource date(s))")
+    elif not written:
         print("nothing to write")
     return 0
 
@@ -1179,6 +1320,7 @@ def cmd_stale(args: argparse.Namespace) -> int:
         print(f"{len(blind)} further citation(s) of the same kind carry no "
               "stamp at all, so the clock says nothing about them. They are "
               "`kinemata check`'s findings, not this list's.")
+    _report_resources(settings, found)
     _report_unassociated(found)
     return 0  # advisory, always
 
@@ -1232,6 +1374,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     ]
     _print_reports(settings, filtered, verbose=args.verbose)
     _report_silent(settings)
+    _report_resources(settings, found)
     _report_unassociated(found)
 
     # Printed on every run that has a baseline at all, and **not suppressed by

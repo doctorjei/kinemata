@@ -18,10 +18,16 @@ from __future__ import annotations
 
 import textwrap
 
+from kinemata.citations import citations
 from kinemata.claims import Counted, verify
 from kinemata.prose import outside_illustrations, python_prose_only
+from kinemata.provenance import declared_foreign
 
 PY = (".md", ".py")
+
+#: A syntactically valid stamp, so these tests exercise the association rule
+#: rather than the codec's refusals.
+STAMP = "0TMQDKB"
 
 
 def write(tmp_path, rel, body):
@@ -413,3 +419,89 @@ def test_the_filter_keeps_line_numbers_and_line_lengths(tmp_path):
     source = 'x :shown:`a/b.md` y\nz ``c/d.md`` w\n'
     kept = outside_illustrations(source)
     assert kept.splitlines() == ["x                 y", "z ``c/d.md`` w"]
+
+
+# -- evidence in somebody else's tree ----------------------------------------
+#
+# A tool validated against other projects cites those projects. The citations
+# are real and permanently unresolvable here, which left the docstring scan
+# with a residue it could never drive to zero -- and a gate that can never go
+# green over text nobody should change is a gate its reader learns to skim.
+
+
+def test_a_citation_beside_a_foreign_key_is_not_a_claim_about_this_tree(tmp_path):
+    write(tmp_path, "mod.py", '''
+        """Their tripwire scanned ``project/workset.py`` [{stamp}-Pa0004]."""
+    '''.replace("{stamp}", STAMP))
+
+    assert broken(verify(tmp_path, suffixes=PY)) == {("path", "project/workset.py")}
+
+    settled = verify(tmp_path, suffixes=PY, foreign=declared_foreign({"Pa0004"}))
+    assert settled.broken == []
+    assert [claim.text for claim in settled.foreign] == ["project/workset.py"]
+
+
+def test_a_key_nothing_declares_foreign_settles_nothing(tmp_path):
+    """The predicate answers for the keys it was given and no others.
+
+    Otherwise any keyed citation would exempt itself, which would make the
+    citation notation a suppression syntax -- the opposite of what declaring is
+    for.
+    """
+    write(tmp_path, "mod.py", '''
+        """Their tripwire scanned ``project/workset.py`` [{stamp}-Pa0004]."""
+    '''.replace("{stamp}", STAMP))
+
+    result = verify(tmp_path, suffixes=PY, foreign=declared_foreign({"Cm0001"}))
+    assert broken(result) == {("path", "project/workset.py")}
+    assert result.foreign == []
+
+
+def test_one_keyed_occurrence_does_not_cover_an_unkeyed_one(tmp_path):
+    """Every occurrence, not any: the line still contains a live claim.
+
+    A sentence naming one path as another project's and then as this one's has
+    something in it that this tree can be wrong about, and the conservative
+    reading keeps checking it. Getting this backwards would let a declaration
+    switch off a real claim.
+    """
+    write(tmp_path, "mod.py", '''
+        """Theirs ``a/thing.py`` [{stamp}-Pa0004], ours ``a/thing.py`` too."""
+    '''.replace("{stamp}", STAMP))
+
+    result = verify(tmp_path, suffixes=PY, foreign=declared_foreign({"Pa0004"}))
+    assert broken(result) == {("path", "a/thing.py")}
+    assert result.foreign == []
+
+
+def test_a_foreign_key_cannot_take_a_live_claim_out_of_the_check(tmp_path):
+    """Resolution is asked first, so the declaration never overrides the tree.
+
+    A path that exists here is this project's whatever a key beside it says --
+    and it is reported as resolved rather than as foreign, so the count of
+    waived citations stays honest.
+    """
+    write(tmp_path, "src/real.py", "x = 1\n")
+    write(tmp_path, "mod.py", '''
+        """Also in their tree: ``src/real.py`` [{stamp}-Pa0004]."""
+    '''.replace("{stamp}", STAMP))
+
+    result = verify(tmp_path, suffixes=PY, foreign=declared_foreign({"Pa0004"}))
+    assert result.broken == []
+    assert result.foreign == []
+
+
+def test_an_illustrated_citation_is_not_a_citation(tmp_path):
+    """The unfenced filter reads `.py` now, and a role is how it is told.
+
+    Before it did, the closed-world catch and the reverse index read source
+    files whole -- so this package's own ``stamps`` module, whose docstrings
+    display a malformed key to explain why the width is fixed, refused every
+    command that scanned it.
+    """
+    write(tmp_path, "mod.py", '''
+        """Pinning the width would make :shown:`[{stamp}-Ru0169]` match nothing."""
+        WIRE = "[{stamp}-Ru0170] is not prose either"
+    '''.replace("{stamp}", STAMP))
+
+    assert citations(tmp_path, suffixes=[".py"]) == []
