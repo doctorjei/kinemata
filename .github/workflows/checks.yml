@@ -56,3 +56,8 @@ jobs:
       - run: kinemata check
       # Documentation is a registry of claims about this tree.
       - run: kinemata claims
+      # The closed-world catch. It began gating here on 2026-09-10, when the
+      # bibliography became the first registry in this tree that can recognize
+      # its own identifiers -- and it was not added here for a day. A catch that
+      # does not run where the agent cannot reach it is not a catch.
+      - run: kinemata undeclared

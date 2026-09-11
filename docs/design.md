@@ -147,6 +147,8 @@ closed: bool           # is an undeclared identifier an error?
 budget: bytes          # ceiling on the projection's size
 machinery: [path]      # files that declare these entries rather than use them
 mentions_are_uses: bool # is "nothing mentions this" a finding at all?
+boundary: charclass    # what may not abut an identifier for a match to count
+match_mode: str        # which filter table the scan reads through
 ```
 
 **`closed`** — kanibako's keyspace is closed: an undeclared key is not a key, and
@@ -165,6 +167,18 @@ every real project, and taking it as the answer would satisfy the requirement ev
 meaning nothing. `mentions_are_uses` is false for a registry whose entries are declared to be
 *absent* — a list of retired names is honored precisely when nothing says them, so the question
 does not apply and is refused rather than answered with the whole list.
+
+**`boundary` and `match_mode`** are declared because a data model's idea of an identifier is not
+the contract's. A dotted keyspace key must not match inside a longer dotted key, so a dot may not
+abut it; a Python constant is routinely read through its module, so a dot **must** be allowed to.
+That was found by an adopter, whose module-qualified constants read as unmentioned. The two kinds
+want different rules and neither is the right default for the other, so the rule belongs to the
+registry rather than to the matcher.
+
+Both are refused rather than defaulted when unusable. A boundary matching every character that can
+abut an identifier leaves no legal neighbor and answers nothing about every tree; one matching none
+of them bounds nothing and degrades to substring search — and the second is also where a typo
+lands, which cannot be told from an intention.
 
 The ratchet is built — `baseline.py`, `kinemata baseline`, read by `check`. Two
 decisions the specification above left open, both settled by measurement rather than

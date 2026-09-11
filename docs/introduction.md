@@ -189,27 +189,52 @@ and is refused if it declares none. It does **not** need a registry: `claims` an
 on a config that declares no registry at all, and a registry-shaped command refuses rather than
 scanning nothing.
 
-**Per-registry options:** `suffixes`, `case_sensitive`, `match_mode`, `allow_empty`, `source`,
-`modules`, `closed`, `machinery`, on `substitutions` — `boundary`, on `bibliography` —
-`interpreted` and `standardized`, which **add to** the reserved type vocabulary rather than
-replacing it, and on `import` — `target`, plus anything else the project's class takes. A closed
-built-in set with no extension point is a defect this project has already shipped twice: once in
-that type vocabulary, and once as `BUILDERS` itself.
+**Per-registry options:** `suffixes`, `boundary`, `match_mode`, `machinery`, `case_sensitive`,
+`allow_empty`, `source`, `modules`, `closed`, on `bibliography` — `interpreted` and
+`standardized`, which **add to** the reserved type vocabulary rather than replacing it, and on
+`import` — `target`, plus anything else the project's class takes. A closed built-in set with no
+extension point is a defect this project has already shipped twice: once in that type
+vocabulary, and once as `BUILDERS` itself.
 
-On an `import` registry the loader keeps `name`, `kind`, `target`, `suffixes`, `machinery` and
-`allow_empty` for itself and hands **every other key** to the class. `name` is the one option
-that behaves differently there: given, it wins as it does everywhere; omitted, the class keeps
-the name it declares for itself rather than being renamed to a default nobody wrote.
+The first four are **how a registry matches**, and each adapter's answer to them is a default
+rather than a verdict: the adapter knows the shape its data model usually has, and only the
+project knows what its identifiers are actually spelled like or which files they live in. They
+are read on every kind.
+
+On an `import` registry the loader keeps `name`, `kind`, `target`, `suffixes`, `machinery`,
+`boundary`, `match_mode` and `allow_empty` for itself and hands **every other key** to the
+class. The four matching options are in that list because they are contract attributes rather
+than anything a `kind` invented — a project's own adapter gets them without taking a constructor
+argument, and one that wants its own parameter of either name should read the attribute the
+loader sets instead. `name` is the one option that behaves differently there: given, it wins as
+it does everywhere; omitted, the class keeps the name it declares for itself rather than being
+renamed to a default nobody wrote.
 
 **`machinery`** names the files that *declare* a registry's entries rather than use them — a key
 table, an inventory, the manifest. Only `unused` reads it, and only it or an entry `home`
 satisfies that command: a project's `exclude` names build and test trees, is non-empty
 everywhere, and accepting it as the answer would let the requirement pass while meaning nothing.
 
-**Boundaries** (`substitutions` only): `prose` bounds a spelling with `\b`, which is right for a
-word list and wrong for a name list; `identifier` bounds it with the class `contract` declares,
-and reads code spans instead of blanking them. A retired `spec~box-vault` bounded as prose
-matches inside the live `spec~box-vault-enable`.
+**`boundary`** is which characters may not abut an identifier for a match to count. Two rules are
+declared and either can be asked for by name, so that a config never re-spells a character class
+— two matchers disagreeing about what a word is was the finding that produced the second rule:
+
+| `boundary` | Matches | For |
+|---|---|---|
+| `identifier` | the class holding `.` and `-` | identifiers that **contain** their separators — a dotted key, a hyphenated clause ID. The default for a registry that has not said |
+| `name` | letters, digits and underscore | identifiers **reached through** a dot: `bootstrap.CHANNELS_PATH` is a use of `CHANNELS_PATH`. The default for `python-constants` and `code-patterns`, whose ids are names in code |
+
+A project whose identifiers are neither writes the character class itself. `name` buys one false
+positive knowingly: an attribute access spelled the same way on an unrelated object reads as a
+mention, which text matching cannot tell apart without resolving the receiver. In `unused` that
+*suppresses* a report rather than raising one, which is the right direction for a list a person
+reads and the wrong one for any check that treats a mention as an accusation.
+
+On a `substitutions` registry `boundary` is that same question asked of the matcher that kind
+actually uses — which rule *builds* its patterns — and it takes `prose` or `identifier`: `prose`
+bounds a spelling with `\b`, which is right for a word list and wrong for a name list;
+`identifier` bounds it with the class above, and reads code spans instead of blanking them. A
+retired `spec~box-vault` bounded as prose matches inside the live `spec~box-vault-enable`.
 
 **Match modes** (`match_mode`, selects a filter table):
 
@@ -218,7 +243,15 @@ matches inside the live `spec~box-vault-enable`.
 | `strings` | default | string literals only |
 | `code` | source | code with prose filtered |
 | `prose` | `.md` | inline code spans exempt; fenced blocks **not** exempt |
+| `unfenced` | `.md` | fenced blocks exempt; inline code spans **not** exempt |
 | `raw` | anything | no filtering at all |
+
+`prose` and `unfenced` are not opposites and neither subsumes the other. `prose` exempts what a
+document quotes inline; `unfenced` exempts what a document *displays*. A citation registry wants
+the second, because a specification illustrating its own notation is showing the form rather than
+using it — and a notation designed to be mechanically unambiguous cannot distinguish an
+illustration of itself from a use of itself. A misspelling can, which is why the spelling registry
+does not want this.
 
 ---
 
@@ -233,11 +266,13 @@ matches inside the live `spec~box-vault-enable`.
 | `kinemata undeclared` | the closed-world catch — an identifier a `closed` registry does not declare | a stray under a closed registry; refuses outright if no registry can recognize its own identifiers |
 | `kinemata unused` | declared entries nothing mentions outside the files declaring them | never; refuses outright if no registry can say (needs `machinery` or entry `home`) |
 | `kinemata check` | the gate | a strong finding not covered by the baseline, or a baseline past its `until` |
-| `kinemata claims` | documentation gate; also verifies `[[gate]]` declarations | a dead claim, or a declared gate that does not run |
+| `kinemata claims` | documentation gate, ratcheted; also verifies `[[gate]]` declarations | a dead claim the baseline does not already accept, a baseline past its `until` that exempts claims here, or a declared gate that does not run |
 | `kinemata context` | session-load gate | measured bytes exceed `budget` |
 | `kinemata baseline` | shows accepted findings; `--record --until`, `--prune` | — |
 | `kinemata stamp` | mints a citation stamp, or decodes one; reads no config | the text given is not a stamp |
 | `kinemata cite` | resolves a reference key — forward to its source, `--where` to every `file:line` citing it, bare for every key with its count | the key is malformed, or no entry declares it |
+| `kinemata stale` | citations not confirmed within `stale_after`, scoped to kinds that cost a network request; a local claim is settled on every run, so a clock over it restates what the run already knows | never — refuses (exit 2) if `[citations] provenance` is not declared, because the citations carrying a stamp would then be an accident of who wrote them |
+| `kinemata confirm` | **the only command that writes into prose.** Dry run by default; `--write` re-dates the keyed citations it verified in that run | never — the exit code is what a project wires into CI, and a writer that can fail a build is one that can be made to pass one |
 
 **Common flags:** `-c/--config`, `-r/--registry`, `-q/--quiet`, `-v/--verbose`, `--max-sites`.
 Each is accepted **on either side of the subcommand** — `kinemata -c x.toml check` and
@@ -284,6 +319,15 @@ outside, so the following are `ConfigError`, not silent skips:
 - a `[[promise]]` with no `until`, an unparseable date, or a `note` with no `by`
 - a `[[count]]` naming a `run` no `[command]` declares, or giving both `command` and `run`
 - an unknown `boundary` on a `substitutions` registry
+- a `match_mode` that selects no filter table. An unknown one used to *work*: it landed on a
+  table with no entry for the suffix, filtered nothing, and so behaved as `raw` by accident
+- a `boundary` that is not a usable character class, **including both degenerate ends**. One
+  matching every character that can sit beside an identifier leaves no legal neighbor, so the
+  registry answers nothing about every tree it is pointed at; one matching none of them bounds
+  nothing, so matching degrades to a substring search that reports a name inside a longer one. A
+  bare word — `prose`, borrowed from the other table — lands in the second, which is why a typo
+  is the likeliest way to arrive at one. A project that genuinely wants either sets `boundary`
+  on a registry class of its own, where it is Python somebody wrote
 - a baseline with no `until`, or `--record` without one — and an unsigned `--note`
 - a `bibliography` whose source is missing, declares no entries, misspells a field or a table,
   or holds a key of the wrong width. Two spellings of one key is the re-derivation this project
@@ -337,6 +381,21 @@ multiplicity counted. Line numbers are excluded; path is included.
 
 `review` is unaffected by the baseline: the ratchet governs the gate, not the advice.
 
+**One list, both gates.** `check` puts the code findings through it and `claims` puts the
+documentation findings through it, each reading the half it scans. A second exemption list for
+documentation was the alternative and is the failure mode: two lists eventually disagree about
+what a project accepted, and the one nobody is reading is the one still exempting something
+real. Records are tagged with the check that produced them, so neither gate reports the other's
+as fixed — it names them instead, because silence about part of an exemption list reads exactly
+like having accounted for all of it. `kinemata baseline` runs both, being the only command that
+writes the file; a `--prune` that covered one half would delete the other's records on the
+strength of never having looked.
+
+The four failures `claims` reports that are **not** claims about a site — a declared oracle that
+would not run, and a promise kept, uncited or past its date — are never offered to the ratchet.
+They have no path and line to fingerprint, and accepting one would build the thing both
+`[[promise]]` and the baseline refuse by construction: a deferral that never lapses.
+
 ---
 
 ## The documentation gates
@@ -362,6 +421,36 @@ is deliberate: a wrong normalization does not fail, it passes.
 
 Negation is parsed: a claim inside a negated clause is a mention, not an assertion. Clause
 boundaries are `;:`, `but`, `however`, `whereas`, `while` — commas deliberately excluded.
+
+**Documentation inside code is scannable.** `suffixes` accepts `.py`, and a Python file declared
+there is reduced to its docstrings and comments before any extractor reads it — a path in a
+default value, a fixture or an embedded template is a value the code uses, not an assertion
+about the tree. Whether that is worth arming is a measurement each project has to take: a
+codebase whose docstrings cite *other* projects' files and commits, as this one's do, produces
+findings that are correct as written.
+
+**A docstring marks an illustration with a role.** A markdown document says *this text is shown,
+not spoken* with a fence; a docstring had no equivalent, and the gap was the largest single class
+of finding when `.py` was first armed here — text that shows a shape rather than citing anything,
+sitting inside a sentence where a block-level fence cannot go. Putting `:shown:` immediately
+before the span exempts it:
+
+| Written | Read as |
+|---|---|
+| ``docs/design.md`` | a claim; the file has to be there |
+| `` :shown:`example.md` `` | an illustration; not read as a claim at all |
+
+The marker sits **outside** the delimiters, so the token between them is unchanged — a stamp
+placed inside backticks once changed the path it was attached to and the citation stopped
+resolving. Only this one role suppresses. Skipping every role-prefixed span was measured and
+rejected: it silenced nothing that this tree's 88 existing roles mark, and Sphinx's `:doc:` and
+`:download:` take a path in the tree as their target, so the broad rule would quietly silence a
+real citation the day one of those is written. A misspelled role is therefore not a silent
+exemption — the span is still read, and a dead path still fails. Suppressed spans are **counted
+on every run**, because a suppression nobody can count is an allowlist with a good story.
+
+`.py` only, deliberately: a reStructuredText role renders as literal text in markdown, and
+markdown's own answer is the fence, whose cost `claims` has already named and measured.
 
 **Gate verification** rides on `claims` rather than being its own command: a check that
 verifies other checks are wired up is worthless if nothing guarantees it runs. It fires on a
@@ -462,8 +551,12 @@ down, and the two shapes at the end are the findings that matter most.
   which names a `module:Class` target. What is left of the limit: the class has to be importable
   by the interpreter running kinemata — nothing is put on `sys.path` for it — so a project whose
   package is not installed gets a refusal rather than a search. See `design.md` §4.2.
-- **`match_mode` is not settable from TOML.** `config.py` passes `suffixes` and `machinery`
-  through and nothing else, so a project cannot ask for `raw`, or override `code`/`strings`.
+- **~~`match_mode` is not settable from TOML.~~** True until 2026-09-10: `config.py` passed
+  `suffixes` and `machinery` through and nothing else, so a project could not ask for `raw` or
+  override `code`/`strings`. Closed together with the boundary below, since both are one
+  question — whether matching behavior is a property of the adapter class or something a project
+  declares — and the answer is that the adapter supplies the default and the project overrides
+  it. Both are refused rather than defaulted when they cannot mean anything.
 - **Registry scoping is inverted, with no exception.** Entries fire everywhere except `home`;
   there is no "fires only inside this one file", which is what an import-discipline check needs.
 - **A `yaml-mapping` registry contributes nothing to `check`.** Its entries carry no
@@ -471,19 +564,59 @@ down, and the two shapes at the end are the findings that matter most.
 - **`PythonConstants` reads `ast.Assign` only.** A module-level `NAME: Final[str] = "..."` is an
   `ast.AnnAssign` and is invisible; so are tuple targets and enum members. In that project, 195
   bare-assign constants were readable and 32 annotated ones were not.
-- **`contract._BOUNDARY` contains `.`**, so a module-qualified use is invisible to `detect()`:
-  `bootstrap.CHANNELS_PATH` yields nothing where bare `CHANNELS_PATH` yields the entry. The `.`
-  is right for dotted keyspace identifiers and wrong for Python constants reached through their
-  module — **the two registry kinds want different boundaries.** `unused` inherits this on top
-  of its own weakness.
+- **~~`contract._BOUNDARY` contains `.`~~**, so a module-qualified use was invisible to
+  `detect()`: `bootstrap.CHANNELS_PATH` yielded nothing where bare `CHANNELS_PATH` yielded the
+  entry, and four of that project's constants were reported as unmentioned on the strength of
+  it. The `.` is right for dotted keyspace identifiers and wrong for Python constants reached
+  through their module — **the two registry kinds want different boundaries** — so the boundary
+  became a registry attribute on 2026-09-09 and a declaration on 2026-09-10. `code-patterns` was
+  left on the dotted default that first day and had the same exposure, its ids being names in
+  code; `helpers.run_or_die(cmd)` detected nothing, so the one site routing through the helper
+  correctly was the site `unused` could not see. Fixed by changing that adapter's default, which
+  moved nothing in this repository's own `check`, `review`, `unused` or `undeclared` output.
+  `unused` still carries its own weakness underneath, which none of this touches.
 - **`[[gate]]` cannot express ordering** — only that a command's text is present and uncommented.
 
 **Where `claims` is narrower than its knobs suggest:**
 
 - **The extractors are markdown-syntax-bound, and `suffixes` does not say so.** A format that
-  happens to share the syntax works by coincidence (an RST double-backtick literal contains a
-  markdown span); one that does not — YAML, plain text — contributes **zero claims, silently**,
-  with no warning that a declared suffix found nothing.
+  does not share it — YAML, plain text — is read and contributes **zero claims**; a declared
+  suffix that settles nothing is now named on stderr rather than passing in silence.
+  **~~A format that shares it worked by coincidence.~~** True until 2026-09-10: reStructuredText
+  spells an inline literal as a doubled delimiter, whose inner pair is itself a markdown span,
+  so the token inside fell out of a single-backtick pattern. The delimiter run is matched
+  deliberately now, and `.py` is a supported suffix rather than an accident.
+- **Docstrings are scannable and this repository does not scan them.** Measured 2026-09-10 by
+  adding `.py`: 95 claims, 24 unresolved, and the **two** real dead references it found — both in
+  module docstrings pointing at a design document that had moved — are the whole yield. They were
+  fixed by hand. The rest are correct as written: 7 short hashes belonging to the corpus
+  repositories this project validated against, a dozen paths naming another project's files or
+  teaching a shape, and one illustration of markdown link syntax. That is a property of *these*
+  docstrings, whose convention is to name the outside incident that forced a design, so the
+  evidence they cite is mostly not in this tree; a project whose docstrings assert things about
+  its own tree gets a working check from the same knob.
+
+  **Re-measured 2026-09-11**, after the illustration role: 18 unresolved claims under `src/`
+  become **10**, and the 8 that went away were all illustrations rather than assertions. What is
+  left is the part a marker cannot fix — 3 paths and 7 short hashes naming files and commits in
+  the corpus repositories this project validated against. Those are true citations to trees that
+  are gitignored here and absent from a clean clone, so the suffix stays **off**, with a residue
+  of 10 and a named reason instead of a vague one.
+
+  **That residue is what the claims ratchet was built for**, and it now exists: the 10 are
+  accepted once and a new dead reference fails. Demonstrated on a scratch copy of this
+  repository with the suffix armed — 11 findings (the 10, plus one test count this session made
+  stale), recorded, green, then red on a single new dead docstring reference. Arming it here is
+  a separate decision and has not been taken; the residue is genuine evidence of other people's
+  trees, and whether to accept it or to reach that evidence some other way is the open question.
+- **`suffixes` reaches `[[count]]` as well.** It was the sharper reason not to arm it here: the
+  docstring explaining the test-count oracle recounts the numbers this project's notes once
+  claimed, and the oracle reported every one of them against the current suite — the fourth time
+  here that a document about a mechanism tripped that mechanism, and unlike the others it could
+  not be reworded, because the stale numbers *are* the record. It is now marked with the
+  illustration role, which reaches counted claims for exactly this reason: honoring a declared
+  suffix for paths while reading the same file raw for values would let a number be shown in one
+  sentence and asserted in the next.
 - **`resolve_in` fails open.** A directory that does not exist produces byte-identical output and
   **no warning on stderr**. In CI, where a sibling tree is usually not checked out, every claim it
   was resolving goes unreported and the run still looks clean. It also resolves against disk

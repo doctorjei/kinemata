@@ -3,11 +3,18 @@
 #
 # This file used to declare `python-constants` over three modules and found
 # nothing for six commits -- not because the tree was clean, but because this
-# codebase has no module-level *string* constants. Its canonical things are
-# code shapes and non-string values, so `code-patterns` is the adapter that
-# fits. Same diagnosis the tool reached on kento-core: a missing adapter, not a
-# broken mechanism. `config.py` now refuses an empty registry so the next one
-# announces itself instead of passing.
+# codebase then had no module-level *string* constants. Its canonical things
+# were code shapes and non-string values, so `code-patterns` is the adapter
+# that fits. Same diagnosis the tool reached on kento-core: a missing adapter,
+# not a broken mechanism. `config.py` now refuses an empty registry so the next
+# one announces itself instead of passing.
+#
+# ⚑ Past tense as of 2026-09-11: the codebase has grown nine of them, and this
+# comment asserted otherwise for as long as they existed. Measured rather than
+# assumed -- a `python-constants` registry over the three modules that have
+# them yields 13 entries, no strong findings and 4 weak signals, so it would be
+# a real check that currently protects nothing. Not declared for that reason
+# alone, and the sentence above is corrected rather than left to be trusted.
 [project]
 root = "."
 exclude = ["tests/", "corpus/", ".venv/", "deliverables/"]
@@ -15,6 +22,36 @@ exclude = ["tests/", "corpus/", ".venv/", "deliverables/"]
 # Documentation is a registry of claims about this tree, so it gets checked
 # like one. `historical` names records that cite what was true when written --
 # an archive is not stale, it is an archive.
+#
+# `.py` is deliberately absent, and this is the measurement rather than an
+# oversight. Docstrings here are documentation -- the convention is that they
+# name the incident or measurement that forced the design -- and nothing was
+# reading them, which cost two dead references to a design document that had
+# moved, in `contract.py` and `projection.py`, the two files a reader opens
+# first. `claims` can read them now, and both were found by adding the suffix.
+#
+# Measured 2026-09-10 with the suffix added: 95 claims, 24 unresolved, and the
+# two real ones are the whole yield. The rest are correct as written -- short
+# hashes belonging to the corpus repositories this project validated against,
+# paths naming another project's files, and prose teaching a shape. The evidence
+# these docstrings cite is mostly outside this tree, so a checker of this tree
+# cannot settle it.
+#
+# The largest class there was a gap rather than a property: text that *shows* a
+# shape had no way to say so, because a markdown document marks an illustration
+# with a fence and a docstring had no equivalent. The illustration role closed
+# it. Re-measured 2026-09-11: 18 unresolved under `src/` become 10, the 8 that
+# went are all illustrations, and the suffix now reaches `[[count]]` through the
+# same reduction -- so the docstring explaining the test-count oracle, which
+# recounts numbers this project's notes once claimed and cannot be reworded
+# without deleting the record, is marked rather than tripping the oracle.
+#
+# So: still off, and off is still a decision -- but the residue is 10 with a
+# name now. All 10 cite the corpus repositories, which are gitignored here and
+# absent from a clean clone, so they cannot resolve for anybody and a marker
+# would be a lie about what they are. What would let this be armed is a ratchet
+# over `claims` of the kind `baseline` gives the bypass scan: an accepted set
+# that fails on increase. Re-measure before turning it on.
 [claims]
 suffixes = [".md"]
 historical = ["archives/"]
@@ -83,6 +120,15 @@ note = "the tool against its own source"
 [[gate]]
 command = "kinemata claims"
 note = "documentation, and this inventory"
+
+# The closed-world catch. Declared 2026-09-11, a day after it began gating here:
+# the `sources` bibliography became the first registry in this tree that can
+# recognize its own identifiers, and nothing wired the catch into CI. A catch
+# that does not run where the agent cannot reach it is a reminder wearing a
+# catch's clothes -- and this inventory exists precisely to notice that.
+[[gate]]
+command = "kinemata undeclared"
+note = "a citation naming a key no entry declares"
 
 [[gate]]
 command = "ruff check"
@@ -197,11 +243,14 @@ suffixes = [".md", ".py"]
 # and a reference key; the key's entry carries the path or the address, so a
 # source that moves is edited once here rather than at every mention.
 #
-# Open, not closed. `docs/citations.md` illustrates the form with a key this
-# project has no entry for, and closing would turn an example in a specification
-# into a failing gate. `kinemata undeclared` reports it as the advisory finding
-# it is.
+# Closed as of 2026-09-10, and the reason it could not be before is the point.
+# `docs/citations.md` illustrates the notation with a key nothing declares, so
+# closing would have turned an example in a specification into a failing gate --
+# and the illustration is inside a fenced block, which nothing was reading as
+# display rather than use. `match_mode = "unfenced"` fixed that, so a key nothing
+# declares is now a real catch instead of an advisory line nobody reads.
 [[registry]]
 name = "sources"
 kind = "bibliography"
+closed = true
 source = "docs/bibliography.toml"

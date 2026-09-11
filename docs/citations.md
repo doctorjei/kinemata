@@ -376,6 +376,65 @@ request, which is why it is opt-in, and which is why a date on it is worth keepi
 
 Archived material is left alone on both axes. A record cites what was true when written.
 
+### 6.1 Which stamp dates which citation
+
+Saying *"this path citation has no stamp"* requires knowing which stamp belongs to which
+citation. That association was deliberately left unbuilt while it could be sidestepped — a
+reference key lives *inside* a stamp, so a keyed citation already carries its own timestamp and
+there is nothing to associate. A check for a *missing* stamp cannot sidestep it.
+
+**The rule is a stated adjacency, not a guess.** A stamp dates the citation it immediately
+follows, on the same line, with nothing or a single space between them. That is §5.6 read
+literally — a citation accompanies its target — and it is the mirror of the rule the writer
+already uses in the other direction, from a stamp back to the target beside it. The two are
+asserted to agree on the same text rather than maintained in parallel.
+
+```markdown
+The registry contract is `docs/design.md` [0TMQDKB-Pa].
+```
+
+**What it cannot see, stated rather than discovered:**
+
+- A stamp two spaces after its citation, or with punctuation between them, or on the following
+  line, dates nothing. These read as near misses and are reported as undated.
+- One stamp does not date two citations. Where a sentence names two targets and carries one
+  stamp, the stamp dates the one it follows and the other is a finding.
+- Where a line names one target more than once and the occurrences disagree about carrying a
+  stamp, **nothing is reported**. The extractors answer with text and no position, so which
+  occurrence the sentence asserts cannot be recovered, and the count of these is printed on every
+  run. A false accusation of an undated citation teaches its reader that the check is noise,
+  which switches the check off for the findings that were real; a miss costs one finding.
+- A fenced block is an illustration, not a citation. A document specifying this notation writes
+  whole examples of it.
+
+The unit of a finding is a target cited on a line, not each occurrence of it — the extractors
+disagree about repeats, and counting occurrences would make the size of the report depend on
+which one produced it.
+
+### 6.2 Declaring the policy
+
+**The catch is off unless a project asks for it.** Armed on a tree that has never dated a
+citation it reports every citation in the tree, and a gate that fires on everything on day one is
+one somebody switches off — which is the failure the ratchet exists to prevent.
+
+```toml
+[citations]
+provenance = true    # every citation carries a stamp
+stale_after = 7      # days before the clock surfaces one; advisory
+```
+
+There is no list of exempt kinds, because §6 admits none.
+
+**Adoption is the existing ratchet, not a second one.** An undated citation is recorded, split
+and driven down exactly as a duplication finding is: record the population the project already
+has, and the gate fails only on citations added after that. A second exemption list would
+eventually disagree with the first about what a project accepted.
+
+**The clock is refused without the catch.** It can only see citations that carry a date, so with
+the stamp requirement off it would report on whichever citations happen to be dated and say
+nothing about the rest — a short list that reads like a clean tree. Half a policy is refused
+rather than run.
+
 ## 7. Who writes a stamp
 
 **The checker writes what it verified.** A stamp advanced by hand is unverifiable — nothing

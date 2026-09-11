@@ -173,6 +173,10 @@ kinemata init        # a starting config, and optionally the CI to run it.
 kinemata stamp       # mint a citation stamp, or decode one. Needs no config.
 kinemata cite        # resolve a reference key: what it points at, where it is
                      # cited, or every key with its citation count.
+kinemata stale       # advisory. Citations not confirmed lately, for the kinds
+                     # that cost a network request to settle.
+kinemata confirm     # the only command that writes into prose. Dry run by
+                     # default; --write re-dates what it actually verified.
 ```
 
 A config found by walking **up** from the working directory says so on stderr.
@@ -218,6 +222,15 @@ mechanism that admits to being an allowlist in the next paragraph. On that date
 `check` fails with nothing new, saying so: the exemptions are still in force and
 nobody has looked at them since the day somebody said they would. Extend it
 deliberately, or drive the list down. A note must be signed.
+
+**Keep `kinemata.toml` in the repository, not in a scratch directory.** Not
+because a scan is precious — because **a number is only meaningful alongside the
+config that produced it.** An adopting project reported two figures for the same
+tree, 126 findings and 90, taken a day apart; neither was wrong and neither could
+be reproduced, because the config behind the first had lived in `/tmp` and gone
+with a container restart. The results were narrated carefully and the thing that
+generated them was not kept, which is the same failure as citing an authority
+that has since been renamed: the claim survives, its provenance does not.
 
 `check` then reports only findings the baseline does not cover, and prints the
 size of the exemption list **on every run, including clean ones**. `review` is
@@ -396,7 +409,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **483 tests**, and
+The companion guard is a number with an oracle. This suite is **616 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 

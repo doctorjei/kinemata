@@ -60,3 +60,10 @@ jobs:
       # Then the gate. Strong signals only; weak ones never fail a build.
       - name: Gate on strong bypasses
         run: kinemata check
+
+      # Documentation is a registry of claims about the tree, and it rots the
+      # same way code does. This is what `kinemata init --ci` writes; the
+      # example omitted it until 2026-09-11, so a project following the example
+      # got less than a project following the tool.
+      - name: Gate on documentation claims
+        run: kinemata claims
