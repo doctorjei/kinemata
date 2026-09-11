@@ -37,6 +37,7 @@ from typing import Any
 
 from .. import stamps
 from ..contract import BaseRegistry, Entry
+from ..prose import outside_fenced_blocks
 
 #: Codes the tool interprets, where behavior depends on the code meaning what it
 #: says. **A project redefining one of these is refused at load**, because
@@ -117,12 +118,23 @@ class Bibliography(BaseRegistry):
 
     name = "bibliography"
 
-    #: Everything, prose included. A citation is *written in prose* and a stamp
-    #: inside a code span or a docstring is still a citation, so the filters
-    #: that make a value registry precise would make this one blind. Live
-    #: rather than decorative: :func:`~kinemata.bypass.strays` reads it before
-    #: asking :meth:`candidates` what is cited.
-    match_mode = "raw"
+    #: Everything a document *says*, prose included, minus what it *shows*. A
+    #: citation is written in prose and a stamp inside an inline code span or a
+    #: docstring is still a citation, so the filters that make a value registry
+    #: precise would make this one blind -- which is why this was ``raw`` for
+    #: the life of the project.
+    #:
+    #: It stopped being right at the fence. ``docs/citations.md`` has to spell a
+    #: whole reference key to show the reader what one looks like, and that
+    #: example was the only finding the closed-world citation catch had: true as
+    #: stated, wrong in substance, and unfixable except by inventing a
+    #: bibliography entry for a source that does not exist. See
+    #: :func:`~kinemata.prose.outside_fenced_blocks` for what a fence is taken
+    #: to mean and what that costs.
+    #:
+    #: Live rather than decorative: :func:`~kinemata.bypass.strays` reads it
+    #: before asking :meth:`candidates` what is cited.
+    match_mode = "unfenced"
 
     #: Documents, not code, and declared here rather than left to the project's
     #: list. The project default is ``.py``; a bibliography pointed at it would
@@ -333,6 +345,19 @@ class Bibliography(BaseRegistry):
         :func:`kinemata.stamps.find` also means a malformed token is refused
         here exactly as it is everywhere else, instead of being passed over by a
         matcher that never saw it.
+
+        **What a document shows never arrives here, but not by one route.** A
+        fence is a property of a whole document and this reads one line at a
+        time, so the blanking has to happen before the split -- and the two
+        callers reach it differently. :meth:`candidates` is asked line by line
+        by :func:`~kinemata.bypass.strays`, which applies the ``unfenced`` mode
+        to the file first. :meth:`detect` is handed a whole file by
+        :func:`~kinemata.bypass.unused`, which consults no mode at all, so it
+        blanks the text itself.
+
+        This paragraph previously claimed the mode covered both. It did not, and
+        nothing caught the difference until the two directions disagreed out
+        loud on 2026-09-10.
         """
         for line in text.splitlines():
             for stamp in stamps.find(line):
@@ -346,9 +371,27 @@ class Bibliography(BaseRegistry):
         citation; and its boundary class treats the hyphen as part of a name, so
         the separator immediately before a key would stop the match dead and
         every entry would report as uncited.
+
+        **Fences are blanked here, not left to the caller.** This method has one
+        caller -- :func:`~kinemata.bypass.unused` -- and it reads whole files
+        without consulting ``match_mode``, so a registry that relied on the mode
+        alone would answer one question for the catch and a different one for the
+        review list. It did, on 2026-09-10: ``undeclared`` and ``cite`` both
+        reported this project as citing nothing while ``unused`` still counted an
+        illustration inside a fenced block as a mention.
+
+        The mode is not the place to fix that generally. ``match_mode`` governs
+        where an *antipattern* counts -- a re-derived value, which lives in a
+        string literal -- while this asks where the *identifier* is mentioned,
+        which for a value registry lives in code. Teaching ``unused`` to apply
+        the mode would blank the code and report every declared constant as
+        unmentioned; measured on a constants registry, ``detect`` goes from
+        finding its entry to finding nothing. The two coincide only for a
+        registry whose identifiers are themselves what appears in prose, which is
+        this one.
         """
         seen: dict[str, None] = {}
-        for key in self._cited(text):
+        for key in self._cited(outside_fenced_blocks(text)):
             if key in self._index:
                 seen.setdefault(key, None)
         return list(seen)

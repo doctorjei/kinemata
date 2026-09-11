@@ -30,7 +30,13 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from .contract import BaseRegistry, Entry, undeclared
-from .prose import FILTERS, LITERAL_EXTRACTORS, PROSE_FILTERS, STRING_FILTERS
+from .prose import (
+    FILTERS,
+    LITERAL_EXTRACTORS,
+    PROSE_FILTERS,
+    STRING_FILTERS,
+    UNFENCED_FILTERS,
+)
 
 #: Which filter table each ``match_mode`` selects. A mode is a row here, so
 #: adding one does not mean editing the branch that picks it.
@@ -38,6 +44,11 @@ MODE_FILTERS = {
     "prose": PROSE_FILTERS,
     "code": FILTERS,
     "strings": STRING_FILTERS,
+    # Everything a document says, minus what it merely shows. For a registry
+    # whose matches are *citations*, where an illustration of the notation is
+    # indistinguishable from a use of it -- this project's own specification of
+    # the citation form was the closed-world catch's only finding.
+    "unfenced": UNFENCED_FILTERS,
     # No filtering at all. A row rather than a fallback, because ``raw`` was
     # already being passed by name and worked only because an unknown mode
     # happens to land on a table with no entry for the suffix -- a mode that
@@ -262,10 +273,13 @@ def scan(
     # overwrite the other -- which it did, making an explicit code_only=False
     # behave as though the registry's mode had been requested.
     mode = getattr(registry, "match_mode", "strings")
-    # ``prose`` blanks inline code spans and nothing else: for an antipattern
-    # that is a *spelling*, a backticked token is a mention. An explicit
-    # argument still wins, so a caller can override the registry's choice.
-    prose_only = mode == "prose" and strings_only is None and code_only is None
+    # With neither argument given, the mode picks its own table -- ``prose``
+    # blanks inline code spans, ``unfenced`` blanks what a document shows. That
+    # is what the two-way code/strings axis below cannot express, and reading
+    # the table by name gives every mode the same answer here that ``strays``
+    # gives, rather than leaving a new row to work in one caller and not the
+    # other. For the four modes the axis does express, the two agree.
+    from_mode = strings_only is None and code_only is None
     if strings_only is None:
         strings_only = mode == "strings"
     if code_only is None:
@@ -312,7 +326,7 @@ def scan(
                     )
             continue
 
-        table = MODE_FILTERS.get(mode, FILTERS) if prose_only else (
+        table = MODE_FILTERS.get(mode, FILTERS) if from_mode else (
             STRING_FILTERS if strings_only else (FILTERS if code_only else {})
         )
         source_filter = table.get(path.suffix)

@@ -22,6 +22,7 @@ from pathlib import Path
 
 from . import stamps
 from .bypass import _walk
+from .prose import UNFENCED_FILTERS
 
 #: How long a citation target can be and still read comfortably beside its key,
 #: in characters.
@@ -78,6 +79,16 @@ def citations(
     that names no bibliography entry, which is a legitimate thing to write and
     nothing this index can say anything about.
 
+    Fenced blocks are not read, for the same reason the catch does not read
+    them: a document specifying a notation writes whole examples of it, and an
+    illustration is not a citation. This has to agree with
+    :attr:`~kinemata.adapters.bibliography.Bibliography.match_mode` or the two
+    directions describe different trees -- which they did, on 2026-09-10,
+    between the fence filter landing and this line: ``undeclared`` called the
+    specification's five stamps display while ``cite`` still counted two of
+    them as uses, so the index reported citations of a key this repository does
+    not actually cite anywhere.
+
     Refuses on a malformed token, because :func:`kinemata.stamps.find` does: a
     key of the wrong width is one fact with two spellings, and reporting a
     worklist that quietly omitted it would be the worse of the two outcomes.
@@ -93,6 +104,11 @@ def citations(
             source = path.read_text(errors="ignore")
         except OSError:
             continue
+        # Blanking rather than dropping: the filter preserves line numbering,
+        # and a worklist whose line numbers are off by a fence is not a worklist.
+        filtered = UNFENCED_FILTERS.get(path.suffix)
+        if filtered is not None:
+            source = filtered(source)
         for number, line in enumerate(source.splitlines(), start=1):
             for stamp in stamps.find(line):
                 if stamp.key is None:

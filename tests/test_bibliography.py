@@ -234,6 +234,83 @@ def test_a_closed_bibliography_reports_a_citation_nothing_declares(tmp_path):
     assert "Ru0169" in str(stray)
 
 
+# -- shown syntax versus used syntax ------------------------------------------
+
+
+def test_a_key_shown_inside_a_fence_is_not_a_citation(tmp_path):
+    """The defect this registry's mode exists for.
+
+    ``docs/citations.md`` prints a whole reference key inside a fence so a
+    reader can see the notation, and that illustration was the closed-world
+    catch's only finding in this repository -- unfixable except by declaring a
+    bibliography entry for a ruling that does not exist.
+    """
+    write(tmp_path, "notes.md", f"""
+        the form is:
+
+        ```
+        [{STAMP}-Ru0169]
+        ```
+    """)
+    registry = Bibliography([book()], closed=True)
+    assert strays(registry, tmp_path, suffixes=(".md",)) == []
+
+
+def test_a_citation_outside_a_fence_is_still_found(tmp_path):
+    """The control. An exemption that also swallowed real citations would be
+    the under-reporting failure wearing the fix's clothes, and the two live one
+    line apart in the document that prompted this."""
+    write(tmp_path, "notes.md", f"""
+        the form is:
+
+        ```
+        [{STAMP}-Ru0169]
+        ```
+
+        and the ruling itself is [{STAMP}-Ru0170].
+    """)
+    registry = Bibliography([book()], closed=True)
+    (stray,) = strays(registry, tmp_path, suffixes=(".md",))
+    assert "Ru0170" in str(stray)
+    assert stray.line == 7  # blanked in place, so the number still points home
+
+
+def test_an_entry_cited_only_from_inside_a_fence_is_not_mentioned(tmp_path):
+    """The review list and the catch have to answer about the same tree.
+
+    ``unused`` reads whole files and consults no ``match_mode``, so for a day
+    this asserted the opposite: a fenced illustration counted as a mention while
+    the closed-world catch and the reverse index both said the project cited
+    nothing. Fixed in :meth:`Bibliography.detect` rather than in ``unused``,
+    because ``match_mode`` governs where an *antipattern* counts and this asks
+    where an *identifier* is mentioned -- applying the mode generally would
+    blank the code and report every declared constant as unused.
+    """
+    write(tmp_path, "notes.md", f"""
+        ```
+        the contract is [{STAMP}-Pa0003]
+        ```
+    """)
+    registry = Bibliography([book()], home="docs/bibliography.toml")
+    assert unused(registry, tmp_path, suffixes=(".md",)) == ["Pa0003"]
+
+
+def test_a_citation_outside_a_fence_still_counts_as_mentioned(tmp_path):
+    """The negative control for the test above."""
+    write(tmp_path, "notes.md", f"the contract is [{STAMP}-Pa0003]\n")
+    registry = Bibliography([book()], home="docs/bibliography.toml")
+    assert unused(registry, tmp_path, suffixes=(".md",)) == []
+
+
+def test_an_inline_code_span_still_carries_a_citation(tmp_path):
+    """Why the mode is not ``prose``. A stamp inside backticks on a prose line
+    is a citation like any other; only a whole fenced block is display."""
+    write(tmp_path, "notes.md", f"see `[{STAMP}-Ru0169]` for the form.\n")
+    registry = Bibliography([book()], closed=True)
+    (stray,) = strays(registry, tmp_path, suffixes=(".md",))
+    assert "Ru0169" in str(stray)
+
+
 def test_an_entry_nothing_cites_shows_up_as_unused(tmp_path):
     """No separate machinery for a key nothing cites: it is a declared entry
     nothing mentions, which the existing review list already describes."""
@@ -555,3 +632,42 @@ def test_a_short_target_gets_no_such_note(tmp_path, capsys):
 def test_stamp_reads_a_key_back(capsys):
     assert main(["stamp", f"[{STAMP}-Ru0169]"]) == 0
     assert "type Ru key Ru0169" in capsys.readouterr().out
+
+
+# -- the index and the catch must describe the same tree --------------------
+
+
+def test_a_fenced_illustration_is_not_counted_as_a_citation(tmp_path):
+    """A specification writes whole examples of the notation it defines.
+
+    Found 2026-09-10, between the fence filter landing and this being fixed:
+    ``undeclared`` had begun calling a fenced stamp display while ``citations``
+    still counted it as a use, so the reverse index reported citations of a key
+    the tree does not cite anywhere. Two directions that could disagree about
+    what a citation is eventually will.
+    """
+    write(tmp_path, "spec.md", """
+        Shown, not spoken:
+
+        ```markdown
+        The contract is `docs/design.md` [0TMQDKB-Pa0003].
+        ```
+    """)
+    assert citations(tmp_path) == []
+
+
+def test_a_citation_below_a_fence_is_still_found_at_its_own_line(tmp_path):
+    """The negative control, and the reason the filter blanks rather than drops.
+
+    A worklist whose line numbers shifted by the length of a fence is not a
+    worklist -- it is a list of places to look near.
+    """
+    write(tmp_path, "spec.md", """
+        ```markdown
+        The contract is [0TMQDKB-Pa0003].
+        ```
+
+        And in prose, genuinely: [0TMQDKB-Pa0003].
+    """)
+    found = citations(tmp_path)
+    assert [str(one) for one in found] == ["spec.md:5"]
