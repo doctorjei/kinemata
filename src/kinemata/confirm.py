@@ -63,7 +63,12 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 
 from . import stamps
-from .adapters.bibliography import INTERPRETED, Bibliography, undeclared_key
+from .adapters.bibliography import (
+    EXTERNAL,
+    INTERPRETED,
+    Bibliography,
+    undeclared_key,
+)
 from .bypass import _walk, git_ignored
 from .claims import (
     EXTERNAL_TIMEOUT,
@@ -188,10 +193,19 @@ SETTLERS: tuple[Settler, ...] = (
 
 _BY_CODE: dict[str, Settler] = {settler.code: settler for settler in SETTLERS}
 
-if set(_BY_CODE) != set(INTERPRETED):
+#: The interpreted codes an oracle here could answer about. **An external code
+#: is excluded by definition, not by omission**: every oracle in this package
+#: asks about the tree it was pointed at, so no row could be written for one
+#: without inventing an answer. That is why the check below subtracts them
+#: rather than requiring a row -- and why a row for ``Px`` would be worse than
+#: none, since it would have to return "could not tell" on every call while
+#: reading in this table as an oracle.
+SETTLEABLE = set(INTERPRETED) - EXTERNAL
+
+if set(_BY_CODE) != SETTLEABLE:
     raise ImportError(
         "the interpreted type codes and the oracles that settle them have "
-        f"drifted apart: {sorted(set(INTERPRETED) ^ set(_BY_CODE))}. An "
+        f"drifted apart: {sorted(SETTLEABLE ^ set(_BY_CODE))}. An "
         "interpreted code is one whose behavior the tool depends on, so one "
         "with no oracle is a promise nothing keeps."
     )
@@ -522,18 +536,18 @@ def _judge(
 
     entry = declared[key]
     code, target = str(entry.extra["type"]), str(entry.extra["target"])
-    # A source the project has declared to be in somebody else's tree is asked
-    # about before an oracle here is. Every oracle here answers about *this*
-    # tree, so a foreign commit reads as "the history does not know it" and a
-    # foreign path as "no such path" -- both true statements that say the source
-    # is gone, when what is true is that this is not the repository that can
-    # tell. Eight of them were being reported that way, which is a report a
-    # reader would act on by deleting real citations.
-    if entry.extra.get("foreign"):
+    # An artifact in another repository is recognized before an oracle here is
+    # asked. Every oracle here answers about *this* tree, so a Cx read as a Cm
+    # reports "the history does not know it" and a Px reads as "no such path" --
+    # both true statements that say the source is gone, when what is true is
+    # that this is not the repository that can tell. Eight citations were being
+    # reported that way, which is a report a reader would act on by deleting
+    # real evidence.
+    if code in EXTERNAL:
         return Outcome(
             site.path, site.line, key, UNSETTLED,
-            f"declared foreign to {entry.extra['foreign']}, which is the tree "
-            "that can settle it",
+            f"in {entry.extra['repository']}, which is the repository that can "
+            "settle it",
             body, body, at,
         )
     settler = _BY_CODE.get(code)
@@ -664,7 +678,7 @@ BLOCKING: tuple[tuple[str, str, str], ...] = (
     ("broken", GONE, "does not resolve"),
     ("unsettled", UNSETTLED, "could not be settled by this run"),
     ("deferred", UNSETTLED, "is held open by a promise"),
-    ("foreign", UNSETTLED, "is declared to be in another project's tree"),
+    ("elsewhere", UNSETTLED, "is declared to be in another repository"),
 )
 
 

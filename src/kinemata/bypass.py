@@ -14,8 +14,8 @@ its own reach.
 Two properties, both learned from corpus evidence:
 
 * **Scope is the whole tree, never one module.** kanibako-cli's own tripwire
-  scanned ``project/workset.py`` [0TMVXHC-Pa0004] alone and missed eight sites
-  in six other modules (``42ece129`` [0TMVXHC-Cm0001]). A catch scoped to one
+  scanned ``project/workset.py`` [0TMVXHC-Px0001] alone and missed eight sites
+  in six other modules (``42ece129`` [0TMVXHC-Cx0001]). A catch scoped to one
   module is not a catch.
 * **It runs where the agent cannot reach it.** In CI, host-side. A check an
   agent can edit or skip is a reminder, not a catch.
@@ -442,7 +442,7 @@ def unused(
     ⚠ **This detects mention, not use, and the difference matters.**
 
     Validated against a labeled incident and it failed. kanibako-cli commit
-    ``d8037cf5`` [0TMVXHC-Cm0002] records that three declared keys "had no
+    ``d8037cf5`` [0TMVXHC-Cx0002] records that three declared keys "had no
     reader at all -- a set was accepted, persisted and read back, and nothing
     moved". This function
     missed all three, because each appears in the project's own declaring

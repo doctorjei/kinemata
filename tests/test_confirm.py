@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from kinemata.adapters.bibliography import INTERPRETED, Bibliography
+from kinemata.adapters.bibliography import EXTERNAL, INTERPRETED, Bibliography
 from kinemata.cli import main
 from kinemata.confirm import (
     CONFIRMED,
@@ -465,11 +465,22 @@ def test_an_excluded_path_is_not_read(tmp_path):
 # -- the tables agree ---------------------------------------------------------
 
 
-def test_every_interpreted_code_has_an_oracle():
+def test_every_settleable_interpreted_code_has_an_oracle():
     """An interpreted code is one whose meaning the tool acts on. One with
     nothing to settle it would be a promise nothing keeps, so the two tables are
     checked against each other rather than trusted to stay in step."""
-    assert {settler.code for settler in SETTLERS} == set(INTERPRETED)
+    assert {settler.code for settler in SETTLERS} == set(INTERPRETED) - EXTERNAL
+
+
+def test_only_the_external_codes_are_exempt_from_needing_one():
+    """The subtraction above is the one way a code can have no oracle, so what
+    it removes is pinned rather than left to widen quietly.
+
+    An external code is excluded *by definition*: every oracle here asks about
+    the tree it was pointed at, so no row could be written for one without
+    inventing an answer. A row returning "could not tell" on every call would be
+    worse than none -- it would read in that table as an oracle."""
+    assert set(INTERPRETED) - {s.code for s in SETTLERS} == EXTERNAL
 
 
 def test_the_report_names_the_file_the_line_and_both_stamps(tmp_path, capsys):
@@ -534,22 +545,22 @@ def test_a_stamp_in_executable_code_is_not_a_citation(tmp_path):
 # -- evidence in somebody else's tree -----------------------------------------
 
 
-def test_a_foreign_source_is_unsettled_rather_than_gone(tmp_path):
+def test_a_source_in_another_repository_is_unsettled_rather_than_gone(tmp_path):
     """Every oracle here answers about *this* tree.
 
-    A foreign commit therefore reads as "the history does not know it" and a
-    foreign path as "no such path" -- true statements that say the source is
-    gone, when what is true is that this is not the repository that can tell.
+    A ``Cx`` read as a ``Cm`` therefore reports "the history does not know it"
+    and a ``Px`` reports "no such path" -- true statements that say the source
+    is gone, when what is true is that this is not the repository that can tell.
     Eight of this project's own citations were reported that way, which is a
     report a reader would act on by deleting real evidence.
     """
     book = Bibliography([{
-        "key": "Pa0009",
+        "key": "Px0009",
         "target": "src/theirs/module.py",
-        "foreign": "doctorjei/kanibako-cli",
+        "repository": "doctorjei/kanibako-cli",
         "note": "the module their tripwire scanned",
     }], home="docs/bibliography.toml")
-    tree(tmp_path, f"Their module is `src/theirs/module.py` [{OLD}-Pa0009].\n")
+    tree(tmp_path, f"Their module is `src/theirs/module.py` [{OLD}-Px0009].\n")
     outcome = only(plan(tmp_path, [book], when=NOW), UNSETTLED)
     assert "doctorjei/kanibako-cli" in outcome.detail
     assert outcome.old == outcome.new

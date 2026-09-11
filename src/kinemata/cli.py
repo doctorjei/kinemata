@@ -44,7 +44,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from . import stamps
-from .adapters.bibliography import Bibliography, undeclared_key
+from .adapters.bibliography import EXTERNAL, Bibliography, undeclared_key
 from .baseline import Baseline, BaselineError, Split, record
 from .bypass import Bypass, crossings, strays, unused
 from .citations import citations, index
@@ -61,7 +61,7 @@ from .provenance import (
     PROVENANCE_REGISTRY,
     ProvenanceError,
     Survey,
-    declared_foreign,
+    declared_elsewhere,
     survey,
 )
 from .report import DEFAULT_MAX_SITES, Report, review
@@ -633,27 +633,37 @@ def cmd_unused(args: argparse.Namespace) -> int:
     return 0  # advisory, always
 
 
-def _foreign_keys(settings: Settings) -> frozenset[str]:
-    """Reference keys whose entry names a source outside this tree.
+def _elsewhere_keys(settings: Settings) -> frozenset[str]:
+    """Reference keys whose **type code** says the artifact is somebody else's.
 
     Read off the built registries rather than re-parsing the config, so a key
-    the bibliography refused never reaches here. Asked of every registry by
-    what its entries carry, not by class: a project that supplies its own
-    adapter through ``kind = "import"`` and declares foreign evidence the same
-    way gets the same behavior, which is what publishing the field means.
+    the bibliography refused never reaches here. Asked of every registry by what
+    its entries carry, not by class: a project that supplies its own adapter
+    through ``kind = "import"`` and declares external evidence the same way gets
+    the same behavior, which is what publishing the vocabulary means.
+
+    **Keyed on the code rather than on a field's presence**, which is the change
+    that made the codes worth minting. The predicate used to ask whether an
+    entry carried ``foreign``, so a reader had to know that a field silently
+    re-read ``Pa`` as a path in somebody else's tree. Now the code says it and
+    the field only says where.
     """
-    return _entries_carrying(settings, "foreign")
+    return frozenset(
+        entry.id
+        for registry in settings.registries
+        for entry in registry.entries()
+        if str(entry.extra.get("type", "")) in EXTERNAL
+    )
 
 
 def _entries_carrying(settings: Settings, field: str) -> frozenset[str]:
     """Reference keys whose entry declares ``field``.
 
-    One reader for both of the fields a check acts on, because two would drift:
-    ``foreign`` says a citation is about another project's tree, ``confirmed``
-    says a source was verified on a day and is a record rather than a live
-    pointer. Asked of every registry by what its entries carry rather than by
-    class, so a project supplying its own adapter through ``kind = "import"``
-    gets the same behavior -- which is what publishing a field means.
+    Today that is ``confirmed``: a source verified on a day, which is a record
+    rather than a live pointer. Asked of every registry by what its entries
+    carry rather than by class, so a project supplying its own adapter through
+    ``kind = "import"`` gets the same behavior -- which is what publishing a
+    field means.
     """
     return frozenset(
         entry.id
@@ -671,9 +681,9 @@ def _verify(args: argparse.Namespace, settings: Settings) -> Verification:
     thing that writes the gate's exemption list must not be able to disagree
     about what a finding is.
 
-    This is also where the two halves of a foreign citation are joined, and the
-    only place that knows both: a bibliography is a registry, a claim is prose,
-    and neither module is allowed to import the other's world.
+    This is also where the two halves of an external citation are joined, and
+    the only place that knows both: a bibliography is a registry, a claim is
+    prose, and neither module is allowed to import the other's world.
     """
     return verify(
         _target(args, settings),
@@ -684,7 +694,7 @@ def _verify(args: argparse.Namespace, settings: Settings) -> Verification:
         counts=settings.counts,
         resolve_in=settings.resolve_in,
         commits_in=settings.commits_in,
-        foreign=declared_foreign(_foreign_keys(settings)),
+        elsewhere=declared_elsewhere(_elsewhere_keys(settings)),
         promised=settings.promised,
         external=settings.external,
         timeout=settings.external_timeout,
@@ -787,9 +797,9 @@ def cmd_claims(args: argparse.Namespace) -> int:
     # marker: these citations were not checked here because the project said
     # they are somebody else's. `cite --where` resolves any one of them to its
     # sites, which is why the number is the reading and the list is not.
-    if found.foreign:
-        print(f"external evidence: {len(found.foreign)} citation(s) declared "
-              "foreign, checked by the project that owns them")
+    if found.elsewhere:
+        print(f"external evidence: {len(found.elsewhere)} citation(s) naming "
+              "another repository, checked by the project that owns it")
 
     # Not a suppression this time but its neighbor: claims nothing falsified and
     # nothing confirmed either. `unavailable` above names the oracle that would
@@ -1164,9 +1174,9 @@ def cmd_cite(args: argparse.Namespace) -> int:
             entry = declared[_known(text, declared)]
             target = str(entry.extra["target"])
             print(f"{entry.id}  {target}  -- {entry.extra['note']}")
-            if entry.extra.get("foreign"):
-                print(f"{' ' * len(entry.id)}  known elsewhere as "
-                      f"{entry.extra['foreign']}")
+            if entry.extra.get("repository"):
+                print(f"{' ' * len(entry.id)}  in {entry.extra['repository']}, "
+                      "which is where it resolves")
             # The accompany threshold, reported and never enforced. Whether a
             # sentence reads better with its target spelled beside the key is a
             # judgment about that sentence; what a tool can offer is the

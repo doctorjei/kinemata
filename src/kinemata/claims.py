@@ -355,7 +355,7 @@ class Tree:
         target = claim.strip().rstrip("/.,;:")
         # `./name` anchors to the document's own directory. Stripping it lets
         # the fallbacks below answer: httpie's packaging README names
-        # `./get_release_artifacts.sh` [0TMVXHC-Pa0005], the file sits beside
+        # `./get_release_artifacts.sh` [0TMVXHC-Px0002], the file sits beside
         # it, and this reported it dead because the prefix survived into every
         # lookup.
         if target.startswith("./"):
@@ -400,8 +400,8 @@ class Verification:
     #: every run, never a failure -- that is what declaring it bought.
     deferred: list[Claim] = field(default_factory=list)
     #: Claims a bibliography says are about **another project's tree**: the
-    #: citation stands beside a reference key whose entry names a foreign
-    #: source. Reported on every run, never a failure -- the same bargain a
+    #: citation stands beside a reference key whose entry names an artifact
+    #: in another repository. Reported on every run, never a failure -- the same bargain a
     #: promise strikes, and for the same reason. The alternative shapes were
     #: both worse: leaving them broken makes the gate permanently red over
     #: honest citations, and dropping the readable target so no claim is
@@ -413,7 +413,7 @@ class Verification:
     #: this is the one suppression that already has a resolver -- the key is
     #: declared, so ``kinemata cite --where`` lists every place it is cited
     #: and ``unused`` names an entry nothing cites any more.
-    foreign: list[Claim] = field(default_factory=list)
+    elsewhere: list[Claim] = field(default_factory=list)
     #: Claims that did not fail and were not confirmed either: the oracle was
     #: off, absent, or unable to answer. **Never a failure** -- that is
     #: :attr:`ClaimKind.settled`'s whole argument, and gating on weather is what
@@ -1154,7 +1154,7 @@ def verify(
     file_suffixes: Iterable[str] = (),
     resolve_in: Iterable[str] = (),
     commits_in: Iterable[str] = (),
-    foreign: Callable[[Claim], bool] | None = None,
+    elsewhere: Callable[[Claim], bool] | None = None,
     promised: Iterable[Promise] = (),
     today: date | None = None,
     external: bool = False,
@@ -1204,13 +1204,13 @@ def verify(
         visible -- a corpus checked out on a developer's machine and gitignored
         in CI settles the citations locally and silently stops settling them
         where the gate actually runs.
-    :param foreign: asked of a claim this tree could not settle, and answers
+    :param elsewhere: asked of a claim this tree could not settle, and answers
         whether the project has *declared* it to be about somebody else's tree.
         A predicate rather than a bibliography, because this module must not
         learn what a registry is: documentation checking works on a repository
         that declares no registry at all, and wiring the two together here
         would make the claims gate need one. The caller that knows about both
-        builds it -- :func:`kinemata.provenance.declared_foreign`.
+        builds it -- :func:`kinemata.provenance.declared_elsewhere`.
 
         **The evidence this exists for is a docstring citing another
         repository.** This package's own source names commits and paths in the
@@ -1397,9 +1397,9 @@ def verify(
             continue
         # Asked only once the tree has failed to settle it. A citation that
         # resolves here is about here, whatever a key beside it says -- so a
-        # foreign declaration can never take a live claim out of the check.
-        if foreign is not None and foreign(claim):
-            found.foreign.append(claim)
+        # declaration can never take a live claim out of the check.
+        if elsewhere is not None and elsewhere(claim):
+            found.elsewhere.append(claim)
             continue
         if kind.name in PROMISABLE and _normalize(text) in promised_paths:
             found.deferred.append(claim)

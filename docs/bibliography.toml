@@ -33,11 +33,11 @@ note = "the registry contract"
 
 # Evidence in other people's repositories.
 #
-# These are the citations that forced this file to grow a `foreign` field. The
-# docstrings in `src/` name the incident or the measurement that produced a
-# design, and for a tool validated against other projects most of that evidence
-# is in those projects -- real commits and real files, permanently unresolvable
-# here because those trees are gitignored corpora and absent from a clean clone.
+# These are the citations that forced the `Px` and `Cx` codes. The docstrings in
+# `src/` name the incident or the measurement that produced a design, and for a
+# tool validated against other projects most of that evidence is in those
+# projects -- real commits and real files, permanently unresolvable here because
+# those trees are gitignored corpora and absent from a clean clone.
 #
 # Two shapes were rejected before this one. Leaving them as dead claims makes a
 # gate that can never go green over text nobody should change. Dropping the
@@ -46,44 +46,53 @@ note = "the registry contract"
 # of a docstring citing an incident is that a reader meets the incident where
 # the reasoning is.
 #
-# `foreign` names the repository, and it is what stops `Pa` and `Cm` from being
-# read as claims about this tree. An entry without it is still this project's
-# own path or commit, checked here as before.
+# `Px` is `Pa` and `Cx` is `Cm`, differing in locality and in nothing else. The
+# code says the artifact is somebody else's; `repository` says whose. Both are
+# required together, and an entry declaring one without the other is refused --
+# a code with no repository cannot be followed, and a repository beside a local
+# code says one thing to a reader and another to every check.
+#
+# ⚑ These were `Cm`/`Pa` with a `foreign` field until 2026-09-11. That field
+# silently re-read "path in this tree" as "path in the named tree", which is
+# coherent, undeclared, and the exact second-meaning-for-one-spelling this
+# project reports in other people's code. The keys were renumbered from 1 within
+# their new types: numbers are chosen rather than minted, so any unused one is
+# valid and there is nothing to preserve across a retyping.
 
 [[entry]]
-key = "Cm0001"
+key = "Cx0001"
 target = "42ece1296223babf896f00c514b2f0dc40d9e158"
-foreign = "doctorjei/kanibako-cli"
+repository = "doctorjei/kanibako-cli"
 note = "the tripwire scoped to one module: eight sites in six other modules went unseen"
 
 [[entry]]
-key = "Cm0002"
+key = "Cx0002"
 target = "d8037cf56e38761e0b7113f55d85ef5250af3a24"
-foreign = "doctorjei/kanibako-cli"
+repository = "doctorjei/kanibako-cli"
 note = "three declared keys with no reader at all -- the labeled incident `unused` failed 0/3"
 
 [[entry]]
-key = "Cm0003"
+key = "Cx0003"
 target = "452f0451990dca0cc74d5379de3d2a2b71474c8d"
-foreign = "doctorjei/kanibako-cli"
+repository = "doctorjei/kanibako-cli"
 note = "a bootstrap path spelled independently rather than copied: why equality is the wrong test"
 
 [[entry]]
-key = "Cm0004"
+key = "Cx0004"
 target = "e84b9504d1900a5a5ab1735cb1c43175eaf8b9be"
-foreign = "doctorjei/kento-core"
+repository = "doctorjei/kento-core"
 note = "three resolver messages harmonized: the f-string skeleton case, invisible to literal_eval"
 
 [[entry]]
-key = "Pa0004"
+key = "Px0001"
 target = "src/kanibako/project/workset.py"
-foreign = "doctorjei/kanibako-cli"
+repository = "doctorjei/kanibako-cli"
 note = "the single module their tripwire scanned; cited by its module-relative spelling"
 
 [[entry]]
-key = "Pa0005"
+key = "Px0002"
 target = "extras/packaging/linux/get_release_artifacts.sh"
-foreign = "httpie/cli"
+repository = "httpie/cli"
 note = "named `./get_release_artifacts.sh` by the README beside it -- the anchored spelling this read as dead"
 
 [[entry]]

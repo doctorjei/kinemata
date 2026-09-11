@@ -263,7 +263,7 @@ def _path_clusters(
     """Paths built by composing a shorter path that is spelled out again.
 
     Equality is the wrong test for this failure and the corpus says so.
-    kanibako-cli ``452f0451`` [0TMVXHC-Cm0003] single-sourced ``/etc/kanibako``
+    kanibako-cli ``452f0451`` [0TMVXHC-Cx0003] single-sourced ``/etc/kanibako``
     and two files under it; the sites were
     ``Path("/etc/kanibako/config_base.yaml")`` in one
     module and ``Path("/etc/kanibako") / BASELINE_FILENAME`` in another. No two

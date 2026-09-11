@@ -214,7 +214,13 @@ across all of them rather than within each.
 
 A key in this project's bibliography is *this* project's key for whatever it points at, in the
 way that reference 12 in one paper is that paper's number for another's work rather than a number
-both must agree on forever. The entry names the foreign identifier where there is one.
+both must agree on forever.
+
+⚑ **This sentence used to say the entry "names the foreign identifier where there is one"**, which
+quietly covered two different things with one word: another project's *name* for a source (RFC
+7159, say) and the *repository* an artifact is in. Only the second is a field —
+`repository`, required by the external codes in §5.4 and refused beside a local one. An outside
+name for a source is what `target` and `note` are for.
 
 A key is therefore only ever resolved against its own bibliography, and collision between
 projects stops being a category of problem. Global uniqueness across trees would need either a
@@ -265,7 +271,20 @@ question.
 |---|---|---|
 | `Wb` | web address | settles that it resolves |
 | `Pa` | path in this tree | settles that it exists |
-| `Cm` | commit | settles that the history knows it |
+| `Cm` | commit in this repository | settles that the history knows it |
+| `Px` | path in **another** repository | nothing can settle it here; see §5.8 |
+| `Cx` | commit in **another** repository | nothing can settle it here; see §5.8 |
+
+**The external codes are pairs, and the pairing is the design.** `Px` is `Pa` and `Cx` is `Cm`,
+differing in locality and in nothing else. A single code meaning only *"not ours"* was proposed
+first and rejected on what it loses: a code is one per entry, so it cannot say *external* and
+*commit* at once, and the entry would stop telling a reader what sort of artifact the target is.
+
+`Wb` has no pair. An address is off this machine by nature, so "in another repository" is not a
+distinction it can draw — and note that *external* in this table means **another repository**,
+while `[claims] external` means **reaching the network**. Two boundaries, deliberately not one
+word: the codes carry `x`, the config key carries the network sense, and neither is read where the
+other applies.
 
 #### Standardized codes
 
@@ -350,17 +369,32 @@ silent rot becomes a task list.
 A key that nothing cites needs no separate machinery — it is a declared entry nothing mentions,
 which the existing report of unused entries already describes.
 
-### 5.8 `foreign` — evidence that lives in another project's tree
+### 5.8 `Px` and `Cx` — evidence that lives in another repository
 
-An entry may name the repository its source belongs to. Section 5.2 introduces the field as the
-place to record another project's identifier for a thing this project has given its own key; this
-section states the **behavior** it carries, because it changes what a check concludes.
+An entry whose code is `Px` or `Cx` names an artifact this repository does not contain, and says
+which repository does:
 
-**A citation this tree cannot settle, standing beside a key whose entry is `foreign`, is not a
-finding.** It is a citation of somebody else's artifact, checked by whoever owns that tree. The
-documentation gate reports the count of them on every run and never fails on one.
+```toml
+[[entry]]
+key = "Cx0001"
+target = "42ece1296223babf896f00c514b2f0dc40d9e158"
+repository = "doctorjei/kanibako-cli"
+note = "the tripwire scoped to one module"
+```
 
-**Why the field exists at all.** A tool validated against other projects cites those projects, and
+**The code and the field are required together, and each without the other is refused.** An
+external code with no repository says the source is somewhere else without saying where, which is
+a citation a reader cannot follow. A repository beside a local code says two contradictory things
+about one target, and the code is the half a check acts on — so the entry would read as external
+to a person and as this tree's to the tool.
+
+**A citation this tree cannot settle, standing beside an external key, is not a finding.** It is a
+citation of somebody else's artifact, checked by whoever owns that repository. The documentation
+gate reports the count of them on every run and never fails on one, and the writer reports such a
+source as *unsettled* rather than *gone* — every oracle here answers about the tree it was pointed
+at, so calling it gone is a true sentence that invites a reader to delete real evidence.
+
+**Why these codes exist at all.** A tool validated against other projects cites those projects, and
 a project adopting a checker usually has a vendored dependency or a sibling repository it refers
 to by path. Those citations are real, they are permanently unresolvable from here, and the two
 alternatives are both worse than declaring them: left alone they are dead claims forever, so the
@@ -378,10 +412,12 @@ safe to have at all:
 - **A token the checker cannot locate stays checked.** The failure costs a false finding rather
   than a silent exemption, which is the direction every mechanism here errs in.
 
-⚑ **What this field does to an interpreted code is not yet settled.** `Pa` is reserved as *"path
-in this tree"*, and `foreign` silently re-reads it as a path in the named tree. That is coherent
-and it is undeclared; it is an open question whether foreign sources should carry their own codes
-instead. A new reserved code is not the tool's to mint — see §5.4.
+⚑ **This was a `foreign` field on a `Pa` or `Cm` entry until 2026-09-11**, and the field silently
+re-read *"path in this tree"* as *"path in the named tree"*. Coherent, undeclared, and the exact
+second-meaning-for-one-spelling this tool reports in other people's code. Two reserved codes were
+minted instead — which is not the tool's to do, so they were approved one at a time — and the keys
+were renumbered from 1 within their new types. Numbers are chosen rather than minted (§5.3), so
+there was nothing to preserve across a retyping.
 
 ### 5.9 `confirmed` — the day a source was verified, and what it changes
 

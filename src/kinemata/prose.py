@@ -288,7 +288,7 @@ def python_message_skeletons(source: str) -> list[tuple[int, str, str]]:
     hides almost every user-facing message in modern Python, and duplicated
     messages are a large share of the undeclared-literal failure.
 
-    Evidence: kento-core ``e84b9504`` [0TMVXHC-Cm0004] harmonized three
+    Evidence: kento-core ``e84b9504`` [0TMVXHC-Cx0004] harmonized three
     resolver messages that were each
     ``f"Error: no {thing} named '{name}'"``. Compared as raw tokens
     they share nothing useful; compared as skeletons they are near-identical.

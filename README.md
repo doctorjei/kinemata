@@ -398,6 +398,20 @@ It rides on `claims` rather than being a command of its own on purpose. A check
 that verifies other checks are wired up is worthless if nothing guarantees *it*
 runs, and a fifth command would have created exactly that regress.
 
+**Declare the commands that are not checks, too.** A gate says *this check must
+run*; nothing says *this command must still work*, and that gap has bitten this
+project three times — a command missing from its own documentation, a catch that
+gated locally while nothing in CI ran it, and a command that refused outright,
+exit 2, for most of a day on a break already fixed elsewhere in the same
+codebase. Every one was invisible to every other check. The fix is a CI job that
+runs each of them for the fact that it still runs, with those runs declared here
+so a deleted step fails something.
+
+A by-design refusal is a claim as much as a pass is. This repository declares no
+`[context]`, so `kinemata context` exits 2 here — asserted rather than tolerated,
+so that declaring `[context]`, or the refusal quietly turning into something
+else, fails the step instead of going unread.
+
 **What it does not see**, since a checker that overstates its reach is the
 problem it is trying to solve: a step disabled by `if:`, a job nothing triggers,
 or a command that runs and checks nothing. It verifies that the text is present
@@ -411,7 +425,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **689 tests**, and
+The companion guard is a number with an oracle. This suite is **693 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 

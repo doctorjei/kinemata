@@ -21,7 +21,7 @@ import textwrap
 from kinemata.citations import citations
 from kinemata.claims import Counted, verify
 from kinemata.prose import outside_illustrations, python_prose_only
-from kinemata.provenance import declared_foreign
+from kinemata.provenance import declared_elsewhere
 
 PY = (".md", ".py")
 
@@ -429,19 +429,19 @@ def test_the_filter_keeps_line_numbers_and_line_lengths(tmp_path):
 # green over text nobody should change is a gate its reader learns to skim.
 
 
-def test_a_citation_beside_a_foreign_key_is_not_a_claim_about_this_tree(tmp_path):
+def test_a_citation_beside_an_external_key_is_not_a_claim_about_this_tree(tmp_path):
     write(tmp_path, "mod.py", '''
-        """Their tripwire scanned ``project/workset.py`` [{stamp}-Pa0004]."""
+        """Their tripwire scanned ``project/workset.py`` [{stamp}-Px0001]."""
     '''.replace("{stamp}", STAMP))
 
     assert broken(verify(tmp_path, suffixes=PY)) == {("path", "project/workset.py")}
 
-    settled = verify(tmp_path, suffixes=PY, foreign=declared_foreign({"Pa0004"}))
+    settled = verify(tmp_path, suffixes=PY, elsewhere=declared_elsewhere({"Px0001"}))
     assert settled.broken == []
-    assert [claim.text for claim in settled.foreign] == ["project/workset.py"]
+    assert [claim.text for claim in settled.elsewhere] == ["project/workset.py"]
 
 
-def test_a_key_nothing_declares_foreign_settles_nothing(tmp_path):
+def test_a_key_nothing_declares_external_settles_nothing(tmp_path):
     """The predicate answers for the keys it was given and no others.
 
     Otherwise any keyed citation would exempt itself, which would make the
@@ -449,12 +449,12 @@ def test_a_key_nothing_declares_foreign_settles_nothing(tmp_path):
     for.
     """
     write(tmp_path, "mod.py", '''
-        """Their tripwire scanned ``project/workset.py`` [{stamp}-Pa0004]."""
+        """Their tripwire scanned ``project/workset.py`` [{stamp}-Px0001]."""
     '''.replace("{stamp}", STAMP))
 
-    result = verify(tmp_path, suffixes=PY, foreign=declared_foreign({"Cm0001"}))
+    result = verify(tmp_path, suffixes=PY, elsewhere=declared_elsewhere({"Cx0001"}))
     assert broken(result) == {("path", "project/workset.py")}
-    assert result.foreign == []
+    assert result.elsewhere == []
 
 
 def test_one_keyed_occurrence_does_not_cover_an_unkeyed_one(tmp_path):
@@ -466,29 +466,29 @@ def test_one_keyed_occurrence_does_not_cover_an_unkeyed_one(tmp_path):
     switch off a real claim.
     """
     write(tmp_path, "mod.py", '''
-        """Theirs ``a/thing.py`` [{stamp}-Pa0004], ours ``a/thing.py`` too."""
+        """Theirs ``a/thing.py`` [{stamp}-Px0001], ours ``a/thing.py`` too."""
     '''.replace("{stamp}", STAMP))
 
-    result = verify(tmp_path, suffixes=PY, foreign=declared_foreign({"Pa0004"}))
+    result = verify(tmp_path, suffixes=PY, elsewhere=declared_elsewhere({"Px0001"}))
     assert broken(result) == {("path", "a/thing.py")}
-    assert result.foreign == []
+    assert result.elsewhere == []
 
 
-def test_a_foreign_key_cannot_take_a_live_claim_out_of_the_check(tmp_path):
+def test_an_external_key_cannot_take_a_live_claim_out_of_the_check(tmp_path):
     """Resolution is asked first, so the declaration never overrides the tree.
 
     A path that exists here is this project's whatever a key beside it says --
-    and it is reported as resolved rather than as foreign, so the count of
+    and it is reported as resolved rather than as external, so the count of
     waived citations stays honest.
     """
     write(tmp_path, "src/real.py", "x = 1\n")
     write(tmp_path, "mod.py", '''
-        """Also in their tree: ``src/real.py`` [{stamp}-Pa0004]."""
+        """Also in their tree: ``src/real.py`` [{stamp}-Px0001]."""
     '''.replace("{stamp}", STAMP))
 
-    result = verify(tmp_path, suffixes=PY, foreign=declared_foreign({"Pa0004"}))
+    result = verify(tmp_path, suffixes=PY, elsewhere=declared_elsewhere({"Px0001"}))
     assert result.broken == []
-    assert result.foreign == []
+    assert result.elsewhere == []
 
 
 def test_an_illustrated_citation_is_not_a_citation(tmp_path):

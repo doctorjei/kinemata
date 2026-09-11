@@ -70,6 +70,33 @@ def test_a_commented_out_step_does_not_satisfy_its_own_declaration(tmp_path):
     assert report.failed
 
 
+def test_a_command_inside_a_multi_line_run_block_counts(tmp_path):
+    """A step may be a shell block rather than a bare command, and this project
+    now relies on that: the row asserting `kinemata context` exits 2 cannot be a
+    bare `run:`, because the assertion is the point of it.
+
+    Declared here rather than left to the repository's own config to prove,
+    since a property only its dogfooding exercises is one that breaks silently
+    for an adopter.
+    """
+    write(tmp_path, ".github/workflows/checks.yml", """
+        name: checks
+        jobs:
+          tests:
+            steps:
+              - name: context refuses, by design here
+                run: |
+                  set +e
+                  kinemata context
+                  status=$?
+                  set -e
+                  test "$status" -eq 2
+    """)
+    report = enforced(tmp_path, (Gate(command="kinemata context"),))
+    assert [gate.command for gate in report.verified] == ["kinemata context"]
+    assert not report.absent
+
+
 def test_a_trailing_comment_leaves_the_step_running(tmp_path):
     """The inverse mistake: stripping from the first ``#`` anywhere would read
     a live step as commented out."""

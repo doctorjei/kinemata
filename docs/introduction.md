@@ -100,11 +100,13 @@ case_sensitive = true
 name = "sources"
 kind = "bibliography"
 suffixes = [".md", ".py"]
-source = "docs/bibliography.toml"   # [[entry]]: key, target, note, foreign,
+source = "docs/bibliography.toml"   # [[entry]]: key, target, note, repository,
                                     # confirmed. An entry with `confirmed` is a
                                     # record, not a live pointer: the staleness
                                     # clock leaves it alone and `confirm`
-                                    # re-checks it on request
+                                    # re-checks it on request. `repository` is
+                                    # required by the Px and Cx codes and
+                                    # refused beside a local one
 
 # How long a citation target can be and still read comfortably beside its key.
 # Reported by `kinemata cite -v`, never enforced.
@@ -356,9 +358,12 @@ outside, so the following are `ConfigError`, not silent skips:
 - a reference key declared **twice anywhere in the project** — the key space is project-wide, not
   per file, so one key resolving to two sources is refused across every bibliography at once
 - a `bibliography` entry naming a type code nothing declares, and a project redefining an
-  **interpreted** code (`Wb`, `Pa`, `Cm`), whose meaning a check acts on. Redefining a
+  **interpreted** code (`Wb`, `Pa`, `Cm`, `Px`, `Cx`), whose meaning a check acts on. Redefining a
   **standardized** code is a warning instead: the tool never reads those, so refusing would
   enforce a convention it cannot act on
+- a `bibliography` entry whose code and `repository` field disagree: an **external** code (`Px`,
+  `Cx`) with no repository names a source it cannot point at, and a repository beside a local code
+  says one thing to a reader and another to every check
 - `[citations] accompany_max` that is not a length in characters
 - `[citations] suffixes` that is not a non-empty list of dotted file extensions, or that is
   declared without `provenance = true` — an empty list would turn the policy off while leaving it
@@ -536,6 +541,10 @@ transforms, sum bytes, compare to `budget`. `-v` lists files largest-first.
   that survivable is that it is a committed file change, visible in review.
 - **`[[gate]]` verifies text presence, not execution.** Blind to a step disabled by `if:`, a
   job nothing triggers, or a command that runs and checks nothing. It does not parse YAML.
+  ⚑ It is also the only declaration available for *"this command must still work"*, which is a
+  different claim from *"this check must run"* and is counted in the same number. Deliberate — the
+  inventory asks whether every declared command is still run here, and that question is the same
+  for both — but a reader of `gates: N of N` should know the count mixes them.
 - **`context` bounds bytes, not attention.** It measures what you *declare* is loaded; the
   flattening is a model of a harness, not the harness.
 - **A CI workflow in the repository is editable by the agent it constrains.** Branch protection

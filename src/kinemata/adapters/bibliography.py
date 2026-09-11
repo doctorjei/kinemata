@@ -52,8 +52,30 @@ from ..prose import outside_fenced_blocks
 INTERPRETED: Mapping[str, str] = MappingProxyType({
     "Wb": "web address",
     "Pa": "path in this tree",
-    "Cm": "commit",
+    "Cm": "commit in this repository",
+    "Px": "path in another repository",
+    "Cx": "commit in another repository",
 })
+
+#: Codes naming an artifact that is **not in this repository**. Their entries
+#: carry ``repository``, and nothing here can settle one: every oracle in this
+#: package answers about the tree it was pointed at.
+#:
+#: **Two codes rather than one, and the kind is why.** A single code for "not
+#: ours" was the first proposal and it loses what sort of artifact the target
+#: is, because a code is one per entry -- there is no room to say *external*
+#: and *commit* at once. Paired codes say both, and the pairing is the whole
+#: design: ``Pa``/``Px`` and ``Cm``/``Cx`` differ in locality and in nothing
+#: else.
+#:
+#: ``Wb`` has no pair. An address is off this machine by nature, so "in another
+#: repository" is not a distinction it can draw.
+#:
+#: **This replaced a field that re-read a code.** An entry used to carry
+#: ``foreign`` beside ``Pa``, which silently turned *"path in this tree"* into
+#: *"path in the named tree"* -- coherent, undeclared, and exactly the
+#: second-meaning-for-one-spelling this package reports in other people's code.
+EXTERNAL: frozenset[str] = frozenset({"Px", "Cx"})
 
 #: Common source types, reserved even though the tool never reads them. The
 #: value of a shorthand is that it reads without explanation -- the same
@@ -80,7 +102,7 @@ STANDARDIZED: Mapping[str, str] = MappingProxyType({
 #: reason a promise's keys are: ``not`` written for ``note`` would drop the
 #: human-readable half in silence and leave an entry that resolves to a bare
 #: path, which is the readable form the forward direction exists to give back.
-ENTRY_KEYS = frozenset({"key", "target", "note", "foreign", "confirmed"})
+ENTRY_KEYS = frozenset({"key", "target", "note", "repository", "confirmed"})
 
 
 def confirmed_date(value: Any, where: str) -> date:
@@ -359,8 +381,30 @@ class Bibliography(BaseRegistry):
             "target": str(record["target"]),
             "note": str(record["note"]),
         }
-        if record.get("foreign"):
-            extra["foreign"] = str(record["foreign"])
+        # The code and the field have to agree, and neither alone says enough.
+        # An external code with no repository says the source is somewhere else
+        # without saying where, which is a citation a reader cannot follow. A
+        # repository beside a local code says two contradictory things about one
+        # target, and the code is the half a check acts on -- so the entry would
+        # read as external to a person and as this tree's to the tool.
+        if code in EXTERNAL and not record.get("repository"):
+            raise ValueError(
+                f"{where} ({key}) names type {code}, which is an artifact in "
+                "another repository, and does not say which. Add "
+                "`repository = \"owner/name\"`, or use "
+                f"{'Pa' if code == 'Px' else 'Cm'} if the target is in this one."
+            )
+        if code not in EXTERNAL and record.get("repository"):
+            instead = {"Pa": "Px", "Cm": "Cx"}.get(code)
+            raise ValueError(
+                f"{where} ({key}) names a repository and type {code}, which is "
+                "not a code for somebody else's artifact. "
+                + (f"Use {instead}." if instead else
+                   f"Nothing here reads {code} as external, so the field would "
+                   "say one thing and the code another.")
+            )
+        if record.get("repository"):
+            extra["repository"] = str(record["repository"])
         if record.get("confirmed"):
             extra["confirmed"] = confirmed_date(record["confirmed"], where).isoformat()
         return Entry(

@@ -272,7 +272,7 @@ def test_a_document_confirmed_today_is_left_alone(tmp_path):
         ("broken", GONE),
         ("unsettled", UNSETTLED),
         ("deferred", UNSETTLED),
-        ("foreign", UNSETTLED),
+        ("elsewhere", UNSETTLED),
     ],
 )
 def test_a_citation_this_run_did_not_confirm_stops_the_date(

@@ -274,7 +274,7 @@ class Survey:
     #: Reference keys whose bibliography entry carries a verified date. These
     #: are records rather than live pointers, so the clock leaves them alone --
     #: see :meth:`clocked`. Injected rather than looked up, for the reason
-    #: :func:`declared_foreign` is: this module must not learn what a registry
+    #: :func:`declared_elsewhere` is: this module must not learn what a registry
     #: is, or the citation policy would need one declared before it could run.
     recorded: frozenset[str] = frozenset()
 
@@ -407,11 +407,12 @@ def _dating(line: str, end: int, marks: Sequence[stamps.Stamp]) -> stamps.Stamp 
     return None
 
 
-def declared_foreign(keys: Container[str]) -> Callable[[Claim], bool]:
+def declared_elsewhere(keys: Container[str]) -> Callable[[Claim], bool]:
     """Is this claim declared to be about another project's tree?
 
     True when every occurrence of the cited token on its line stands beside a
-    reference key that a bibliography entry marks ``foreign``. Built here
+    reference key whose type code says the artifact is somebody else's
+    (``Px``, ``Cx``). Built here
     because this is where the adjacency rule lives: a citation and the token
     that annotates it are the same relation :data:`SEPARATORS` already
     describes, read for a different purpose, and a second spelling of it would
@@ -430,7 +431,7 @@ def declared_foreign(keys: Container[str]) -> Callable[[Claim], bool]:
     asks only after resolution has failed -- so a key beside a path that does
     exist here cannot take it out of the check.
     """
-    def foreign(claim: Claim) -> bool:
+    def elsewhere(claim: Claim) -> bool:
         kind = _KIND_BY_NAME.get(claim.kind)
         if kind is None:
             return False
@@ -447,7 +448,7 @@ def declared_foreign(keys: Container[str]) -> Callable[[Claim], bool]:
             for _, end in here
         )
 
-    return foreign
+    return elsewhere
 
 
 def survey(

@@ -16,6 +16,7 @@ import textwrap
 import pytest
 
 from kinemata.adapters.bibliography import (
+    EXTERNAL,
     INTERPRETED,
     STANDARDIZED,
     Bibliography,
@@ -94,11 +95,31 @@ def test_a_key_is_stored_canonically_however_it_was_written():
     assert entry.id == "Pa0003"
 
 
-def test_the_foreign_identifier_is_kept_when_there_is_one():
-    """Section 5.2: a key is this project's number for another's work, so the
-    entry names the foreign identifier where one exists."""
-    (entry,) = Bibliography([book(foreign="RFC 7159")]).entries()
-    assert entry.extra["foreign"] == "RFC 7159"
+def test_the_repository_is_kept_when_the_code_says_there_is_one():
+    """Section 5.8: an external code says the artifact is somebody else's, and
+    the entry says whose."""
+    (entry,) = Bibliography([
+        {"key": "Px0001", "target": "src/theirs.py",
+         "repository": "doctorjei/kanibako-cli", "note": "their module"},
+    ]).entries()
+    assert entry.extra["repository"] == "doctorjei/kanibako-cli"
+
+
+def test_an_external_code_without_a_repository_is_refused():
+    """A citation that says the source is elsewhere without saying where is one
+    a reader cannot follow."""
+    with pytest.raises(ValueError) as raised:
+        Bibliography([{"key": "Cx0001", "target": "abcdef12", "note": "theirs"}])
+    assert "does not say which" in str(raised.value)
+
+
+def test_a_repository_beside_a_local_code_is_refused():
+    """The mirror, and the one that matters: the code is the half a check acts
+    on, so this entry would read as external to a person and as this tree's to
+    the tool. It names the code to use instead."""
+    with pytest.raises(ValueError) as raised:
+        Bibliography([book(repository="doctorjei/kanibako-cli")])
+    assert "Use Px." in str(raised.value)
 
 
 # -- refusals over the declarations -------------------------------------------
@@ -191,8 +212,13 @@ def test_the_reserved_tables_are_the_ones_the_specification_names():
     """Pinned because additions are not the tool's to make: the reserved set is
     a shared convention, and every code added to it is one some project may
     already be spending differently."""
-    assert set(INTERPRETED) == {"Wb", "Pa", "Cm"}
+    assert set(INTERPRETED) == {"Wb", "Pa", "Cm", "Px", "Cx"}
     assert set(STANDARDIZED) == {"Dc", "Sp", "Ru", "Is", "Pr", "Rp", "Bk", "Ar"}
+    assert EXTERNAL == {"Px", "Cx"}
+    # The pairing is the design: an external code differs from its local twin in
+    # locality and in nothing else, so a new one arriving without its pair would
+    # be a code that says "somebody else's" without saying of what.
+    assert EXTERNAL < set(INTERPRETED)
 
 
 def test_a_reserved_table_cannot_be_edited_in_place():
@@ -674,27 +700,27 @@ def test_a_citation_below_a_fence_is_still_found_at_its_own_line(tmp_path):
     assert [str(one) for one in found] == ["spec.md:5"]
 
 
-# -- foreign evidence, end to end ---------------------------------------------
+# -- evidence in another repository, end to end -------------------------------
 
 
-def test_a_foreign_entry_settles_a_citation_the_gate_would_otherwise_fail(tmp_path):
+def test_an_external_entry_settles_a_citation_the_gate_would_otherwise_fail(tmp_path):
     """From `kinemata.toml` to the exit code, through the command.
 
     The unit tests prove the predicate. This proves the *wiring*: a config that
-    declares a foreign source has to reach ``verify``, and the way that stops
-    being true is one dropped keyword argument in ``_verify`` -- which is how
-    the equivalent gap was found in ``[claims] file_suffixes``. Deleting
-    ``foreign=`` there fails this and nothing else.
+    declares a source in another repository has to reach ``verify``, and the
+    way that stops being true is one dropped keyword argument in ``_verify`` --
+    which is how the equivalent gap was found in ``[claims] file_suffixes``.
+    Deleting ``elsewhere=`` there fails this and nothing else.
     """
     config = project(tmp_path, bibliography="""
         [[entry]]
-        key = "Cm0001"
+        key = "Cx0001"
         target = "42ece1296223babf896f00c514b2f0dc40d9e158"
-        foreign = "doctorjei/kanibako-cli"
+        repository = "doctorjei/kanibako-cli"
         note = "their tripwire, scoped to one module"
     """, document=f"""
         Their tripwire failed by being scoped to one module,
-        `42ece129` [{STAMP}-Cm0001].
+        `42ece129` [{STAMP}-Cx0001].
     """, config="""
         [project]
         root = "."
@@ -737,7 +763,7 @@ def test_unused_does_not_count_an_illustration_in_a_source_file(tmp_path):
     assert unused(registry, root=tmp_path, suffixes=[".py"]) == ["Pa0003"]
 
 
-def test_the_same_citation_fails_when_the_entry_is_not_foreign(tmp_path):
+def test_the_same_citation_fails_when_the_code_is_not_external(tmp_path):
     """The negative control, and the reason it is a separate test.
 
     Without it the one above passes on a tree where commit checking was simply
@@ -747,7 +773,7 @@ def test_the_same_citation_fails_when_the_entry_is_not_foreign(tmp_path):
         [[entry]]
         key = "Cm0001"
         target = "42ece1296223babf896f00c514b2f0dc40d9e158"
-        note = "no foreign field: this project's own commit"
+        note = "a local code: this project's own commit"
     """, document=f"""
         Their tripwire failed by being scoped to one module,
         `42ece129` [{STAMP}-Cm0001].
