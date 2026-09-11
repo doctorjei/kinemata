@@ -9,7 +9,7 @@ the role.
 The contract is deliberately small: one required method, three with defaults
 derived from it, and one more required only if the registry wants to be closed.
 
-See ``canon/workbook/designs/registry-contract.md``.
+See ``docs/design.md``.
 """
 
 from __future__ import annotations
@@ -38,6 +38,87 @@ _BOUNDARY = r"[A-Za-z0-9_.\-]"
 # than containing one: a Python constant read as ``bootstrap.CHANNELS_PATH``.
 # Here the dot is the access operator, so it has to be allowed to abut.
 _NAME_BOUNDARY = r"[A-Za-z0-9_]"
+
+#: The boundary rules a declaration may ask for by name, so that a config file
+#: names the rule this package already settled instead of re-spelling its
+#: character class -- two matchers disagreeing about what a word is was the
+#: finding that produced these in the first place.
+#:
+#: ``identifier`` is the same rule under the same name in
+#: :data:`kinemata.adapters.substitutions.BOUNDARIES`. One vocabulary, asked of
+#: two matchers: that table decides how a forbidden spelling is *bounded when it
+#: is built into a pattern*, this one decides what may abut a declared
+#: identifier for :meth:`BaseRegistry.detect` to count it.
+NAMED_BOUNDARIES = {"identifier": _BOUNDARY, "name": _NAME_BOUNDARY}
+
+# What a declared boundary is tried against: the characters that actually sit
+# beside an identifier in source and in prose. A class admitting all of them
+# bounds nothing; a class admitting none of them leaves no legal neighbor.
+_PROBE_NEIGHBORS = "aZ0_.-/ ()"
+
+# Stands in for a declared identifier while probing. Never matched against real
+# text; it only has to be spelled the way an identifier is.
+_PROBE_ID = "kinemataProbeIdentifier"
+
+
+def usable_boundary(declared: object) -> str:
+    """The character class ``declared`` asks for, or a ``ValueError`` saying why not.
+
+    Written for the config surface. A registry's boundary used to be whatever
+    its adapter class said, so the two rules above were unreachable from
+    ``kinemata.toml`` and a project whose identifiers were neither dotted keys
+    nor bare Python names had no way to say so. Reported by an adopting project
+    on 2026-09-09 alongside ``match_mode``, unreachable the same way.
+
+    **The degenerate ends are refused rather than honored**, and they are tried
+    rather than reasoned about -- the class is put in the position
+    :attr:`BaseRegistry._detector` uses it in and probed with real neighbors:
+
+    * A class matching *every* character that can abut an identifier leaves no
+      legal neighbor, so ``detect`` answers nothing about every tree it is ever
+      pointed at. That is the inert check this package exists to prevent, and it
+      is what ``boundary = "."`` gets you.
+    * A class matching *none* of them is no boundary at all: matching degrades
+      to a plain substring search that reports a declared name inside a longer
+      one. A bare word -- ``prose``, say, borrowed from the other table -- lands
+      here, which is why a typo is the likeliest way to arrive.
+
+    Neither can be told apart from an intention, so both raise. A project that
+    genuinely wants one sets ``boundary`` on a registry class of its own, where
+    it is Python somebody wrote rather than a string that might be a slip.
+    """
+    if not isinstance(declared, str) or not declared:
+        raise ValueError(
+            f"boundary {declared!r} is not a character class. Name one of "
+            f"{', '.join(sorted(NAMED_BOUNDARIES))}, or write the class itself."
+        )
+    if declared in NAMED_BOUNDARIES:
+        return NAMED_BOUNDARIES[declared]
+    try:
+        probe = re.compile(rf"(?<!{declared})(?:{_PROBE_ID})(?!{declared})")
+    except re.error as exc:
+        raise ValueError(
+            f"boundary {declared!r} cannot bound a match: {exc}. It is used as a "
+            "regular-expression character class on both sides of an identifier, "
+            "so it has to be one character wide."
+        ) from exc
+
+    may_abut = [c for c in _PROBE_NEIGHBORS if probe.search(f"{c}{_PROBE_ID}{c}")]
+    if not may_abut:
+        raise ValueError(
+            f"boundary {declared!r} matches every character that can sit beside "
+            "an identifier, so nothing may abut one and no match could ever "
+            "count. The registry would report nothing about any tree."
+        )
+    if len(may_abut) == len(_PROBE_NEIGHBORS):
+        raise ValueError(
+            f"boundary {declared!r} matches none of the characters that sit "
+            "beside an identifier, so it bounds nothing and a declared name "
+            "would be found inside a longer one. Name one of "
+            f"{', '.join(sorted(NAMED_BOUNDARIES))}, or write a character class "
+            "that excludes something."
+        )
+    return declared
 
 
 @dataclass(frozen=True)
@@ -114,6 +195,11 @@ class BaseRegistry(ABC):
     #: The default stays ``_BOUNDARY``, because a registry that has not thought
     #: about the question is likelier to hold dotted identifiers, where the dot
     #: belongs to the name.
+    #:
+    #: Settable per registry from ``kinemata.toml`` -- by name from
+    #: :data:`NAMED_BOUNDARIES` or as a class of the project's own, checked by
+    #: :func:`usable_boundary`. An adapter's answer is a default, not a verdict:
+    #: only the project knows whether its identifiers contain their separators.
     boundary: str = _BOUNDARY
 
     #: How this registry's antipatterns should be matched. The registry knows
@@ -125,6 +211,13 @@ class BaseRegistry(ABC):
     #: ``"code"``     executable code, comments and docstrings stripped. For
     #:                antipatterns that are a *code shape* (``check=True``).
     #: ``"raw"``      everything, prose included. Rarely right.
+    #:
+    #: The modes are the rows of :data:`kinemata.bypass.MODE_FILTERS`, which is
+    #: what a declared one is checked against; the three above are the ones a
+    #: registry class here chooses between. Settable per registry from
+    #: ``kinemata.toml`` for the same reason :attr:`boundary` is -- a project
+    #: whose adapter fits but whose file set does not was left with no way to
+    #: say so.
     match_mode: str = "strings"
 
     #: File suffixes this registry applies to, overriding the project's. ``None``

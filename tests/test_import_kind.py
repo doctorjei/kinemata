@@ -171,6 +171,57 @@ def test_the_loaders_own_keys_are_applied_not_forwarded(tmp_path, monkeypatch):
     assert registry.machinery == ("manifest.yaml",)
 
 
+def test_matching_behavior_is_declarable_on_a_class_the_project_wrote(
+    tmp_path, monkeypatch
+):
+    """``boundary`` and ``match_mode`` are contract attributes, not kind options.
+
+    So they are the loader's keys here too, and a project's own adapter gets
+    them without taking a constructor argument -- this class takes exactly one
+    keyword and would raise on either. The cost is the other side of the same
+    coin: a class wanting its own ``boundary`` parameter will not be handed one,
+    and should read the attribute the loader sets.
+    """
+    name = module(tmp_path, monkeypatch, KEYSPACE)
+    path = config(
+        tmp_path,
+        f"""
+        [[registry]]
+        name = "keyspace"
+        kind = "import"
+        target = "{name}:KeyspaceRegistry"
+        boundary = "name"
+        match_mode = "raw"
+        """,
+    )
+    (registry,) = load(path).registries
+    assert registry.match_mode == "raw"
+    assert registry.detect("read settings.box.name") == ["box.name"]
+
+
+def test_a_boundary_a_project_supplied_class_cannot_use_is_refused(
+    tmp_path, monkeypatch
+):
+    """Checked before the class is asked anything, and named the same way.
+
+    A registry loaded with a boundary that bounds nothing answers about every
+    tree it is pointed at, and answers wrongly.
+    """
+    name = module(tmp_path, monkeypatch, KEYSPACE)
+    path = config(
+        tmp_path,
+        f"""
+        [[registry]]
+        name = "keyspace"
+        kind = "import"
+        target = "{name}:KeyspaceRegistry"
+        boundary = "identifiers"
+        """,
+    )
+    with pytest.raises(ConfigError, match=r"'keyspace'.*bounds nothing"):
+        load(path)
+
+
 def test_an_imported_registry_that_recognizes_nothing_is_still_refused(
     tmp_path, monkeypatch
 ):

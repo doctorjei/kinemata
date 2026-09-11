@@ -21,7 +21,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
-from ..contract import BaseRegistry, Entry
+from ..contract import _NAME_BOUNDARY, BaseRegistry, Entry
 
 
 class CodePatterns(BaseRegistry):
@@ -34,6 +34,28 @@ class CodePatterns(BaseRegistry):
 
     name = "patterns"
     match_mode = "code"
+
+    #: These ids are the names of things in code -- ``run_or_die``,
+    #: ``read_mode`` -- and a helper is most often reached through the module
+    #: that defines it. With the dotted default ``helpers.run_or_die(cmd)``
+    #: detected nothing, so the entry was reported as mentioned by nobody at
+    #: the very site that routes through it.
+    #:
+    #: The same defect the adopter's ``bootstrap.CHANNELS_PATH`` measurement
+    #: forced :class:`~kinemata.adapters.constants.PythonConstants` to fix on
+    #: 2026-09-09, left here that day because no entry in this repository was
+    #: written module-qualified. That is a fact about this repository and not
+    #: about the adapter, and the failure it hides is a silent one -- so it is
+    #: fixed here on the evidence from there rather than waiting for a second
+    #: project to be bitten. Verified against this tree first: with the change,
+    #: ``check``, ``review``, ``unused`` and ``undeclared`` report exactly what
+    #: they did before.
+    #:
+    #: It buys the same false positive that adapter documents, in the same
+    #: direction, and a registry whose ids really do carry dots -- a clause
+    #: scheme, a dotted key declared by hand -- says so with
+    #: ``boundary = "identifier"`` rather than being told which it must be.
+    boundary = _NAME_BOUNDARY
 
     def __init__(
         self,

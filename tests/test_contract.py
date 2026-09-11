@@ -6,7 +6,7 @@ import pytest
 
 from kinemata import BaseRegistry, Entry, project, undeclared
 from kinemata.adapters.mapping import MappingRegistry
-from kinemata.contract import _NAME_BOUNDARY
+from kinemata.contract import _BOUNDARY, _NAME_BOUNDARY, usable_boundary
 
 
 class Tiny(BaseRegistry):
@@ -88,6 +88,72 @@ def test_detect_only_ever_finds_declared_entries():
     # The reason candidates() has to exist: detect() is structurally blind to
     # anything undeclared, so it can never be the closure check.
     assert Tiny(["a.one"]).detect("a.undeclared") == []
+
+
+# -- a boundary a project declares --------------------------------------------
+
+
+def test_a_boundary_may_be_named_rather_than_respelled():
+    """The two answers this module already settled, reachable by name.
+
+    Re-spelling a character class in a config file is how two matchers come to
+    disagree about what a word is, which is the finding that produced the second
+    class in the first place.
+    """
+    assert usable_boundary("identifier") == _BOUNDARY
+    assert usable_boundary("name") == _NAME_BOUNDARY
+
+
+def test_a_class_the_project_writes_is_accepted_and_bounds_what_it_says():
+    """Neither built-in answer fits every data model, which is the whole point.
+
+    Checked through ``detect`` rather than by comparing strings: the value is
+    only worth accepting if it works in the position the matcher puts it in.
+    """
+    declared = usable_boundary(r"[A-Za-z0-9_~]")
+
+    class Tilde(Tiny):
+        boundary = declared
+
+    r = Tilde(["box.vault"])
+    assert r.detect("read box.vault here") == ["box.vault"]
+    assert r.detect("spec~box.vault") == []
+
+
+def test_a_boundary_that_lets_nothing_abut_is_refused():
+    """``.`` reads like "any character" and means "the registry finds nothing".
+
+    Every neighbor is excluded, so a match can only occur where the identifier
+    has no neighbors at all. The command still exits 0, which is the inert
+    signal this package exists to prevent.
+    """
+    with pytest.raises(ValueError, match="every character"):
+        usable_boundary(".")
+
+
+def test_a_boundary_that_bounds_nothing_is_refused():
+    """A bare word is a regular expression that matches no single character.
+
+    ``prose`` is the likeliest one to be written: it is a real value of the
+    *other* boundary table, the one deciding how a forbidden spelling is built
+    into a pattern. Accepted here it would compile, exclude nothing, and quietly
+    turn matching into a substring search that reports a name inside a longer
+    one.
+    """
+    with pytest.raises(ValueError, match="bounds nothing"):
+        usable_boundary("prose")
+
+
+def test_a_boundary_that_is_not_a_pattern_at_all_is_refused():
+    with pytest.raises(ValueError, match="cannot bound a match"):
+        usable_boundary("[A-Za-z")
+
+
+def test_a_boundary_that_is_not_a_string_is_refused():
+    """An empty one included: it matches at every position, so nothing counts."""
+    for declared in ("", None, 12, [r"[A-Za-z]"]):
+        with pytest.raises(ValueError, match="not a character class"):
+            usable_boundary(declared)
 
 
 # -- closure ------------------------------------------------------------------
