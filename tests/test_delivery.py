@@ -12,7 +12,7 @@ from kinemata.adapters.constants import PythonConstants
 from kinemata.bypass import scan, unused
 from kinemata.cli import build_parser, main
 from kinemata.config import ConfigError, load
-from kinemata.contract import BaseRegistry, Entry
+from kinemata.contract import _BOUNDARY, _NAME_BOUNDARY, BaseRegistry, Entry
 from kinemata.gates import enforced
 from kinemata.report import review
 
@@ -396,6 +396,181 @@ def test_a_registry_can_target_its_own_file_types(tmp_path):
     assert [site.path for site in sites] == ["doc.md"]
 
 
+def test_a_registry_can_declare_how_a_match_is_bounded(tmp_path):
+    """The adapter's answer is a default, and the project overrides it.
+
+    Declared in the direction that proves it is not cosmetic: this adapter
+    chose the narrow boundary on purpose, and a project whose constants are
+    genuinely reached as dotted names says so and gets the dotted rule back.
+    """
+    write(tmp_path, "consts.py", 'CHANNELS_PATH = "channels"\n')
+    write(
+        tmp_path,
+        "kinemata.toml",
+        """
+        [[registry]]
+        name = "constants"
+        kind = "python-constants"
+        modules = ["consts.py"]
+        boundary = "identifier"
+        """,
+    )
+    (reg,) = load(tmp_path / "kinemata.toml").registries
+    assert reg.boundary == _BOUNDARY
+    assert reg.detect("leaf = bootstrap.CHANNELS_PATH") == []
+
+
+def test_a_registry_can_declare_a_boundary_class_of_its_own(tmp_path):
+    write(tmp_path, "consts.py", 'CHANNELS_PATH = "channels"\n')
+    write(
+        tmp_path,
+        "kinemata.toml",
+        """
+        [[registry]]
+        name = "constants"
+        kind = "python-constants"
+        modules = ["consts.py"]
+        boundary = '[A-Za-z0-9_~]'
+        """,
+    )
+    (reg,) = load(tmp_path / "kinemata.toml").registries
+    assert reg.detect("spec~CHANNELS_PATH") == []
+    assert reg.detect("leaf = bootstrap.CHANNELS_PATH") == ["CHANNELS_PATH"]
+
+
+def test_a_registry_can_declare_its_match_mode(tmp_path):
+    """Reported unreachable on 2026-09-09: a project could not ask for ``raw``.
+
+    The pair below is the whole difference. A value registry defaults to string
+    literals, so the identifier assignment is not a hit; a project that wants
+    every occurrence says so.
+    """
+    write(tmp_path, "consts.py", 'BOX_DATA = "box_data"\n')
+    write(tmp_path, "app.py", "box_data = compute()\n")
+    body = """
+        [[registry]]
+        name = "constants"
+        kind = "python-constants"
+        modules = ["consts.py"]
+        {mode}
+    """
+    write(tmp_path, "kinemata.toml", body.format(mode=""))
+    (default,) = load(tmp_path / "kinemata.toml").registries
+    assert default.match_mode == "strings"
+    assert scan(default, tmp_path) == []
+
+    write(tmp_path, "kinemata.toml", body.format(mode='match_mode = "raw"'))
+    (declared,) = load(tmp_path / "kinemata.toml").registries
+    assert [hit.path for hit in scan(declared, tmp_path)] == ["app.py"]
+
+
+def test_a_declaration_that_is_absent_leaves_every_adapter_as_it_was(tmp_path):
+    """The defaults, pinned where a config can now reach them.
+
+    Making a thing configurable is how its default quietly becomes whatever the
+    plumbing does when nobody declares anything.
+    """
+    write(tmp_path, "consts.py", 'BOX_META_FILE = "box.yaml"\n')
+    write(
+        tmp_path,
+        "kinemata.toml",
+        """
+        [[registry]]
+        name = "constants"
+        kind = "python-constants"
+        modules = ["consts.py"]
+
+        [[registry]]
+        name = "helpers"
+        kind = "code-patterns"
+
+          [[registry.entry]]
+          id = "run_or_die"
+          antipatterns = ['check\\s*=\\s*True']
+
+        [[registry]]
+        name = "retired"
+        kind = "substitutions"
+
+          [registry.words]
+          traceface = "kinemata"
+        """,
+    )
+    constants, patterns, retired = load(tmp_path / "kinemata.toml").registries
+    assert (constants.boundary, constants.match_mode) == (_NAME_BOUNDARY, "strings")
+    assert (patterns.boundary, patterns.match_mode) == (_NAME_BOUNDARY, "code")
+    assert (retired.boundary, retired.match_mode) == (_BOUNDARY, "prose")
+
+
+def test_an_unknown_match_mode_is_refused(tmp_path):
+    """It used to *work*: an unknown mode landed on a table with no entry for
+    the suffix, filtered nothing, and so behaved as ``raw`` by accident. A
+    project reading its own config would see a mode it never got."""
+    write(tmp_path, "consts.py", 'BOX_META_FILE = "box.yaml"\n')
+    write(
+        tmp_path,
+        "kinemata.toml",
+        """
+        [[registry]]
+        name = "constants"
+        kind = "python-constants"
+        modules = ["consts.py"]
+        match_mode = "codes"
+        """,
+    )
+    with pytest.raises(ConfigError, match="selects no filter table"):
+        load(tmp_path / "kinemata.toml")
+
+
+def test_a_boundary_that_cannot_bound_is_refused_by_name_and_file(tmp_path):
+    """A refusal with neither is one somebody has to go and locate."""
+    write(tmp_path, "consts.py", 'BOX_META_FILE = "box.yaml"\n')
+    write(
+        tmp_path,
+        "kinemata.toml",
+        """
+        [[registry]]
+        name = "constants"
+        kind = "python-constants"
+        modules = ["consts.py"]
+        boundary = "."
+        """,
+    )
+    with pytest.raises(ConfigError, match=r"'constants'.*every character") as refusal:
+        load(tmp_path / "kinemata.toml")
+    assert "kinemata.toml" in str(refusal.value)
+
+
+def test_substitutions_keeps_its_own_meaning_for_boundary(tmp_path):
+    """One key, asked of the matcher each kind actually uses.
+
+    ``substitutions`` reads ``boundary`` as which rule *builds* its patterns,
+    and one of its two answers -- ``prose`` -- is not a character class at all.
+    Handing that to the generic pass would refuse a config that has been valid
+    since the option existed, so the builder keeps the key.
+    """
+    write(tmp_path, "doc.md", "The spec~box-vault-enable clause is live.\n")
+    body = """
+        [[registry]]
+        name = "retired"
+        kind = "substitutions"
+        suffixes = [".md"]
+        boundary = "{rule}"
+
+          [registry.words]
+          "spec~box-vault" = "spec~box-store"
+    """
+    write(tmp_path, "kinemata.toml", body.format(rule="prose"))
+    (prose,) = load(tmp_path / "kinemata.toml").registries
+    assert prose.match_mode == "prose"
+    assert len(scan(prose, tmp_path, suffixes=(".md",))) == 1  # the known false hit
+
+    write(tmp_path, "kinemata.toml", body.format(rule="identifier"))
+    (identifier,) = load(tmp_path / "kinemata.toml").registries
+    assert identifier.match_mode == "raw"
+    assert scan(identifier, tmp_path, suffixes=(".md",)) == []
+
+
 def test_an_unknown_kind_is_refused(tmp_path):
     write(
         tmp_path,
@@ -556,6 +731,55 @@ def test_code_patterns_matches_a_code_shape_not_a_literal(tmp_path):
     (hit,) = scan(reg, tmp_path)
     assert hit.entry_id == "run_or_die"
     assert hit.path == "app.py"
+
+
+def test_a_module_qualified_helper_is_detected(tmp_path):
+    """The constants defect, in the adapter it was left in on 2026-09-09.
+
+    These ids are names in code, and a helper is normally reached through the
+    module that defines it -- so with the dotted boundary the one site that
+    routes through ``run_or_die`` correctly was the site ``unused`` could not
+    see, and the entry was reported as mentioned by nobody.
+    """
+    from kinemata.adapters.patterns import CodePatterns
+
+    write(tmp_path, "helpers.py", "def run_or_die(cmd):\n    return cmd\n")
+    write(tmp_path, "app.py", "import helpers\n\nhelpers.run_or_die(cmd)\n")
+    reg = CodePatterns(
+        [
+            {
+                "id": "run_or_die",
+                "antipatterns": [r"check\s*=\s*True"],
+                "home": ["helpers.py"],
+            }
+        ]
+    )
+    assert reg.detect("helpers.run_or_die(cmd)") == ["run_or_die"]
+    assert unused(reg, tmp_path) == []
+    # ...and the narrower rule still refuses to fire inside a longer name.
+    assert reg.detect("helpers.run_or_die_quietly(cmd)") == []
+
+
+def test_a_code_patterns_registry_can_ask_for_the_dotted_boundary(tmp_path):
+    """Its ids are usually Python names, and a project may declare otherwise.
+
+    A clause scheme or a dotted key declared by hand wants the separator to
+    belong to the name, which is what the default here gives up.
+    """
+    write(tmp_path, "kinemata.toml",
+          """
+          [[registry]]
+          name = "clauses"
+          kind = "code-patterns"
+          boundary = "identifier"
+
+            [[registry.entry]]
+            id = "spec~box-vault"
+            antipatterns = ['vault_path\\s*=']
+          """)
+    (reg,) = load(tmp_path / "kinemata.toml").registries
+    assert reg.detect("see spec~box-vault-enable") == []
+    assert reg.detect("see spec~box-vault here") == ["spec~box-vault"]
 
 
 def test_the_registry_chooses_its_own_match_mode(tmp_path):
@@ -936,6 +1160,52 @@ def test_a_config_that_declares_no_check_at_all_is_refused(tmp_path):
         load(tmp_path / "kinemata.toml")
 
 
+def test_the_citation_policy_counts_as_a_check(tmp_path):
+    """A table that can fail a build is a check, and the loader has to say so.
+
+    `[citations] provenance` gates through `check`, and for a day the loader
+    counted five kinds of check and not this one -- so a project declaring the
+    citation policy alone was refused, and told to declare one of five things
+    that did not include the one it had. The condition and the message were
+    separate lists; they are one now.
+    """
+    write(tmp_path, "kinemata.toml",
+          '[project]\nroot = "."\n[citations]\nprovenance = true\n')
+    assert load(tmp_path / "kinemata.toml").provenance is True
+
+
+def test_the_accompany_hint_alone_is_not_a_check(tmp_path):
+    """The other key in that table is advisory -- `cite -v` reports it and
+    nothing enforces it -- so a config carrying it alone really does check
+    nothing, and the refusal has to survive the table existing."""
+    write(tmp_path, "kinemata.toml",
+          '[project]\nroot = "."\n[citations]\naccompany_max = 50\n')
+    with pytest.raises(ConfigError, match="declares no check at all"):
+        load(tmp_path / "kinemata.toml")
+
+
+def test_the_refusal_names_every_check_it_counts(tmp_path):
+    """The message is derived from the condition, so a check added to one
+    cannot go missing from the other."""
+    write(tmp_path, "kinemata.toml", '[project]\nroot = "."\n')
+    with pytest.raises(ConfigError) as raised:
+        load(tmp_path / "kinemata.toml")
+    for spelling in ("[[registry]]", "[[count]]", "[[gate]]", "[claims]",
+                     "[context]", "[citations] provenance"):
+        assert spelling in str(raised.value)
+
+
+def test_the_citation_policy_gates_without_a_registry(tmp_path, capsys):
+    """The catch is not registry-shaped, so requiring one was the required
+    fiction the loader had already stopped demanding elsewhere."""
+    write(tmp_path, "kinemata.toml",
+          '[project]\nroot = "."\n[citations]\nprovenance = true\n')
+    write(tmp_path, "docs/design.md", "")
+    write(tmp_path, "notes.md", "Undated: `docs/design.md`.\n")
+    assert main(["check", "-c", str(tmp_path / "kinemata.toml")]) == 1
+    assert "provenance:path" in capsys.readouterr().out
+
+
 def test_a_config_inherited_from_a_parent_says_so(tmp_path, capsys, monkeypatch):
     """The upward walk is convenience in one place and a blindness leak in
     another: a role meant to see one subtree, running a gate inside it, picks up
@@ -977,6 +1247,33 @@ def test_init_writes_a_config_that_runs_immediately(tmp_path):
     config = tmp_path / "kinemata.toml"
     assert load(config).registries == []
     assert main(["claims", "-c", str(config)]) == 0
+
+
+def test_a_declared_file_suffix_reaches_the_extractors(tmp_path, capsys):
+    """The knob was tested against `verify` and never through the command.
+
+    An adopter's repository had `Containerfile.x` and `tmux.conf` as its only
+    content files and the scan came back nearly green, because the built-in
+    suffix set could not see them. `[claims] file_suffixes` extends that set --
+    but a config value that never reaches the extractor fails exactly the way
+    the closed set did, and the wiring is one keyword argument in `cmd_claims`
+    that nothing pinned.
+    """
+    write(tmp_path, "kinemata.toml",
+          '[project]\nroot = "."\n[claims]\nsuffixes = [".md"]\n'
+          'file_suffixes = [".conf"]\n')
+    write(tmp_path, "notes.md", "The daemon reads `missing.conf` at startup.\n")
+    assert main(["claims", "-c", str(tmp_path / "kinemata.toml")]) == 1
+    assert "missing.conf" in capsys.readouterr().out
+
+
+def test_an_undeclared_file_suffix_is_not_a_claim(tmp_path, capsys):
+    """The negative control. Without the declaration the same line says
+    nothing, so the test above is measuring the knob and not the filename."""
+    write(tmp_path, "kinemata.toml",
+          '[project]\nroot = "."\n[claims]\nsuffixes = [".md"]\n')
+    write(tmp_path, "notes.md", "The daemon reads `missing.conf` at startup.\n")
+    assert main(["claims", "-c", str(tmp_path / "kinemata.toml")]) == 0
 
 
 def test_init_ci_declares_the_gates_its_workflow_runs(tmp_path):

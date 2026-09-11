@@ -10,6 +10,17 @@ So the accepted state is recorded, and the gate fails on *increase* --
 ``design.md`` §4.3: "record the baseline, fail on any increase, drive it down on
 a separate schedule that does not block feature work."
 
+**Every gate here rides this one list**, and that is a decision rather than an
+accident of layering. The argument above is about code only because code is
+where it was first measured; it is exactly as true of prose, and this repository
+is the demonstration -- ``[claims] suffixes`` could not include ``.py`` while
+arming it meant 10 permanently unresolvable citations of evidence that lives in
+other people's repositories. ``bypass``, ``provenance`` and ``claims`` therefore
+all emit :class:`kinemata.bypass.Bypass` records into this file. A second
+exemption list for documentation was the obvious alternative and is the failure:
+two lists eventually disagree about what a project accepted, and the one nobody
+is reading is the one still exempting something real.
+
 **A baseline is an allowlist, and allowlists rot.** Three properties exist to
 make the rot visible rather than quiet:
 
@@ -133,6 +144,11 @@ class Split:
     """A scan divided against what was already accepted."""
 
     #: Findings with no matching record. **These are what gates.**
+    #:
+    #: The pairs are the ones handed in, unchanged and by identity, so a caller
+    #: can carry its own richer object alongside each finding and recover it
+    #: here. ``claims`` does exactly that: a ``Bypass`` is what the ratchet
+    #: fingerprints, and ``Claim.__str__`` is what a reader should be shown.
     new: tuple[tuple[str, Bypass], ...] = ()
     #: Findings the baseline already covers.
     accepted: tuple[tuple[str, Bypass], ...] = ()
@@ -141,6 +157,17 @@ class Split:
     #: the list can be driven down, which is the half of a ratchet that is easy
     #: to forget.
     stale: tuple[Accepted, ...] = ()
+    #: Records this scan was not in a position to judge, because it did not run
+    #: the check that produces them. **Not stale**, and keeping the two apart is
+    #: the whole reason this field exists: ``check`` does not read documentation
+    #: and ``claims`` does not read source, so each would otherwise report the
+    #: other's records as no longer present and recommend pruning findings that
+    #: are sitting right there.
+    #:
+    #: Carried rather than dropped, for the reason the baseline prints its own
+    #: size: a run that quietly ignored part of an exemption list reads exactly
+    #: like a run that accounted for all of it.
+    unscanned: tuple[Accepted, ...] = ()
 
 
 @dataclass
@@ -280,22 +307,59 @@ class Baseline:
         document["findings"] = findings
         self.path.write_text(json.dumps(document, indent=2) + "\n")
 
-    def split(self, findings: Iterable[tuple[str, Bypass]]) -> Split:
+    def split(
+        self,
+        findings: Iterable[tuple[str, Bypass]],
+        *,
+        scope: Iterable[str] | None = None,
+    ) -> Split:
         """Divide a scan into new, accepted and no-longer-present.
 
         Matching consumes: a record for three identical sites accepts three, and
         the fourth is new. Without that, one record would exempt a file's every
         future repetition of the same literal.
+
+        :param scope: the finding sources this scan actually ran, or ``None``
+            for all of them. One file holds the exemptions for every check here,
+            deliberately -- two exemption lists eventually disagree about what a
+            project accepted -- but no single command runs every check: ``check``
+            reads source and ``claims`` reads prose. Without a scope, each
+            reports the other's records as :attr:`Split.stale` and points the
+            reader at ``--prune``, which is a command that would delete live
+            exemptions on the strength of a scan that never looked for them.
+
+            A finding tagged with a source outside ``scope`` **raises**, because
+            the alternative is silent and expensive: it would be counted as new
+            and gate CI on a finding the caller already said this run does not
+            cover.
+
+            The cost, named because it is real: under a scope, records left
+            behind by a registry that was *deleted from the config* land in
+            :attr:`Split.unscanned` rather than in ``stale``. They are still
+            reported and ``baseline --prune`` -- which runs every check, and is
+            the only command that writes -- still drops them.
         """
+        covered = None if scope is None else {str(name) for name in scope}
         remaining: Counter[tuple[str, ...]] = Counter()
         by_key: dict[tuple[str, ...], Accepted] = {}
+        unscanned: list[Accepted] = []
         for item in self.accepted:
+            if covered is not None and item.registry not in covered:
+                unscanned.append(item)
+                continue
             remaining[item.key] += item.count
             by_key[item.key] = item
 
         new: list[tuple[str, Bypass]] = []
         accepted: list[tuple[str, Bypass]] = []
         for registry, hit in findings:
+            if covered is not None and registry not in covered:
+                raise BaselineError(
+                    f"{self.path}: a finding from {registry!r} was handed to a "
+                    f"split scoped to {sorted(covered)}. It would be counted as "
+                    "new and fail the gate on a check this run said it does not "
+                    "cover."
+                )
             key = _record(registry, hit).key
             if remaining.get(key, 0) > 0:
                 remaining[key] -= 1
@@ -315,7 +379,12 @@ class Baseline:
             for key, count in sorted(remaining.items())
             if count > 0
         )
-        return Split(new=tuple(new), accepted=tuple(accepted), stale=stale)
+        return Split(
+            new=tuple(new),
+            accepted=tuple(accepted),
+            stale=stale,
+            unscanned=tuple(sorted(unscanned, key=lambda item: item.key)),
+        )
 
 
 def record(

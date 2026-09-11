@@ -34,6 +34,11 @@ Example::
 The kinds are a convenience, not the boundary. ``import`` names a class the
 project wrote, for a data model none of the others fit; see
 :func:`_build_import` for why it exists and what it refuses.
+
+How a registry *matches* is declared beside what it holds -- ``suffixes``,
+``machinery``, ``boundary`` and ``match_mode`` are read on any kind, including
+``import``. The adapter's answer is the default; the project's is the
+declaration. See :func:`_boundary` and :func:`_match_mode` for what forced each.
 """
 
 from __future__ import annotations
@@ -52,12 +57,19 @@ from .adapters.mapping import MappingRegistry
 from .adapters.patterns import CodePatterns
 from .adapters.substitutions import Substitutions
 from .baseline import BASELINE_NAME
-from .bypass import git_ignored
+from .bypass import MODE_FILTERS, git_ignored
 from .citations import DEFAULT_ACCOMPANY_MAX
-from .claims import EXTERNAL_TIMEOUT, Counted, Promise
+from .claims import CLAIMS_REGISTRY, EXTERNAL_TIMEOUT, Counted, Promise
 from .context import STRIPPERS
-from .contract import BaseRegistry, Registry, closure_guard, missing_members
+from .contract import (
+    BaseRegistry,
+    Registry,
+    closure_guard,
+    missing_members,
+    usable_boundary,
+)
 from .gates import Gate
+from .provenance import DEFAULT_STALE_AFTER, PROVENANCE_REGISTRY
 
 CONFIG_NAMES = ("kinemata.toml", ".kinemata.toml")
 
@@ -74,6 +86,13 @@ class ConfigError(Exception):
 #: that mark a record as superseded. Defaults rather than requirements: a
 #: project with no ``[claims]`` table still gets its markdown checked.
 DEFAULT_CLAIM_SUFFIXES = (".md",)
+
+#: Names a registry may not take, because the baseline already files findings
+#: under them for checks that are not registries. Derived from the modules that
+#: own them rather than spelled again here -- a third non-registry check would
+#: otherwise be reserved in one place and not the other, which is the shape of
+#: drift this package reports.
+RESERVED_NAMES = frozenset({CLAIMS_REGISTRY, PROVENANCE_REGISTRY})
 
 
 @dataclass(frozen=True)
@@ -154,6 +173,17 @@ class Settings:
     #: Nothing enforces it; see :data:`kinemata.citations.DEFAULT_ACCOMPANY_MAX`
     #: for the measurement behind the default and for why it is a reminder.
     accompany_max: int = DEFAULT_ACCOMPANY_MAX
+    #: Does every citation have to carry a stamp? **Off unless declared.**
+    #: Section 6 admits no exemption by kind, so the only dial is the project:
+    #: armed on a tree that has never dated a citation, this reports every
+    #: citation in it, and a gate that fires on everything on day one is one
+    #: somebody switches off. A project arms it and records a baseline, which
+    #: is the adoption path the ratchet already exists for.
+    provenance: bool = False
+    #: Days a citation may go unconfirmed before ``kinemata stale`` surfaces
+    #: it. Advisory and never a gate: section 6 keeps provenance and staleness
+    #: on separate axes.
+    stale_after: int = DEFAULT_STALE_AFTER
 
 
 def find_config(start: str | Path = ".") -> Path | None:
@@ -339,7 +369,18 @@ def _build_bibliography(spec: dict[str, Any], root: Path, path: Path) -> BaseReg
 #: table is handed to the class as a keyword argument, so a project can
 #: parameterize its own adapter without this file learning its vocabulary --
 #: which is the whole point of naming a class instead of a kind.
-IMPORT_KEYS = frozenset({"name", "kind", "target", "suffixes", "machinery", "allow_empty"})
+#:
+#: ``boundary`` and ``match_mode`` are kept here, with ``suffixes`` and
+#: ``machinery``, because they are contract attributes rather than anything a
+#: kind invented: the loader sets them on the instance and they work on a
+#: project's own class exactly as they do on a built-in one. The cost is that a
+#: class taking its own constructor argument of either name will not receive it
+#: -- which is why they are named in the refusal a bad key already raises, and
+#: why such a class should read the attribute the loader sets instead.
+IMPORT_KEYS = frozenset(
+    {"name", "kind", "target", "suffixes", "machinery", "allow_empty",
+     "boundary", "match_mode"}
+)
 
 #: How a target is spelled, quoted in every refusal so the fix is on screen.
 #: One module, one attribute in it, both named outright.
@@ -459,6 +500,67 @@ BUILDERS = {
     "import": _build_import,
 }
 
+#: Keys the pass in :func:`load` must leave alone because a builder has already
+#: consumed them. Only keys that pass would otherwise apply belong here: a
+#: builder's own vocabulary -- ``modules``, ``syntax``, ``case_sensitive`` --
+#: needs no entry, since nothing reaches for it a second time.
+#:
+#: One entry, and it is the reason this is a table rather than a rule in prose:
+#: ``substitutions`` reads ``boundary`` as *which rule builds its patterns* --
+#: ``prose`` or ``identifier`` -- which is a different question from what may
+#: abut a match, and one of its two answers is not a character class at all.
+#: Applying both meanings to one key would refuse a config that has been valid
+#: since the option existed.
+#:
+#: The two questions share a name deliberately: they are the same question asked
+#: of the two matchers, and ``identifier`` means the same rule in both.
+BUILDER_KEYS = {"substitutions": frozenset({"boundary"})}
+
+
+def _match_mode(spec: dict[str, Any], path: Path) -> str:
+    """``match_mode`` on any registry, checked against the table that reads it.
+
+    Reported unreachable by the first outside audit on 2026-09-09: the loader
+    passed ``suffixes`` and ``machinery`` through and nothing else, so a project
+    could not ask for ``raw`` or override the adapter's ``code``/``strings``.
+
+    Refused rather than defaulted, because an unknown mode used to *work*: it
+    landed on a table with no entry for the suffix and so filtered nothing,
+    which is ``raw`` reached by accident. A misspelling that quietly buys a mode
+    nobody asked for is how a project ends up trusting a scan it never
+    configured.
+    """
+    declared = spec["match_mode"]
+    if not isinstance(declared, str) or declared not in MODE_FILTERS:
+        raise ConfigError(
+            f"{path}: registry {spec.get('name', '?')!r} asks for match_mode "
+            f"{declared!r}, which selects no filter table "
+            f"(known: {', '.join(sorted(MODE_FILTERS))})."
+        )
+    return declared
+
+
+def _boundary(spec: dict[str, Any], path: Path) -> str:
+    """``boundary`` on any registry whose builder does not claim the key.
+
+    The other half of the same report. ``contract._BOUNDARY`` contains ``.``, so
+    ``bootstrap.CHANNELS_PATH`` was invisible to ``detect()`` while bare
+    ``CHANNELS_PATH`` was found; the fix made the boundary a registry attribute,
+    and this makes it a *declaration*. The adapters' defaults are right for the
+    data models they were written for and cannot be right for a model nobody
+    here has seen.
+
+    :func:`~kinemata.contract.usable_boundary` decides; this only says which
+    registry and which file, because "unknown boundary" with neither is a
+    refusal somebody has to go and locate.
+    """
+    try:
+        return usable_boundary(spec["boundary"])
+    except ValueError as exc:
+        raise ConfigError(
+            f"{path}: registry {spec.get('name', '?')!r}: {exc}"
+        ) from exc
+
 
 def load(path: str | Path) -> Settings:
     """Read a ``kinemata.toml`` into ready-to-use registries."""
@@ -483,17 +585,55 @@ def load(path: str | Path) -> Settings:
     #
     # Commands that need a registry refuse individually instead, which is the
     # shape `context` and `undeclared` already use.
-    if not any((declarations, raw.get("count"), raw.get("gate"),
-                raw.get("claims") is not None, raw.get("context") is not None)):
+    # Spelled once and read twice from the same place. The condition and the
+    # message used to be separate lists, and `[citations] provenance` -- a table
+    # that fails a build -- was added to neither: a project declaring only the
+    # citation policy was refused, and told to declare one of five things that
+    # did not include the one it had. Same shape as the gate count that read
+    # "four" until a fifth gate existed.
+    #
+    # `[citations]` counts only with `provenance` armed. The table's other key
+    # is advisory -- `cite -v` reports it and nothing enforces it -- so a config
+    # carrying that alone really does check nothing.
+    declared_checks = {
+        "[[registry]]": bool(declarations),
+        "[[count]]": bool(raw.get("count")),
+        "[[gate]]": bool(raw.get("gate")),
+        "[claims]": raw.get("claims") is not None,
+        "[context]": raw.get("context") is not None,
+        "[citations] provenance": bool(
+            (raw.get("citations") or {}).get("provenance")
+        ),
+    }
+    if not any(declared_checks.values()):
+        names = list(declared_checks)
         raise ConfigError(
             f"{path}: declares no check at all. A config needs at least one of "
-            "[[registry]], [[count]], [[gate]], [claims] or [context] -- "
+            f"{', '.join(names[:-1])} or {names[-1]} -- "
             "otherwise every command it configures would pass by doing nothing."
         )
 
     registries: list[Registry] = []
     unfitted: list[str] = []
     for spec in declarations:
+        # The baseline tags every record with the check that produced it, and
+        # two of those names belong to checks that are not registries -- the
+        # documentation scan and the citation catch. A registry answering to one
+        # of them would put its records under a name a gate reads as somebody
+        # else's and declines to judge, so the exemption would sit in the file
+        # doing nothing while reading as an accepted finding.
+        #
+        # Refused rather than renamed or suffixed. Guessing what the project
+        # meant is how a declaration stops saying what it says, and these are
+        # the only two names in the file that are not the project's to choose.
+        if spec.get("name") in RESERVED_NAMES:
+            reserved = ", ".join(sorted(RESERVED_NAMES))
+            raise ConfigError(
+                f"{path}: registry {spec['name']!r} takes a name the baseline "
+                f"reserves for a check that is not a registry ({reserved}). Its "
+                "accepted findings would be filed under that check and no gate "
+                "would judge them. Rename the registry."
+            )
         kind = spec.get("kind")
         builder = BUILDERS.get(kind)
         if builder is None:
@@ -509,6 +649,16 @@ def load(path: str | Path) -> Settings:
             registry.suffixes = tuple(spec["suffixes"])
         if "machinery" in spec:
             registry.machinery = tuple(spec["machinery"])
+        # Matching behavior, same place and for the same reason. An adapter's
+        # answer is a default: it knows what shape its own data model usually
+        # has, and only the project knows what its identifiers are actually
+        # spelled like or which files they live in. Set before anything asks the
+        # registry a question, so no cached matcher is built from the class
+        # default and then contradicted.
+        if "match_mode" in spec:
+            registry.match_mode = _match_mode(spec, path)
+        if "boundary" in spec and "boundary" not in BUILDER_KEYS.get(kind, ()):
+            registry.boundary = _boundary(spec, path)
         # Every declaration above can be individually valid and still produce a
         # registry with nothing in it -- the modules exist and parse, they just
         # hold nothing this adapter recognizes. That check passes, reports
@@ -588,12 +738,84 @@ def load(path: str | Path) -> Settings:
             for message in getattr(registry, "notices", ())
         ),
         accompany_max=_accompany_max(raw.get("citations"), path),
+        provenance=_provenance(raw.get("citations"), path),
+        stale_after=_stale_after(raw.get("citations"), path),
         context=_build_context(raw.get("context"), path),
     )
 
 
 #: What a ``[citations]`` table may say.
-CITATION_KEYS = frozenset({"accompany_max"})
+CITATION_KEYS = frozenset({"accompany_max", "provenance", "stale_after"})
+
+
+def _citations(spec: dict[str, Any] | None, path: Path) -> dict[str, Any]:
+    """The ``[citations]`` table, shape-checked once.
+
+    Three readers ask about this table, and each of them would otherwise have
+    to decide again what an unknown key means. One place, one answer.
+    """
+    if spec is None:
+        return {}
+    if not isinstance(spec, dict):
+        raise ConfigError(
+            f"{path}: [citations] is a table, not {type(spec).__name__}."
+        )
+    unknown = set(spec) - CITATION_KEYS
+    if unknown:
+        raise ConfigError(
+            f"{path}: [citations] declares {', '.join(sorted(unknown))}, which "
+            f"means nothing here (known: {', '.join(sorted(CITATION_KEYS))})."
+        )
+    return spec
+
+
+def _provenance(spec: dict[str, Any] | None, path: Path) -> bool:
+    """``[citations] provenance`` -- does every citation need a stamp here?
+
+    A flag rather than a list of kinds. Asked which citation kinds would be
+    exempt, the answer settled on 2026-09-10 was: which ones wouldn't. Section
+    6 spells out why a commit hash is not the exception it looks like -- a hash
+    is content identity, history gets rewritten, and without a stamp *true when
+    written* and *wrong when written* are the same text.
+    """
+    declared = _citations(spec, path).get("provenance", False)
+    if not isinstance(declared, bool):
+        raise ConfigError(
+            f"{path}: [citations] provenance is on or off and {declared!r} is "
+            "neither. There is no list of exempt citation kinds to name here: "
+            "section 6 of docs/citations.md admits none."
+        )
+    return declared
+
+
+def _stale_after(spec: dict[str, Any] | None, path: Path) -> int:
+    """``[citations] stale_after`` -- the clock, in days.
+
+    **Refused when the catch is off, rather than accepted and inert.** The
+    clock measures how long since a citation was confirmed, and it can only see
+    citations that carry a date. A project that has not required stamps has a
+    population where some citations are dated and the rest are invisible, so
+    the review list would be silently partial -- a check reporting a short list
+    while most of the tree went unexamined is the inert-signal failure this
+    package exists to refuse. Half a policy is refused, not run.
+    """
+    table = _citations(spec, path)
+    declared = table.get("stale_after", DEFAULT_STALE_AFTER)
+    if not isinstance(declared, int) or isinstance(declared, bool) or declared < 1:
+        raise ConfigError(
+            f"{path}: [citations] stale_after is a number of days and "
+            f"{declared!r} is not one. Zero would call a citation stale the "
+            "moment it was written, which is the opposite of a reminder."
+        )
+    if "stale_after" in table and not _provenance(spec, path):
+        raise ConfigError(
+            f"{path}: [citations] declares stale_after but not "
+            "provenance = true. The clock only sees citations that carry a "
+            "stamp, so with the stamp requirement off it would report on "
+            "whichever citations happen to be dated and say nothing about the "
+            "rest -- a short list that reads like a clean tree."
+        )
+    return declared
 
 
 def _accompany_max(spec: dict[str, Any] | None, path: Path) -> int:
@@ -605,19 +827,7 @@ def _accompany_max(spec: dict[str, Any] | None, path: Path) -> int:
     a refusal rather than a repair because a project meaning to raise the
     ceiling and typing a negative would silently get the reverse rule.
     """
-    if spec is None:
-        return DEFAULT_ACCOMPANY_MAX
-    if not isinstance(spec, dict):
-        raise ConfigError(
-            f"{path}: [citations] is a table, not {type(spec).__name__}."
-        )
-    unknown = set(spec) - CITATION_KEYS
-    if unknown:
-        raise ConfigError(
-            f"{path}: [citations] declares {', '.join(sorted(unknown))}, which "
-            f"means nothing here (known: {', '.join(sorted(CITATION_KEYS))})."
-        )
-    declared = spec.get("accompany_max", DEFAULT_ACCOMPANY_MAX)
+    declared = _citations(spec, path).get("accompany_max", DEFAULT_ACCOMPANY_MAX)
     if not isinstance(declared, int) or isinstance(declared, bool) or declared < 1:
         raise ConfigError(
             f"{path}: [citations] accompany_max is a length in characters and "

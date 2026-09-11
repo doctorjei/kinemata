@@ -22,10 +22,12 @@ One scan, two consumers -- the split this project is organized around:
 
 ``kinemata baseline``
     The ratchet's control surface: what a project has accepted, and the one
-    command that changes it. ``check`` reads the baseline; nothing else does.
-    ``review`` deliberately ignores it -- the ratchet governs the gate, not the
-    advice, and an advisory scan that hid known problems would be lying about
-    the tree.
+    command that changes it. **Both gates read it** -- ``check`` for the code it
+    scans and ``claims`` for the documentation it scans -- and each is scoped to
+    its own half, because one list serving two gates is the point and a command
+    reporting on a check it never ran is not. ``review`` deliberately ignores it:
+    the ratchet governs the gate, not the advice, and an advisory scan that hid
+    known problems would be lying about the tree.
 
 The difference between the last two is the exit code and where they run, not
 the analysis. That is deliberate: two mechanisms that could disagree eventually
@@ -37,15 +39,16 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from datetime import UTC, date, datetime
+from dataclasses import replace
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from . import stamps
 from .adapters.bibliography import Bibliography, undeclared_key
-from .baseline import Baseline, BaselineError, record
+from .baseline import Baseline, BaselineError, Split, record
 from .bypass import Bypass, crossings, strays, unused
 from .citations import citations, index
-from .claims import ClaimsError, verify
+from .claims import CLAIMS_REGISTRY, ClaimsError, Verification, verify
 from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
 from .confirm import ConfirmError, apply, plan
 from .context import measure
@@ -53,6 +56,8 @@ from .contract import BaseRegistry, Entry
 from .gates import WORKFLOW_DIR, enforced
 from .literals import clusters
 from .projection import project
+from .prose import ILLUSTRATION_ROLE
+from .provenance import PROVENANCE_REGISTRY, ProvenanceError, Survey, survey
 from .report import DEFAULT_MAX_SITES, Report, review
 from .stamps import StampError
 
@@ -191,14 +196,47 @@ def cmd_ids(args: argparse.Namespace) -> int:
     return 1 if (over_budget and args.strict) else 0
 
 
-def _run_review(args: argparse.Namespace) -> tuple[Settings, list[tuple[str, Report]]]:
+def _run_review(
+    args: argparse.Namespace, *, registry_required: bool = True
+) -> tuple[Settings, list[tuple[str, Report]], Survey | None]:
     """Shared body of review, check and baseline: one scan per registry.
 
     Returns the reports rather than printing them, because ``check`` has to put
     the findings through the baseline before deciding what is worth showing.
+
+    **The citation catch rides here rather than in a command of its own**, and
+    that is the whole of its adoption story. Armed on a tree that has never
+    dated a citation it reports every citation in the tree, so it needs the
+    ratchet -- and the ratchet is fed from exactly this function, by ``check``
+    which splits against the baseline and by ``baseline`` which records it. A
+    separate command would have meant a second baseline, and two exemption
+    lists eventually disagree about what a project accepted.
+
+    The survey comes back beside the reports because what it *could not judge*
+    is not a finding and has nowhere else to be said. A run that silently
+    declined to look at part of a tree reads like a run that found nothing.
+
+    :param registry_required: whether the caller has any other source of
+        findings. ``baseline`` does -- it adds the documentation claims -- and
+        a project that declares ``[claims]`` and nothing else is exactly the
+        adoption case the ratchet was extended for, so refusing to record its
+        baseline would have shipped the feature with no way to turn it on.
     """
     settings = _settings(args)
-    _needs_registries(settings, "scan for")
+    # A registry is required only when a registry is what would do the work.
+    # The citation catch rides this function and is not registry-shaped, so a
+    # project declaring the policy and nothing else was refused here -- told to
+    # declare a registry to run a check that never consults one, which is the
+    # required fiction `_needs_registries` exists to have removed.
+    if not settings.provenance:
+        if registry_required:
+            _needs_registries(settings, "scan for")
+        elif settings.unfitted:
+            # The other half of that refusal, which a caller with its own
+            # findings still needs: a registry whose adapter recognized nothing
+            # scans for nothing, and recording a baseline from it would write an
+            # exemption list that is short for a reason nobody was told.
+            raise ConfigError(" ".join(settings.unfitted))
     reports: list[tuple[str, Report]] = []
 
     for registry in settings.registries:
@@ -215,7 +253,59 @@ def _run_review(args: argparse.Namespace) -> tuple[Settings, list[tuple[str, Rep
             ),
         ))
 
-    return settings, reports
+    found: Survey | None = None
+    if settings.provenance and args.registry in (None, PROVENANCE_REGISTRY):
+        found = _survey(args, settings)
+        reports.append((
+            PROVENANCE_REGISTRY,
+            # Every undated citation is strong: a missing stamp is a fact about
+            # the document, not a guess about a namespace, and the weak tier
+            # exists for the latter.
+            Report(bypasses=tuple(hit for _, hit in found.findings()),
+                   scanned=found.scanned),
+        ))
+    return settings, reports, found
+
+
+def _survey(args: argparse.Namespace, settings: Settings) -> Survey:
+    """Every citation in the documents, over the same files ``claims`` reads."""
+    return survey(
+        _target(args, settings),
+        suffixes=settings.claim_suffixes,
+        file_suffixes=settings.claim_file_suffixes,
+        exclude=settings.exclude,
+        historical=settings.historical,
+    )
+
+
+def _report_unassociated(found: Survey | None) -> None:
+    """What the citation catch declined to judge, and why.
+
+    Not suppressed by ``--quiet``, the same rule the baseline size and the gate
+    count follow. Silence about a citation the tool could not place is
+    indistinguishable from a citation it placed and found dated, and the whole
+    argument for the narrow association rule is that a wrong accusation costs
+    more than a missed one -- which is only true while the misses are counted.
+    """
+    if found is None:
+        return
+    if found.ambiguous:
+        print(
+            f"unjudged: {len(found.ambiguous)} citation(s) appear more than "
+            "once on their line and the occurrences disagree about carrying a "
+            "stamp. Which one the sentence asserts cannot be recovered, so "
+            "nothing is reported for them."
+        )
+    if found.unlocatable:
+        print(
+            f"unjudged: {len(found.unlocatable)} citation(s) could not be "
+            "placed on the line that produced them."
+        )
+    if found.archived:
+        print(
+            f"{len(found.archived)} document(s) left alone as superseded "
+            "records; a record cites what was true when it was written."
+        )
 
 
 def _print_reports(
@@ -275,7 +365,7 @@ def _report_silent(settings: Settings) -> None:
 
 
 def cmd_review(args: argparse.Namespace) -> int:
-    settings, reports = _run_review(args)
+    settings, reports, found = _run_review(args)
     _print_reports(settings, reports, verbose=args.verbose)
     strong = sum(len(report.strong) for _, report in reports)
     weak = sum(len(report.weak) for _, report in reports)
@@ -283,6 +373,7 @@ def cmd_review(args: argparse.Namespace) -> int:
         if not args.quiet:
             print("Nothing already declared looks re-derived here.")
         _report_silent(settings)
+        _report_unassociated(found)
         return 0
     if not args.quiet:
         print()
@@ -291,6 +382,7 @@ def cmd_review(args: argparse.Namespace) -> int:
             f"Route through them rather than re-deriving."
         )
     _report_silent(settings)
+    _report_unassociated(found)
     return 0  # advisory, always
 
 
@@ -482,6 +574,47 @@ def cmd_unused(args: argparse.Namespace) -> int:
     return 0  # advisory, always
 
 
+def _verify(args: argparse.Namespace, settings: Settings) -> Verification:
+    """Every claim the documents make, over the files the config declares.
+
+    One body, two callers: ``claims`` gates on it and ``baseline`` records it.
+    Held in one function for the reason ``_run_review`` is -- the gate and the
+    thing that writes the gate's exemption list must not be able to disagree
+    about what a finding is.
+    """
+    return verify(
+        _target(args, settings),
+        suffixes=settings.claim_suffixes,
+        file_suffixes=settings.claim_file_suffixes,
+        exclude=settings.exclude,
+        historical=settings.historical,
+        counts=settings.counts,
+        resolve_in=settings.resolve_in,
+        commits_in=settings.commits_in,
+        promised=settings.promised,
+        external=settings.external,
+        timeout=settings.external_timeout,
+    )
+
+
+def _report_unscanned(split: Split) -> None:
+    """Name the exemptions this command was not in a position to judge.
+
+    Not suppressed by ``--quiet``, the same rule the baseline size and the gate
+    count follow. One list serves every check and no command runs every check,
+    so silence here would leave a reader of ``check``'s output believing they
+    had seen the whole exemption list.
+    """
+    if not split.unscanned:
+        return
+    total = sum(item.count for item in split.unscanned)
+    sources = sorted({item.registry for item in split.unscanned})
+    print(
+        f"{total} further accepted finding(s) belong to {', '.join(sources)}, "
+        "which this command does not run; nothing here is a statement about them."
+    )
+
+
 def cmd_claims(args: argparse.Namespace) -> int:
     """Falsify what the project asserts about itself: in prose, and in CI.
 
@@ -495,25 +628,42 @@ def cmd_claims(args: argparse.Namespace) -> int:
     that verifies other checks are wired up is worthless if nothing guarantees
     *it* runs, and adding a fifth command would have created exactly that
     regress. Folded into an existing gate, it runs wherever that gate does.
+
+    **Ratcheted against the same baseline ``check`` reads, and still its own
+    command with its own exit code.** Sharing the file was the requirement --
+    two exemption lists eventually disagree about what a project accepted.
+    Merging the two commands was considered and rejected on three counts, none
+    of them about taste:
+
+    * ``[claims] external`` reaches the network. ``check`` is what an agent runs
+      in-box on every edit, and a gate that goes amber on a bad network day is
+      one its reader learns to skim.
+    * Four of the five things that fail here have no site to fingerprint -- see
+      :attr:`kinemata.claims.Verification.declarations_failed` -- so this exit
+      code is not reducible to "new findings", which is all ``check``'s is.
+    * ``kinemata claims`` is declared in ``[[gate]]`` and verified against the
+      workflow that runs it, by this very command. Folding it away would make
+      that declaration false, and the inventory it carries is the thing that
+      notices a deleted CI step.
     """
     settings = _settings(args)
     _note_unfitted(settings)
-    found = verify(
-        _target(args, settings),
-        suffixes=settings.claim_suffixes,
-        file_suffixes=settings.claim_file_suffixes,
-        exclude=settings.exclude,
-        historical=settings.historical,
-        counts=settings.counts,
-        resolve_in=settings.resolve_in,
-        commits_in=settings.commits_in,
-        promised=settings.promised,
-        external=settings.external,
-        timeout=settings.external_timeout,
-    )
+    found = _verify(args, settings)
     inventory = enforced(settings.root, settings.gates)
 
-    body = "\n".join(part for part in (found.text(), inventory.text()) if part.strip())
+    baseline = Baseline.load(settings.baseline)
+    # A `Bypass` is what the ratchet fingerprints; a `Claim` is what a reader
+    # should be shown. Paired by position, because `findings()` is the one place
+    # the tagging lives and re-spelling it here to get the pairing would be a
+    # second copy of it. `strict` pins the parallelism rather than trusting it,
+    # and the split returns these very objects, which is what `id` keys on.
+    tagged = found.findings()
+    behind = {id(hit): claim for (_, hit), claim
+              in zip(tagged, found.broken, strict=True)}
+    split = baseline.split(tagged, scope=(CLAIMS_REGISTRY,))
+    gated = replace(found, broken=[behind[id(hit)] for _, hit in split.new])
+
+    body = "\n".join(part for part in (gated.text(), inventory.text()) if part.strip())
     if body.strip():
         print(body)
 
@@ -532,11 +682,52 @@ def cmd_claims(args: argparse.Namespace) -> int:
         print(f"promises: {len(settings.promised)} declared, "
               f"{len(found.deferred)} claim(s) held open")
 
-    if found.failed or inventory.failed:
+    # Same rule again: a span marked as an illustration is a span this stopped
+    # checking because somebody said to, and suppression is reported here rather
+    # than being silent. Counted, not listed -- see `Verification.shown`.
+    if found.shown:
+        print(f"illustrations: {found.shown} span(s) marked `:{ILLUSTRATION_ROLE}:` "
+              "and not read as claims")
+
+    # Same rule once more, and the one this command had no voice for until the
+    # ratchet reached it: an exemption list nobody reads the size of is how an
+    # allowlist rots. The number is the point of printing it.
+    if baseline.exists:
+        note = (f"\nbaseline: {len(split.accepted)} claim(s) accepted as "
+                f"pre-existing in {baseline.path.name}, until {baseline.until}")
+        if baseline.by:
+            note += f" ({baseline.by})"
+        if split.stale and not _narrowed(args):
+            gone = sum(item.count for item in split.stale)
+            note += (f"; {gone} no longer present "
+                     f"(`kinemata baseline --prune` drops them)")
+        print(note)
+        _report_unscanned(split)
+
+    # A lapsed baseline fails here for the reason it fails `check`: the date is
+    # the whole mechanism, and exemptions still in force that nobody has decided
+    # again are what it is there to surface.
+    #
+    # Conditioned on this command having records in the list, which `check`'s
+    # copy of this is not. That is not a softer rule, it is the same rule
+    # addressed to the right reader: a lapse with no claim records in it is
+    # already `check`'s red gate, and a second command going red for somebody
+    # else's list teaches both readers that red means "look elsewhere".
+    if baseline.exists and baseline.lapsed() and (split.accepted or split.stale):
+        print(
+            f"\nFAIL: the baseline lapsed on {baseline.until}, and "
+            f"{len(split.accepted)} claim(s) here are still exempt under it. "
+            "Drive them down, or re-record with a new --until.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if gated.failed or inventory.failed:
         parts = []
-        if found.broken:
+        if gated.broken:
+            label = "new claim(s)" if baseline.exists else "claim(s)"
             parts.append(
-                f"{len(found.broken)} of {found.checked} claim(s) do not resolve"
+                f"{len(gated.broken)} of {found.checked} {label} do not resolve"
             )
         if found.kept:
             parts.append(
@@ -555,7 +746,16 @@ def cmd_claims(args: argparse.Namespace) -> int:
         print(f"\nFAIL: {'; '.join(parts)}.", file=sys.stderr)
         return 1
     if not args.quiet:
-        print(f"{found.checked} documentation claim(s) checked, all resolve.")
+        # "All resolve" is not what green means once a baseline is in play, and
+        # printing it anyway would be the tool telling its own lie of the kind
+        # it exists to catch. The accepted ones are still broken; they are
+        # accepted.
+        if split.accepted:
+            print(f"{found.checked} documentation claim(s) checked; "
+                  f"{len(split.accepted)} accepted as pre-existing, "
+                  "the rest resolve.")
+        else:
+            print(f"{found.checked} documentation claim(s) checked, all resolve.")
     return 0
 
 
@@ -928,6 +1128,61 @@ def cmd_confirm(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_stale(args: argparse.Namespace) -> int:
+    """Citations nobody has confirmed lately. **Advisory, and exits 0 always.**
+
+    Section 6 keeps provenance and staleness on separate axes, and this is the
+    second one. Requiring a stamp is a catch: a missing stamp is a fact about
+    the document. Whether a citation is old enough to deserve re-reading is a
+    judgment about the world, and gating on the calendar means a build that
+    goes red on a day nobody touched the repository.
+
+    **Scoped to the kinds that leave the machine**, which today is addresses.
+    A path or a commit is settled locally on every run, so a clock over them
+    would restate what ``claims`` already answered this morning -- a review
+    list whose every entry is either already a finding or already known good.
+    An address costs a network request, which is why settling it is opt-in and
+    why the date on it is the only record that it was ever settled at all. The
+    scope is read off the claim table (:data:`kinemata.provenance.CLOCKED`),
+    so a later kind that needs the network is clocked without an edit here.
+    """
+    settings = _settings(args)
+    _note_unfitted(settings)
+    if not settings.provenance:
+        raise ConfigError(
+            "the citation clock has nothing to measure here: [citations] "
+            "provenance is not declared, so citations are not required to "
+            "carry a stamp and the ones that do are an accident of who wrote "
+            "them. Arm the catch first -- `kinemata baseline --record` accepts "
+            "the population you already have."
+        )
+    found = _survey(args, settings)
+    after = timedelta(days=settings.stale_after)
+    now = datetime.now(UTC)
+    past = found.stale(after=after, now=now)
+
+    for seen in past:
+        days = seen.age(now).days
+        print(f"{seen.path}:{seen.line}  {seen.text}  ({days} days)")
+
+    clocked = found.clocked()
+    if past:
+        print()
+    print(f"{len(past)} of {len(clocked)} dated citation(s) not confirmed "
+          f"within {settings.stale_after} day(s). `kinemata confirm` re-dates "
+          "the ones that still resolve.")
+    # The population the clock cannot see, counted rather than left out. A
+    # review list is only meaningful next to the size of what it was drawn
+    # from, which is the same argument the baseline's printed size rests on.
+    blind = found.unclocked()
+    if blind:
+        print(f"{len(blind)} further citation(s) of the same kind carry no "
+              "stamp at all, so the clock says nothing about them. They are "
+              "`kinemata check`'s findings, not this list's.")
+    _report_unassociated(found)
+    return 0  # advisory, always
+
+
 def _narrowed(args: argparse.Namespace) -> str | None:
     """Why this scan does not cover the whole project, if it does not.
 
@@ -950,10 +1205,15 @@ def cmd_check(args: argparse.Namespace) -> int:
     baseline it fails on *increase*, which is the only way the gate can be
     adopted by a project that is already failing it -- kanibako-cli starts at
     111 strong findings, and a wall of red on day one gets the gate switched off.
+
+    **Scoped to what this command scans.** The same file holds ``claims``'
+    exemptions and this command does not read documentation; unscoped, every
+    accepted dead reference would be reported here as no longer present, by a
+    command that never looked for it, under a line recommending ``--prune``.
     """
-    settings, reports = _run_review(args)
+    settings, reports, found = _run_review(args)
     baseline = Baseline.load(settings.baseline)
-    split = baseline.split(_strong(reports))
+    split = baseline.split(_strong(reports), scope=[name for name, _ in reports])
 
     new_by_registry: dict[str, list[Bypass]] = {}
     for name, hit in split.new:
@@ -972,6 +1232,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     ]
     _print_reports(settings, filtered, verbose=args.verbose)
     _report_silent(settings)
+    _report_unassociated(found)
 
     # Printed on every run that has a baseline at all, and **not suppressed by
     # --quiet**: an exemption list nobody reads the size of is how an allowlist
@@ -991,10 +1252,25 @@ def cmd_check(args: argparse.Namespace) -> int:
                 f"(`kinemata baseline --prune` drops them)"
             )
         print(note)
+        _report_unscanned(split)
 
     # A lapsed baseline fails even with nothing new, because that is the whole
     # point of the date: the exemptions are still in force and nobody has looked
     # at them since the day somebody said they would.
+    #
+    # **Unconditional, and deliberately not symmetric with `claims`**, which
+    # lapses only when the list actually exempts a claim. The asymmetry was
+    # weighed on 2026-09-11 and kept. This command is the backstop: a scoped
+    # scan reaches only the registries the config still declares, so records
+    # belonging to a registry somebody deleted are reported as unscanned and
+    # judged by nothing. Were this conditional too, those records would sit in
+    # an exemption list that cannot expire -- which is precisely what `Promise`
+    # and `Baseline` both refuse by construction.
+    #
+    # The cost is that a claims-only lapse turns this red for a list it does not
+    # judge. Accepted, because a lapse is not weather: somebody dated a decision
+    # and the date passed. The report above already says which records are this
+    # command's business and which are not.
     if baseline.exists and baseline.lapsed():
         print(
             f"\nFAIL: the baseline lapsed on {baseline.until}. Its "
@@ -1017,6 +1293,11 @@ def cmd_baseline(args: argparse.Namespace) -> int:
     Showing is the default because recording is how the gate goes quiet. A
     command that silences findings should never be the thing that happens when
     somebody types the noun to see what it means.
+
+    **This is the one command that runs every check**, because it is the one
+    command that writes the file. ``check`` and ``claims`` each cover their own
+    half and are scoped accordingly; a ``--prune`` that covered only one half
+    would delete the other's records on the strength of never having looked.
     """
     if args.record and args.prune:
         print("error: --record and --prune do different things; pick one",
@@ -1032,8 +1313,23 @@ def cmd_baseline(args: argparse.Namespace) -> int:
         )
         return 2
 
-    settings, reports = _run_review(args)
+    settings, reports, found = _run_review(args, registry_required=False)
+    _report_unassociated(found)
     findings = _strong(reports)
+
+    # **Every check that feeds the list, run by the one command that writes it.**
+    # `--prune` rebuilds the file from what this scan produced, so a source it
+    # did not run is a set of records silently deleted -- the same failure
+    # `_narrowed` refuses a registry filter for, and skipping the documentation
+    # scan here would be that failure with a runtime argument in front of it.
+    # The cost is real and accepted: this now reaches the network and runs the
+    # declared count oracles, exactly as `kinemata claims` does.
+    #
+    # Guarded the way the citation catch is, so `baseline -r claims` shows the
+    # documentation half alone.
+    if args.registry in (None, CLAIMS_REGISTRY):
+        findings += _verify(args, settings).findings()
+
     try:
         baseline = Baseline.load(settings.baseline)
     except BaselineError:
@@ -1066,14 +1362,25 @@ def cmd_baseline(args: argparse.Namespace) -> int:
         fresh = record(settings.baseline, findings, until=until,
                        by=args.by or "", note=args.note or "")
         delta = fresh.size - baseline.size
+        # Asked before the write, because `exists` asks the filesystem and
+        # `save` is about to create the file: read afterwards, a first recording
+        # reports itself as "+11 against the previous baseline" there was none
+        # of. Found while pasting this command's output into a report.
+        existed = baseline.exists
         fresh.save()
-        change = f" ({delta:+d} against the previous baseline)" if baseline.exists else ""
+        change = f" ({delta:+d} against the previous baseline)" if existed else ""
         print(f"Recorded {fresh.size} accepted finding(s){change} in {settings.baseline}.")
         if delta > 0:
             # Growth is the failure mode. Say so at the moment it happens, since
             # the alternative is noticing it in a diff nobody reads closely.
+            #
+            # Both gates named, not one. This list stopped being `check`'s alone
+            # when documentation started riding it, and a reader told that a
+            # dead reference is exempt from `check` would go look at a command
+            # that was never going to report it.
             print(f"{delta} finding(s) newly accepted. Every one is now exempt "
-                  f"from `check` until it is fixed and the baseline re-recorded.")
+                  f"from `check` and `claims` until it is fixed and the "
+                  f"baseline re-recorded.")
         return 0
 
     if args.prune:
@@ -1092,7 +1399,13 @@ def cmd_baseline(args: argparse.Namespace) -> int:
 
     print(f"{baseline.path}: {baseline.size} accepted finding(s).")
     if split.new:
-        print(f"{len(split.new)} finding(s) not accepted -- `check` fails on these.")
+        # Named by the gate that would fail, not by one of them: this list feeds
+        # two commands and telling a reader to look at `check` for a dead link
+        # sends them to a green run.
+        gates = sorted({"`kinemata claims`" if name == CLAIMS_REGISTRY
+                        else "`kinemata check`" for name, _ in split.new})
+        print(f"{len(split.new)} finding(s) not accepted -- "
+              f"{', '.join(gates)} fails on these.")
     if scope:
         print(f"Scan limited by {scope}; nothing here is a statement about the rest.")
     elif split.stale:
@@ -1185,7 +1498,8 @@ def build_parser() -> argparse.ArgumentParser:
     unu.set_defaults(func=cmd_unused)
 
     clm = sub.add_parser("claims", parents=[common],
-                         help="gate: fail on a documentation claim that does not resolve")
+                         help="gate: fail on a documentation claim the baseline "
+                              "does not already accept")
     clm.add_argument("path", nargs="?", help="limit the scan to this path")
     clm.set_defaults(func=cmd_claims)
 
@@ -1231,6 +1545,12 @@ def build_parser() -> argparse.ArgumentParser:
                      help="record the confirmations in the documents themselves")
     con.set_defaults(func=cmd_confirm)
 
+    sta = sub.add_parser("stale", parents=[common],
+                         help="citations nobody has confirmed lately "
+                              "(advisory; never gates)")
+    sta.add_argument("path", nargs="?", help="limit the run to this path")
+    sta.set_defaults(func=cmd_stale)
+
     base = sub.add_parser("baseline", parents=[common],
                           help="the ratchet: findings accepted as pre-existing")
     base.add_argument("path", nargs="?", help="limit the scan to this path")
@@ -1257,7 +1577,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return args.func(args)
     except (ClaimsError, ConfigError, BaselineError, StampError,
-            ConfirmError) as exc:
+            ConfirmError, ProvenanceError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
