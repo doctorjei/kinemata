@@ -66,9 +66,9 @@ exclude = [
 # citations of other people's repositories, real evidence that cannot resolve
 # here because those trees are gitignored corpora absent from a clean clone.
 #
-# Nine are now declared in `docs/bibliography.toml` with a `foreign` field
-# naming the repository that owns them, so the sentence keeps its readable
-# target and the gate stops judging this tree for another's contents. The
+# Nine are now declared in `docs/bibliography.toml` under the `Px` and `Cx`
+# codes, each naming the repository that owns it, so the sentence keeps its
+# readable target and the gate stops judging this tree for another's contents. The
 # tenth was not evidence at all -- `workset.yaml` is a filename that project's
 # code composes at run time, and no file of that name is in the repository
 # being scanned, so declaring it as a path there would have put a false
@@ -203,6 +203,67 @@ note = "a citation naming a key no entry declares"
 [[gate]]
 command = "ruff check"
 note = "lint; the rule set is declared in pyproject.toml"
+
+# **The commands that are not gates, declared so that deleting one is visible.**
+#
+# Boarded after the third time a non-gating command broke and nothing noticed:
+# `context` was missing from this project's own command table, `undeclared`
+# gated locally for a day while nothing in CI ran it, and `confirm` refused
+# outright -- exit 2, before examining one citation -- for most of a day.
+#
+# A gate says *this check must run*. These say *this command must still work*,
+# which is a weaker claim about the tree and the same claim about the tool. They
+# are declared here for the reason the five above are: the workflow is editable
+# by the agent it constrains, so a step that quietly disappears has to fail
+# something.
+#
+# ⚑ They are counted with the gates in `kinemata claims` output, which conflates
+# two senses of the word in one number. Accepted rather than fixed with a second
+# table: the inventory answers "is every declared command still run here", and
+# that question is the same for both.
+
+[[gate]]
+command = "kinemata ids"
+note = "the projection; advisory, and the smallest thing an agent reads"
+
+[[gate]]
+command = "kinemata review -v"
+note = "the advisory scan, with weak signals and suppressions listed"
+
+[[gate]]
+command = "kinemata clusters -v"
+note = "repeated text with no declared home; advisory, never gates"
+
+[[gate]]
+command = "kinemata unused"
+note = "declared entries nothing mentions; a review list, never a cut list"
+
+[[gate]]
+command = "kinemata stale"
+note = "the citation clock; reports 0 of 0 here, which is still a run"
+
+[[gate]]
+command = "kinemata cite"
+note = "the reverse index; it reported zero sites for keys that had three"
+
+[[gate]]
+command = "kinemata baseline"
+note = "what the gate already accepts, printed without --record"
+
+[[gate]]
+command = "kinemata confirm"
+note = "the writer, dry run. --write is deliberately not run unattended"
+
+[[gate]]
+command = "kinemata stamp"
+note = "the codec; reads no config, which is the property being pinned"
+
+# Asserted at exit 2 rather than run for a zero. This repository has never
+# declared `[context]`, so refusing is what the command does here and a refusal
+# is a claim like any other -- see the step, which fails on any other code.
+[[gate]]
+command = "kinemata context"
+note = "the session-load ceiling; refuses here, and the step pins the refusal"
 
 # Two findings from `kinemata unused`, reviewed 2026-09-09 and set aside. This
 # is the second kind of promise -- not a file the project will produce, but a

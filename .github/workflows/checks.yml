@@ -61,3 +61,64 @@ jobs:
       # its own identifiers -- and it was not added here for a day. A catch that
       # does not run where the agent cannot reach it is not a catch.
       - run: kinemata undeclared
+
+  commands:
+    # **Every other command, run for the fact that it still runs.**
+    #
+    # The gates above check the tree. Nothing checked the commands that are not
+    # gates, and three of them broke without anything noticing: `context` was
+    # missing from the project's own command table, `undeclared` gated locally
+    # for a day while nothing here ran it, and `confirm` refused outright --
+    # exit 2, before examining a single citation -- for most of a day, on a
+    # break already found and fixed in `unused` hours earlier.
+    #
+    # Every one was invisible to every other check, and the last was found only
+    # by a person running the command by hand. A gate says *this check must
+    # run*; nothing said *this command must still work*, and that is the claim
+    # this job makes.
+    #
+    # Its own job rather than steps in `self-check`, so an advisory command
+    # falling over never hides which gate was red.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # `confirm` settles commit citations
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -e .
+      # Advisory: each exits 0 on any completed run, so a non-zero exit here is
+      # the command being broken rather than the tree being dirty.
+      - run: kinemata ids
+      - run: kinemata review -v
+      - run: kinemata clusters -v
+      - run: kinemata unused
+      - run: kinemata stale
+      - run: kinemata cite
+      - run: kinemata baseline
+      # Dry run. `--write` is never reached here: the one writing command in the
+      # package must not run unattended in the place its output would be
+      # committed from.
+      - run: kinemata confirm
+      # Reads no config at all, which is the property worth pinning -- it has to
+      # work inside somebody else's document.
+      - run: kinemata stamp
+      # **A refusal is a claim too, and this is the row that says so.** This
+      # repository has never declared `[context]`, so the command refuses with
+      # exit 2 by design. Asserting the code rather than tolerating it means
+      # `[context]` appearing, or the refusal silently becoming something else,
+      # fails here instead of passing unread.
+      - name: context refuses, this repository having declared none
+        run: |
+          set +e
+          kinemata context
+          status=$?
+          set -e
+          if [ "$status" -ne 2 ]; then
+            echo "kinemata context exited $status; expected 2." >&2
+            echo "This repository declares no [context], so a refusal is the" >&2
+            echo "claim being pinned. If [context] was just declared, this" >&2
+            echo "step should now run it and expect 0." >&2
+            exit 1
+          fi
