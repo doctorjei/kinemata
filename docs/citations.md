@@ -350,6 +350,75 @@ silent rot becomes a task list.
 A key that nothing cites needs no separate machinery — it is a declared entry nothing mentions,
 which the existing report of unused entries already describes.
 
+### 5.8 `foreign` — evidence that lives in another project's tree
+
+An entry may name the repository its source belongs to. Section 5.2 introduces the field as the
+place to record another project's identifier for a thing this project has given its own key; this
+section states the **behavior** it carries, because it changes what a check concludes.
+
+**A citation this tree cannot settle, standing beside a key whose entry is `foreign`, is not a
+finding.** It is a citation of somebody else's artifact, checked by whoever owns that tree. The
+documentation gate reports the count of them on every run and never fails on one.
+
+**Why the field exists at all.** A tool validated against other projects cites those projects, and
+a project adopting a checker usually has a vendored dependency or a sibling repository it refers
+to by path. Those citations are real, they are permanently unresolvable from here, and the two
+alternatives are both worse than declaring them: left alone they are dead claims forever, so the
+gate can never go green over text nobody should change; removed from the sentence so that nothing
+is extracted, the evidence moves into a second file and out of the reasoning that depends on it,
+against §5.6.
+
+**Three properties keep this from becoming a suppression syntax**, and they are the reason it is
+safe to have at all:
+
+- **Resolution is asked first.** A target that exists here is this project's, whatever key sits
+  beside it, so a declaration can never take a live claim out of the check.
+- **Every occurrence on the line must be keyed, not any.** A sentence naming one path as another
+  project's and then as this one's still contains a claim this tree can be wrong about.
+- **A token the checker cannot locate stays checked.** The failure costs a false finding rather
+  than a silent exemption, which is the direction every mechanism here errs in.
+
+⚑ **What this field does to an interpreted code is not yet settled.** `Pa` is reserved as *"path
+in this tree"*, and `foreign` silently re-reads it as a path in the named tree. That is coherent
+and it is undeclared; it is an open question whether foreign sources should carry their own codes
+instead. A new reserved code is not the tool's to mint — see §5.4.
+
+### 5.9 `confirmed` — the day a source was verified, and what it changes
+
+An entry may carry the date it was last checked:
+
+```toml
+[[entry]]
+key = "Wb0007"
+target = "https://spec.commonmark.org/"
+confirmed = "2026-09-11"
+note = "the measurement this design rests on"
+```
+
+(The address above is a live one on purpose. `claims` reads fenced blocks — a dead link inside a
+snippet a reader copies is still dead — so an invented example address in this document would be
+a finding against the document that specifies the notation.)
+
+**An entry with a date is a record; a citation without one is a pointer.** That is the whole of
+it, and §6 is where the consequence lands: the staleness clock reaches pointers and leaves records
+alone. The reasoning behind the clock — an address leaves the machine, so the date on it is worth
+refreshing — is a fact about *going to read something*, not about *having read it*. A source the
+project verified and wrote down does not become unverified because a week passed.
+
+**Verified once, re-run on request.** `kinemata confirm` carries the network oracle and re-dates
+only what it settles, so re-checking records is an act somebody chooses rather than a schedule.
+This matters most where re-checking is not possible at all: a page that has since moved, a
+reference kept because the decision rested on it. Those cannot be re-fetched and should not
+therefore become permanent findings.
+
+**Two refusals**, both for the same reason the whole mechanism exists:
+
+- A value that is not a date. A source verified on an unreadable day is one nothing can say was
+  verified.
+- A date in the future. A record may say when a source was checked, never when it will be —
+  provenance exists to separate *true when written* from *wrong when written*, and a date nobody
+  could have checked at settles neither.
+
 ---
 
 ## 6. Provenance and the clock are separate axes
@@ -373,6 +442,17 @@ So **every citation carries provenance, with no exemptions.** What varies is the
 **The clock belongs to kinds that leave the machine.** A path or a commit is settled locally on
 every run, so a clock would only restate what the run already knows. An address requires a network
 request, which is why it is opt-in, and which is why a date on it is worth keeping.
+
+**And within those, to pointers rather than records.** An address written inline and undeclared
+says *go and read this*: it has to keep resolving, so a reminder to look again is the whole point.
+A source entered in a bibliography with the day it was verified is the other thing — the sense
+§5.2 means by *reference 12 in one paper* — and a journal reorganizing its site does not
+invalidate the reference. **Declaring a source turns a pointer into a record**, and the clock
+leaves records alone; `confirmed` on the entry is what says so. See §5.9.
+
+Re-checking a record is therefore deliberate rather than scheduled. `kinemata confirm` carries the
+same network oracle and re-dates what it settles, so a project re-runs its sources when it wants
+to rather than every seventh day.
 
 Archived material is left alone on both axes. A record cites what was true when written.
 
@@ -419,11 +499,35 @@ one somebody switches off — which is the failure the ratchet exists to prevent
 
 ```toml
 [citations]
-provenance = true    # every citation carries a stamp
-stale_after = 7      # days before the clock surfaces one; advisory
+provenance = true                    # every citation carries a stamp
+stale_after = 7                      # days before the clock surfaces one; advisory
+suffixes = [".py", ".md"]            # where the policy reaches; defaults to the claims scope
+resources = "docs/resources.toml"    # documents dated in a list instead — §6.3
 ```
 
 There is no list of exempt kinds, because §6 admits none.
+
+**`suffixes` is a scope, and a scope is not an exemption.** A citation in a file the policy does
+not reach is not an accepted finding — it is not a finding, because the project has said the
+requirement does not apply there. That is the difference between this and a baseline record, and
+it is why one is declared in the config a reviewer reads while the other is a list that has to be
+driven down.
+
+The reason it exists is that the two checks answer different questions about the same file. **A
+dead path in a README is a defect wherever it appears**, so a project wants documentation claims
+read everywhere. **A stamp beside that path is apparatus** — it records when a checker last
+confirmed the reference — and in the first page a reader of the project sees, it is a token they
+have to learn to skip. Without a scope of its own, the only way to keep stamps out of user-facing
+prose was to drop those files from `[claims] suffixes` entirely, which throws away the more
+valuable of the two checks.
+
+It is refused when `provenance` is off, for the reason `stale_after` is: scoping a policy nobody
+declared narrows nothing, while reading in the file as though a decision had been made.
+
+**It is also the blunter of the two answers**, and §6.3 is the other. A scope buys the notation's
+absence by giving up the coverage; a resource list keeps both. Both are kept, because a project
+that wants a tree genuinely outside the policy's reach is making a legitimate declaration rather
+than working around one.
 
 **Adoption is the existing ratchet, not a second one.** An undated citation is recorded, split
 and driven down exactly as a duplication finding is: record the population the project already
@@ -434,6 +538,57 @@ eventually disagree with the first about what a project accepted.
 the stamp requirement off it would report on whichever citations happen to be dated and say
 nothing about the rest — a short list that reads like a clean tree. Half a policy is refused
 rather than run.
+
+### 6.3 A document that cannot carry a stamp
+
+Some documents are the project's face rather than its apparatus: a README, a design document, an
+introduction an adopter reads to decide whether to adopt. A stamp in one of those is a token the
+reader has to learn to skip, in the very prose written to be read straight through.
+
+**So the document is declared in a list, and the list carries the date.**
+
+```toml
+# docs/resources.toml
+[[resource]]
+path = "README.md"
+confirmed = "2026-09-11"
+note = "the first page a reader sees"
+```
+
+Every citation in a declared document is dated by its entry. Nothing is exempted: a citation in a
+document that is neither stamped nor listed is the finding it was before, and a *new* user-facing
+document that starts citing things is one the catch asks about.
+
+**The unit is the file.** Citation-level entries would copy every citation in the tree into a
+registry and target-level every target — a second carrier of facts the documents already state,
+which is the duplication this tool exists to report. The cost of the coarser unit is real and is
+stated rather than discovered: a citation added after the last confirmation sits under a date that
+predates it. What bounds it is that `claims` settles every citation in those documents on every
+run, so the entry records a verification and is not what keeps the citations true.
+
+**An entry with no date covers nothing.** Declaring a document says where its date will live, not
+that anybody has checked it, and until a run confirms it its citations are undated exactly as they
+were. This is the difference between a list and an allowlist, and it is the whole reason the
+mechanism is safe: the date is not writable by anyone with a text editor, because the only thing
+that writes it is a run that settled the document.
+
+**Four refusals, and the last one is the one that earns the mechanism its keep:**
+
+- A path no file answers to. A resource nothing can read covers no citation while reading in the
+  list as though it did — and a rename is exactly when that happens.
+- The same document declared twice. One document has one date; two entries let a run write one and
+  leave the other reading as a record.
+- A document the citation policy does not read. Its citations are not findings, so dating them
+  buys nothing and the entry reads as coverage.
+- **A document the claims check does not read.** Confirmation asks whether everything a document
+  cites still holds, and `claims` is what answers. A document nothing extracts claims from would
+  be dated by every run for having nothing to falsify it — a green entry certifying a document
+  nobody checked.
+
+**The clock reads the entry's date.** A listed document whose citations are all local paths ages
+without consequence, because §6 clocks only the kinds that leave the machine. A listed document
+that cites an address is where a file-level date starts paying: the entry is what the clock has to
+read, and `kinemata confirm` is what moves it.
 
 ## 7. Who writes a stamp
 
@@ -449,6 +604,20 @@ This is the one place the tool writes into prose, so the boundary is drawn tight
 - **An explicit command writes**, and only when run deliberately.
 - **It writes only what it confirmed in that run.** A stamp is a record of a check that happened,
   never an assertion that one should have.
+
+**There are two things to write and they are read by different oracles.** A keyed citation is
+dated where it stands, and its key names the one source to settle. A document declared under §6.3
+is dated in the list, and what has to hold is *everything it cites* — which is the question the
+documentation check answers, so the writer runs that rather than forming a second opinion about
+the same tree. Nothing short of a settled yes dates a document: a falsified citation, one no
+oracle could reach, one held open by a promise and one declared to live in another project's tree
+are all citations the run did not confirm. The first is a defect and the rest are honest, and none
+of them is a verification.
+
+**A first date in a list has to be inserted**, which a stamp never does — a keyed citation already
+carries a timestamp, so the edit is a fixed-width replacement and every other byte of the document
+is the byte it was. Insertion is admitted in the list and refused in prose, and the distinction is
+not squeamishness: the list is a file the tool maintains, and a document is somebody's writing.
 
 ## 8. What is not settled here
 

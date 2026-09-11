@@ -93,16 +93,37 @@ case_sensitive = true
   oldname = "newname"
 
 # Where the sources this project cites actually live. A citation carries a stamp
-# and a reference key; the entry carries the volatile half.
+# and a reference key; the entry carries the volatile half. Add `.py` to
+# `suffixes` if citations are written in docstrings as well as documents --
+# without it the closed-world catch cannot see them.
 [[registry]]
 name = "sources"
 kind = "bibliography"
-source = "docs/bibliography.toml"   # [[entry]] tables: key, target, note
+suffixes = [".md", ".py"]
+source = "docs/bibliography.toml"   # [[entry]]: key, target, note, foreign,
+                                    # confirmed. An entry with `confirmed` is a
+                                    # record, not a live pointer: the staleness
+                                    # clock leaves it alone and `confirm`
+                                    # re-checks it on request
 
 # How long a citation target can be and still read comfortably beside its key.
 # Reported by `kinemata cite -v`, never enforced.
 [citations]
 accompany_max = 50
+provenance = true                  # every citation carries a stamp; an undated
+                                   # one is a finding. Arming over an existing
+                                   # tree reports all of them, so record a
+                                   # baseline in the same commit
+suffixes = [".py", ".md"]          # where the policy reaches. Defaults to the
+                                   # claims scope; narrow it to keep stamps out
+                                   # of user-facing prose while still checking
+                                   # that prose for dead paths
+resources = "docs/resources.toml"  # documents dated in a list rather than in
+                                   # their own prose. [[resource]]: path, note,
+                                   # confirmed. Every citation in a listed
+                                   # document is dated by its entry; an entry
+                                   # with no date covers nothing, and only
+                                   # `kinemata confirm --write` writes one
 
 # Documentation claims.
 [claims]
@@ -271,8 +292,8 @@ does not want this.
 | `kinemata baseline` | shows accepted findings; `--record --until`, `--prune` | — |
 | `kinemata stamp` | mints a citation stamp, or decodes one; reads no config | the text given is not a stamp |
 | `kinemata cite` | resolves a reference key — forward to its source, `--where` to every `file:line` citing it, bare for every key with its count | the key is malformed, or no entry declares it |
-| `kinemata stale` | citations not confirmed within `stale_after`, scoped to kinds that cost a network request; a local claim is settled on every run, so a clock over it restates what the run already knows | never — refuses (exit 2) if `[citations] provenance` is not declared, because the citations carrying a stamp would then be an accident of who wrote them |
-| `kinemata confirm` | **the only command that writes into prose.** Dry run by default; `--write` re-dates the keyed citations it verified in that run | never — the exit code is what a project wires into CI, and a writer that can fail a build is one that can be made to pass one |
+| `kinemata stale` | citations not confirmed within `stale_after`, scoped to kinds that cost a network request; a local claim is settled on every run, so a clock over it restates what the run already knows. A citation in a declared resource is clocked from its entry's date | never — refuses (exit 2) if `[citations] provenance` is not declared, because the citations carrying a stamp would then be an accident of who wrote them |
+| `kinemata confirm` | **the only command that writes.** Dry run by default; `--write` re-dates the keyed citations it verified in that run, and the `[citations] resources` entries whose documents it settled entirely | never — the exit code is what a project wires into CI, and a writer that can fail a build is one that can be made to pass one |
 
 **Common flags:** `-c/--config`, `-r/--registry`, `-q/--quiet`, `-v/--verbose`, `--max-sites`.
 Each is accepted **on either side of the subcommand** — `kinemata -c x.toml check` and
@@ -339,6 +360,15 @@ outside, so the following are `ConfigError`, not silent skips:
   **standardized** code is a warning instead: the tool never reads those, so refusing would
   enforce a convention it cannot act on
 - `[citations] accompany_max` that is not a length in characters
+- `[citations] suffixes` that is not a non-empty list of dotted file extensions, or that is
+  declared without `provenance = true` — an empty list would turn the policy off while leaving it
+  declared, and scoping a policy that is off narrows nothing while reading as a decision
+- `[citations] resources` naming a file that is not there, declared without `provenance = true`,
+  or holding a list with nothing in it
+- a `[[resource]]` naming a path no file answers to, naming one already declared, carrying a
+  `confirmed` that is not a date or that is in the future, or naming a document **the claims check
+  does not read** — a document nothing extracts claims from would be dated by every run for having
+  nothing to falsify it, which is a green entry certifying a document nobody checked
 - an `import` registry whose `target` is malformed, names a module that will not import, names an
   attribute the module does not define, resolves to something that is not a class, or resolves to
   a class whose instances do not satisfy the `Registry` protocol — the refusal names the members
@@ -347,6 +377,18 @@ outside, so the following are `ConfigError`, not silent skips:
 - an `import` registry declaring a key its class will not accept. Swallowing the `TypeError`
   would build the adapter's default instead, which is a misspelled parameter staying green
   forever
+
+Two more raise from the scan rather than at load, as `ClaimsError`, because only the caller of
+`verify()` knows the root a relative declaration is measured from — the scanned tree is not always
+the config's own root, so validating at load time would settle the wrong path:
+
+- `[claims] resolve_in` naming something that is not a directory
+- `[claims] commits_in` naming something that is not a directory, **or a directory that is not a
+  git repository**. Only repositories are consulted for commit resolution, so either mistake used
+  to disappear into that filter: the declaration contributed nothing, said nothing, and every
+  commit it was meant to settle was judged against the scanned repository alone. The shape bites
+  where it is least visible — a corpus checked out beside a developer's tree and gitignored in CI
+  settles the citations locally and silently stops settling them where the gate runs
 
 Suppression is reported, never silent: `check` prints the exemption count on every run,
 including clean ones, and `-q` does not suppress it.
@@ -512,8 +554,27 @@ transforms, sum bytes, compare to `budget`. `-v` lists files largest-first.
   reporting a false clean. A reference key *is* recognizable — that is what the stamp's
   delimiters buy — so the bibliography answers, and the one finding it reports is real:
   `docs/citations.md` illustrates the form with a key this project has no entry for. The
-  registry is deliberately left open, because closing it would turn an example inside a
-  specification into a failing gate.
+  registry is **closed as of 2026-09-10**, and what unblocked it is the reason it could not be
+  before: closing it would have turned that example into a failing gate, until `match_mode =
+  "unfenced"` taught the scan that a fenced block is display rather than use. So an undeclared
+  reference key exits 1 here, which is this repository's first real closed-world catch.
+- **~~Text a project carries but did not author can only be excluded.~~** A vendored licence or a
+  policy adopted as received cannot carry a stamp, because stamping it means editing text that is
+  not the project's to edit — so its citations were findings the project could never drive down,
+  and `[project] exclude` was the only answer. **Partly closed 2026-09-11** by the resource list:
+  a document declared under `[citations] resources` is dated in the list rather than in its own
+  prose, which is exactly what text you may not edit needs. What survives is the choice, and it is
+  a real one: `exclude` drops the file from every check, a resource entry keeps the claims check
+  over it and relocates only the date. This repository still excludes its two verbatim documents,
+  because a dead link inside a licence is not its to fix either.
+- **A resource entry dates a whole document, not a citation.** A citation added after the last
+  confirmation sits under a date that predates it. The unit was chosen deliberately — citation- or
+  target-level entries would copy into a registry the facts the documents already state, which is
+  the duplication this tool reports — and the cost is bounded rather than absent: the claims check
+  settles every citation in those documents on every run, so the entry records a verification and
+  is not what keeps the citations true. Requiring the entry's date to be no older than the file's
+  last commit would close it and was rejected: every documentation commit would then demand a
+  re-confirmation, including the ones that touch no citation.
 - **The tree walk follows symlinked directories and says so.** Each directory is entered once by
   real identity, and a link leaving the tree is announced on stderr. Before 2026-09-08 it did
   not follow them at all, and a project reached that way scanned as empty.
@@ -561,9 +622,12 @@ down, and the two shapes at the end are the findings that matter most.
   there is no "fires only inside this one file", which is what an import-discipline check needs.
 - **A `yaml-mapping` registry contributes nothing to `check`.** Its entries carry no
   antipatterns, so a green `check` over a mapping registry is not coverage of the mapping.
-- **`PythonConstants` reads `ast.Assign` only.** A module-level `NAME: Final[str] = "..."` is an
-  `ast.AnnAssign` and is invisible; so are tuple targets and enum members. In that project, 195
-  bare-assign constants were readable and 32 annotated ones were not.
+- **~~`PythonConstants` reads `ast.Assign` only.~~** True until 2026-09-09: a module-level
+  `NAME: Final[str] = "..."` is an `ast.AnnAssign` and was invisible, which in that project hid 32
+  annotated constants against 195 readable ones — concentrated in the module they most wanted to
+  declare. Annotated assignments are read now. **Tuple targets and enum members are still
+  invisible, deliberately**: a partial recognizer that reports clean over what it missed is the
+  failure, so the gap is written here rather than half-closed.
 - **~~`contract._BOUNDARY` contains `.`~~**, so a module-qualified use was invisible to
   `detect()`: `bootstrap.CHANNELS_PATH` yielded nothing where bare `CHANNELS_PATH` yielded the
   entry, and four of that project's constants were reported as unmentioned on the strength of
@@ -617,20 +681,32 @@ down, and the two shapes at the end are the findings that matter most.
   illustration role, which reaches counted claims for exactly this reason: honoring a declared
   suffix for paths while reading the same file raw for values would let a number be shown in one
   sentence and asserted in the next.
-- **`resolve_in` fails open.** A directory that does not exist produces byte-identical output and
-  **no warning on stderr**. In CI, where a sibling tree is usually not checked out, every claim it
-  was resolving goes unreported and the run still looks clean. It also resolves against disk
-  before the gitignore-filtered index, so a stale `build/` copy of a package can keep a deleted
-  module resolving.
+- **~~`resolve_in` fails open.~~** True until 2026-09-09. A directory that did not exist produced
+  byte-identical output and **no warning on stderr**; in CI, where a sibling tree is usually not
+  checked out, every claim it was resolving went unreported and the run still looked clean. It
+  refuses now. ⚑ **`commits_in` had the identical hole and kept it two days longer** — fixed
+  2026-09-11, and it refuses a directory that is present but is not a *repository* as well, since
+  only repositories are consulted and a merely-present path disappears into the same filter an
+  absent one does. Finding a fixed defect still live in its twin is the argument for fixing a
+  shape rather than a site.
+  **What is left of the limit, and it is not fixed:** resolution still consults disk before the
+  gitignore-filtered index, so a stale `build/` copy of a package can keep a deleted module
+  resolving. Left deliberately — the "ignored and present" signal cannot separate a stale build
+  copy from a deliberately-uncommitted corpus, and guessing wrong in either direction is worse
+  than the rot.
 - **`~`-prefixed paths are skipped entirely.** For a documentation tree that writes cross-tree
   pointers as `~/...` — which canon-style trees do — most pointers are invisible, so a clean run
   is a floor rather than a measure.
-- **`FILE_SUFFIXES` is a closed set of 14 with no config knob.** A repository whose content files
-  are `Containerfile.x` and `tmux.conf` is structurally unseeable; the scan comes back nearly
-  green because it could not look.
-- **`NEGATION` is missing `neither`, `dead` and `former`** (`formerly` is present, the bare
-  adjective is not), and **`_SHA` matches any backticked run of 7–12 hex characters**, so an
-  all-digit byte count in backticks is reported as a dead commit.
+- **~~`FILE_SUFFIXES` is a closed set of 14 with no config knob.~~** True until 2026-09-09: a
+  repository whose content files were `Containerfile.x` and `tmux.conf` was structurally
+  unseeable, and the scan came back nearly green because it could not look. `[claims]
+  file_suffixes` adds to the set rather than replacing it. **The default is still fourteen names
+  chosen here**, so a project that declares nothing still gets that floor.
+- **~~`NEGATION` is missing `neither`, `dead` and `former`~~**, and **~~`_SHA` matches any
+  backticked run of 7–12 hex characters~~**, so an all-digit byte count in backticks was reported
+  as a dead commit. Both true until 2026-09-09; the words are in the vocabulary and an all-digit
+  run is skipped, because git does not mint all-decimal short hashes often enough to be worth the
+  class of finding it produced.
 - **`historical` is a path axis, but a changelog's currency varies by section.** A live
   `[Unreleased]` entry and an honest historical record in one file cannot be separated by config.
 - **`[context] include` accepts absolute paths, absolute globs and `../` escapes** — but by

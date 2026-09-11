@@ -1,0 +1,204 @@
+{
+  "version": 1,
+  "until": "2027-03-01",
+  "by": "Jei",
+  "note": "undated citations in source docstrings when the citation policy was armed 2026-09-11. The policy is scoped to .py: user-facing prose keeps its claims check but is not where this project puts citation notation",
+  "findings": [
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "cli.py",
+      "path": "src/kinemata/claims.py",
+      "text": "a bare ``cli.py`` naming a module the reader can find. A checker that"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "contract.py",
+      "path": "src/kinemata/claims.py",
+      "text": "in ``contract.py`` and three documents restate the number; raising the"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "contract.py",
+      "path": "src/kinemata/prose.py",
+      "text": "the design. Two module docstrings, ``contract.py`` and ``projection.py``,"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "design.md",
+      "path": "src/kinemata/baseline.py",
+      "text": "``design.md`` \u00a74.3: \"record the baseline, fail on any increase, drive it down on"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "design.md",
+      "path": "src/kinemata/baseline.py",
+      "text": "``design.md``'s Catch B, a new declaration visible in the diff and routed to"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "design.md",
+      "path": "src/kinemata/bypass.py",
+      "text": "narrow enough to mean something.** Same lesson ``design.md`` \u00a77 records for"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "design.md",
+      "path": "src/kinemata/cli.py",
+      "text": "This is the operation ``design.md`` \u00a75 calls the catch \u2014 the one that raises"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "docs/citations.md",
+      "path": "src/kinemata/adapters/bibliography.py",
+      "text": "#: It stopped being right at the fence. ``docs/citations.md`` has to spell a"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "docs/citations.md",
+      "path": "src/kinemata/citations.py",
+      "text": "#: ``docs/citations.md`` is a reminder about legibility, and a document that"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "docs/citations.md",
+      "path": "src/kinemata/cli.py",
+      "text": "``docs/citations.md`` draws the boundary: the gate only ever reports, an"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "docs/citations.md",
+      "path": "src/kinemata/cli.py",
+      "text": "``docs/citations.md`` leaves to the adopting project."
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "docs/citations.md",
+      "path": "src/kinemata/confirm.py",
+      "text": "``docs/citations.md`` settles."
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "docs/citations.md",
+      "path": "src/kinemata/prose.py",
+      "text": "checker; and ``docs/citations.md`` illustrates a reference key inside a"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "docs/citations.md",
+      "path": "src/kinemata/provenance.py",
+      "text": "Section 6 of ``docs/citations.md`` settles both halves and separates them:"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "docs/citations.md",
+      "path": "src/kinemata/stamps.py",
+      "text": "adopting project by section 5 of ``docs/citations.md``. A knob for any of them"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "docs/design.md",
+      "path": "src/kinemata/claims.py",
+      "text": "``docs/design.md`` documented a method named ``enumerate()`` for three commits"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "docs/design.md",
+      "path": "src/kinemata/contract.py",
+      "text": "See ``docs/design.md``."
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "docs/design.md",
+      "path": "src/kinemata/projection.py",
+      "text": "See ``docs/design.md``."
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "kinemata.toml",
+      "path": "src/kinemata/config.py",
+      "text": "\"\"\"Read a ``kinemata.toml`` into ready-to-use registries.\"\"\""
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "kinemata.toml",
+      "path": "src/kinemata/contract.py",
+      "text": "#: Settable per registry from ``kinemata.toml`` -- by name from"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "kinemata.toml",
+      "path": "src/kinemata/contract.py",
+      "text": "#: ``kinemata.toml`` for the same reason :attr:`boundary` is -- a project"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "projection.py",
+      "path": "src/kinemata/context.py",
+      "text": "``projection.py`` bounds the registry's own output, which is the smallest part of"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "projection.py",
+      "path": "src/kinemata/prose.py",
+      "text": "the design. Two module docstrings, ``contract.py`` and ``projection.py``,"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "report.py",
+      "path": "src/kinemata/literals.py",
+      "text": "#: reported in ``report.py``: a filter nobody can see is a filter nobody can"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "report.py",
+      "path": "src/kinemata/literals.py",
+      "text": "is the same move frequency suppression makes in ``report.py``: a term common"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "src/",
+      "path": "src/kinemata/bypass.py",
+      "text": "was pointed at (``pkg/constants.py`` when scanning ``src/``). A plain"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "tests/test_provenance.py",
+      "path": "src/kinemata/provenance.py",
+      "text": "#: disagree about one line, so ``tests/test_provenance.py`` asserts the two"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "tests/test_stamps.py",
+      "path": "src/kinemata/stamps.py",
+      "text": "#: string, which ``tests/test_stamps.py`` verifies across a year boundary and"
+    }
+  ]
+}

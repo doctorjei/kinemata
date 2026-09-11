@@ -1,0 +1,42 @@
+# Documents this project puts in front of a reader, and the day their citations
+# were last verified.
+#
+# A citation stamp is apparatus: it says when a checker last confirmed a
+# reference, which is worth having in source and is a token a reader of the
+# README has to learn to ignore. `[citations] suffixes` answered that by taking
+# these files out of the policy's reach; this keeps them in it and moves the
+# date here instead. Every citation in a document listed below is dated by its
+# entry, and a citation in a document that is neither stamped nor listed is the
+# finding it always was.
+#
+# `confirmed` is written by `kinemata confirm --write`, never by hand. A run
+# dates a document only when it has settled every claim that document makes, so
+# a date typed in here would be the one thing the whole mechanism exists to stop
+# being possible.
+#
+# Measured 2026-09-11 before this file existed: 32 citations across these four
+# documents, all of them `path` kind, all undated. `docs/citations.md` is the
+# fifth user-facing document and is deliberately absent -- every citation in it
+# is inside a fenced block, which the policy reads as display rather than use,
+# so an entry for it would date nothing. The catch asks for one the day that
+# changes.
+
+[[resource]]
+path = "README.md"
+confirmed = "2026-09-11"
+note = "the first page a reader sees; a stamp here is a token they have to learn to skip"
+
+[[resource]]
+path = "docs/introduction.md"
+confirmed = "2026-09-11"
+note = "the reference sheet, and the carrier for what the mechanisms cannot do"
+
+[[resource]]
+path = "docs/design.md"
+confirmed = "2026-09-11"
+note = "the registry contract, read by adopters deciding whether to adopt"
+
+[[resource]]
+path = "docs/structure.md"
+confirmed = "2026-09-11"
+note = "the method; prose an outside reader is meant to follow end to end"

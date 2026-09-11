@@ -175,8 +175,10 @@ kinemata cite        # resolve a reference key: what it points at, where it is
                      # cited, or every key with its citation count.
 kinemata stale       # advisory. Citations not confirmed lately, for the kinds
                      # that cost a network request to settle.
-kinemata confirm     # the only command that writes into prose. Dry run by
-                     # default; --write re-dates what it actually verified.
+kinemata confirm     # the only command that writes. Dry run by default;
+                     # --write re-dates what it actually verified — stamps in
+                     # source, and the resource list that dates user-facing
+                     # documents which cannot carry a stamp themselves.
 ```
 
 A config found by walking **up** from the working directory says so on stderr.
@@ -409,7 +411,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **616 tests**, and
+The companion guard is a number with an oracle. This suite is **689 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 

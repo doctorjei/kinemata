@@ -15,9 +15,24 @@
 # them yields 13 entries, no strong findings and 4 weak signals, so it would be
 # a real check that currently protects nothing. Not declared for that reason
 # alone, and the sentence above is corrected rather than left to be trusted.
+# `exclude` names two different things, and the second one is not a build tree.
+# `tests/`, `corpus/`, `.venv/` and `deliverables/` are trees this project builds
+# or vendors. `LICENSE.md` and `AIPOLICY.md` are text it **carries without
+# authoring**, kept as received, and every check here judges a tree against what
+# its author meant -- which for those two is somebody else.
+#
+# Measured 2026-09-11 rather than assumed. They yield no claims and no spelling
+# findings, so nothing is lost. What they did yield was seven undated citations
+# that can never be stamped, because stamping them means editing the GPL; and
+# **all five addresses `[claims] external` fetched on every run**, none of which
+# are this project's. A network check whose whole population is quoted text is
+# checking nobody's links and goes red when the FSF reorganizes a page.
 [project]
 root = "."
-exclude = ["tests/", "corpus/", ".venv/", "deliverables/"]
+exclude = [
+    "tests/", "corpus/", ".venv/", "deliverables/",
+    "LICENSE.md", "AIPOLICY.md",
+]
 
 # Documentation is a registry of claims about this tree, so it gets checked
 # like one. `historical` names records that cite what was true when written --
@@ -46,14 +61,24 @@ exclude = ["tests/", "corpus/", ".venv/", "deliverables/"]
 # recounts numbers this project's notes once claimed and cannot be reworded
 # without deleting the record, is marked rather than tripping the oracle.
 #
-# So: still off, and off is still a decision -- but the residue is 10 with a
-# name now. All 10 cite the corpus repositories, which are gitignored here and
-# absent from a clean clone, so they cannot resolve for anybody and a marker
-# would be a lie about what they are. What would let this be armed is a ratchet
-# over `claims` of the kind `baseline` gives the bypass scan: an accepted set
-# that fails on increase. Re-measure before turning it on.
+# Armed 2026-09-11, with a residue of zero and no exemptions at all -- which is
+# the only reason it is on. The blocker was never the mechanism: it was ten
+# citations of other people's repositories, real evidence that cannot resolve
+# here because those trees are gitignored corpora absent from a clean clone.
+#
+# Nine are now declared in `docs/bibliography.toml` with a `foreign` field
+# naming the repository that owns them, so the sentence keeps its readable
+# target and the gate stops judging this tree for another's contents. The
+# tenth was not evidence at all -- `workset.yaml` is a filename that project's
+# code composes at run time, and no file of that name is in the repository
+# being scanned, so declaring it as a path there would have put a false
+# statement into declared data. It is marked as shown instead.
+#
+# A ratchet over `claims` was built first and is deliberately unused here. An
+# accepted-set of zero is the stronger position: every exemption is a thing a
+# later reader has to re-derive the reason for.
 [claims]
-suffixes = [".md"]
+suffixes = [".md", ".py"]
 historical = ["archives/"]
 
 # A URL is a claim about the world, and it was the one claim in these documents
@@ -71,6 +96,51 @@ external = true
 # it means running a command named in a config file -- a trust decision worth
 # making deliberately. Declared here because the failure is real: this project's
 # notes claimed 74 tests while the true number went 76, 88, 103.
+# Every citation carries a stamp. Armed 2026-09-11, and the existing population
+# goes into the ratchet rather than being stamped by hand -- which is the
+# adoption path `provenance.py` describes, taken here for reasons that were
+# measured rather than assumed.
+#
+# The tree carried 67 undated citations when this was turned on: 60 paths, 6
+# web addresses and one link. **All six addresses, and the link, are inside
+# LICENSE.md and AIPOLICY.md**, which this project keeps as received -- so every
+# citation the staleness clock would ever read is in text nobody here may edit.
+# There is no way to say "this document is quoted material" short of excluding
+# it from every scan, which would cost the spelling and claims checks over it
+# too; boarded rather than built around.
+#
+# That leaves 60 local paths, and a stamp on one buys nothing a run does not
+# already provide: section 6 scopes the clock to kinds that leave the machine,
+# because a path is settled locally every time. Hand-stamping them would be 60
+# tokens of ceremony with no reader.
+#
+# So what arming buys here is the forward half: a citation added from now on
+# must be dated. That is the half worth having, and it is the half the ratchet
+# leaves live.
+#
+# Where a citation's date lives, which is two different answers for two
+# different readers. A stamp records when a checker last confirmed a reference;
+# that is apparatus, and apparatus belongs where developers read. In `README.md`
+# and `docs/` it is a token a reader has to learn to ignore, in the documents
+# this project uses to explain itself.
+#
+# `suffixes` was the first answer and dropped those documents from the policy.
+# Not a suppression -- the citations there were not exempted findings, they were
+# not findings, because the policy did not reach them -- but it bought the
+# notation's absence by giving up the coverage.
+#
+# `resources` is the better answer and both are kept, because they are not the
+# same offer: a project that wants a tree genuinely out of the policy's reach is
+# making a legitimate declaration. Here the scope is widened back to documents
+# and the four user-facing ones are declared in a list that carries their date.
+# Measured before it was built: 32 citations in those four files, all `path`
+# kind, so what this buys today is coverage rather than freshness -- it starts
+# paying the day one of them cites something that leaves the machine.
+[citations]
+provenance = true
+suffixes = [".py", ".md"]
+resources = "docs/resources.toml"
+
 [[count]]
 label = "test count"
 pattern = '\*\*(\d+) tests?\*\*|\b(\d+) tests? pass\b|\*\*Tests:\*\* (\d+) pass\b|\b(\d+) tests? collected\b'
@@ -249,8 +319,18 @@ suffixes = [".md", ".py"]
 # and the illustration is inside a fenced block, which nothing was reading as
 # display rather than use. `match_mode = "unfenced"` fixed that, so a key nothing
 # declares is now a real catch instead of an advisory line nobody reads.
+#
+# `.py` added 2026-09-11, with the `[claims]` suffix and for the same reason.
+# The default is documents alone, which was right while citations lived only in
+# documents -- and stopped being right the moment nine of them were written into
+# docstrings. Until this line existed the closed-world catch could not see them:
+# a docstring citing a key no entry declares would have passed, and `cite
+# --where` reported zero sites for keys that had nine. **A catch that does not
+# read where the citations are is not a catch**, and the reverse index and the
+# catch must describe the same tree or they will eventually disagree about one.
 [[registry]]
 name = "sources"
 kind = "bibliography"
 closed = true
+suffixes = [".md", ".py"]
 source = "docs/bibliography.toml"
