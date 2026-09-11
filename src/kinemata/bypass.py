@@ -14,8 +14,9 @@ its own reach.
 Two properties, both learned from corpus evidence:
 
 * **Scope is the whole tree, never one module.** kanibako-cli's own tripwire
-  scanned ``project/workset.py`` alone and missed eight sites in six other
-  modules (``42ece129``). A catch scoped to one module is not a catch.
+  scanned ``project/workset.py`` [0TMVXHC-Pa0004] alone and missed eight sites
+  in six other modules (``42ece129`` [0TMVXHC-Cm0001]). A catch scoped to one
+  module is not a catch.
 * **It runs where the agent cannot reach it.** In CI, host-side. A check an
   agent can edit or skip is a reminder, not a catch.
 """
@@ -441,8 +442,9 @@ def unused(
     ⚠ **This detects mention, not use, and the difference matters.**
 
     Validated against a labeled incident and it failed. kanibako-cli commit
-    ``d8037cf5`` records that three declared keys "had no reader at all -- a set
-    was accepted, persisted and read back, and nothing moved". This function
+    ``d8037cf5`` [0TMVXHC-Cm0002] records that three declared keys "had no
+    reader at all -- a set was accepted, persisted and read back, and nothing
+    moved". This function
     missed all three, because each appears in the project's own declaring
     machinery: a key-name list and a key-to-path table. Those are mentions, not
     readers, and no amount of text matching tells them apart.
@@ -502,11 +504,30 @@ def unused(
     exclusions = declaring + tuple(exclude)
     referenced: set[str] = set()
 
+    # This walk consults no ``match_mode``, and ``unfenced`` is the one
+    # exception rather than the start of a general rule. Applying ``code`` or
+    # ``strings`` here would blank the code a constants registry's identifiers
+    # are mentioned in and report every entry unmentioned -- measured, and the
+    # reason `detect` documents for not doing this generally. ``unfenced`` is
+    # different in kind: its matches are citations *in prose*, so what a
+    # document merely shows is not a mention of anything, and the construct that
+    # says so differs by language. `detect` blanks markdown fences on its own
+    # behalf and will keep doing so for any caller; only a walk that reads
+    # several languages knows which file it is holding.
+    shows = (
+        MODE_FILTERS["unfenced"]
+        if getattr(registry, "match_mode", "strings") == "unfenced"
+        else {}
+    )
+
     for path in _walk(Path(root), suffixes):
         rel = str(path.relative_to(root))
         if any(fragment in rel for fragment in exclusions):
             continue
         text = path.read_text(errors="ignore")
+        filtered = shows.get(path.suffix)
+        if filtered is not None:
+            text = filtered(text)
         for found in registry.detect(text):
             # A reference inside the entry's own definition is not a use.
             entry = next((e for e in entries if e.id == found), None)

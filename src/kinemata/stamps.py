@@ -18,7 +18,7 @@ characters, a hyphen, a two-letter type -- and four more when the citation names
 a bibliography entry::
 
     The registry contract is `docs/design.md` [0TMQDKB-Ty].
-    The registry contract is `docs/design.md` [0TMQDKB-Pa0003].
+    The registry contract is `docs/design.md` [0TMXBSV-Pa0003].
 
 **The number is optional because the two halves answer different questions.**
 The stamp says *when*; the key says *which source*, and the entry for that key
@@ -113,8 +113,9 @@ _TYPE = f"[A-Za-z]{{{TYPE_LENGTH}}}"
 #: nothing.
 #:
 #: **Any run of digits is matched here and the width checked afterward**, on
-#: purpose. Pinning the count in the pattern would make ``[0TMQDKB-Ru169]``
-#: match nothing at all, and a token nothing matches is a stamp the extractor
+#: purpose. Pinning the count in the pattern would make
+#: :shown:`[0TMQDKB-Ru169]` match nothing at all, and a token nothing matches
+#: is a stamp the extractor
 #: walks past -- a check that quietly stopped checking, which this package
 #: treats as worse than no check. Matched loosely and refused loudly is the
 #: shape used everywhere else here.

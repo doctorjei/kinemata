@@ -4,7 +4,7 @@ A citation stamp answers *when*. It does not answer *what*, and a citation that
 spells its target inline carries a fact that belongs in one declared place. The
 reference key supplies the second answer and this registry supplies the third::
 
-    The registry contract is `docs/design.md` [0TMQDKB-Pa0003].
+    The registry contract is `docs/design.md` [0TMXBSV-Pa0003].
 
     the stamp   when this was verified   inline
     the key     which source             inline
@@ -32,6 +32,7 @@ mechanically catchable, which is the property that matters.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+from datetime import date
 from types import MappingProxyType
 from typing import Any
 
@@ -79,7 +80,49 @@ STANDARDIZED: Mapping[str, str] = MappingProxyType({
 #: reason a promise's keys are: ``not`` written for ``note`` would drop the
 #: human-readable half in silence and leave an entry that resolves to a bare
 #: path, which is the readable form the forward direction exists to give back.
-ENTRY_KEYS = frozenset({"key", "target", "note", "foreign"})
+ENTRY_KEYS = frozenset({"key", "target", "note", "foreign", "confirmed"})
+
+
+def confirmed_date(value: Any, where: str) -> date:
+    """The day this source was last verified, as a date and not a hopeful string.
+
+    **Public because a second thing carries this field.** A resource list dates
+    a whole user-facing document the same way an entry dates one source, and two
+    readings of ``confirmed`` would eventually disagree about whether a value is
+    a date and about whether tomorrow is allowed. See :mod:`kinemata.resources`.
+
+    **An entry carrying this is a record rather than a pointer, and the
+    difference is what the staleness clock reaches.** A citation written inline
+    and undeclared says *go and read this*, so it has to keep resolving and a
+    clock over it is a reminder to look again. A declared source says *this is
+    what the decision rested on* -- the sense in which reference 12 of a paper
+    is that paper's number for another's work, per section 5.2 -- and a journal
+    reorganizing its site does not invalidate the reference. Verified once,
+    dated, and re-run when somebody asks rather than every week.
+
+    A date in the future is refused. It would assert a verification that has not
+    happened, which is the one thing a provenance record must never be able to
+    say: the whole purpose is telling *true when written* from *wrong when
+    written*, and a date nobody could have checked at settles neither.
+    """
+    if isinstance(value, date) and not isinstance(value, bool):
+        confirmed = value
+    else:
+        try:
+            confirmed = date.fromisoformat(str(value))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"{where}: confirmed is a date as YYYY-MM-DD and {value!r} is "
+                "not one. A source verified on an unreadable day is a source "
+                "nothing can say was verified."
+            ) from exc
+    if confirmed > date.today():
+        raise ValueError(
+            f"{where}: confirmed is {confirmed.isoformat()}, which has not "
+            "happened yet. A record may say when a source was checked, never "
+            "when it will be."
+        )
+    return confirmed
 
 
 def _code(text: Any, where: str) -> str:
@@ -318,6 +361,8 @@ class Bibliography(BaseRegistry):
         }
         if record.get("foreign"):
             extra["foreign"] = str(record["foreign"])
+        if record.get("confirmed"):
+            extra["confirmed"] = confirmed_date(record["confirmed"], where).isoformat()
         return Entry(
             id=key,
             extra=extra,
@@ -341,7 +386,7 @@ class Bibliography(BaseRegistry):
 
         Read as *stamps* rather than as bare names, which the default matcher
         cannot do. A sentence mentioning ``Pa0003`` in passing has not cited
-        anything; the token ``[0TMQDKB-Pa0003]`` has. Routing through
+        anything; the token ``[0TMXBSV-Pa0003]`` has. Routing through
         :func:`kinemata.stamps.find` also means a malformed token is refused
         here exactly as it is everywhere else, instead of being passed over by a
         matcher that never saw it.
@@ -372,13 +417,28 @@ class Bibliography(BaseRegistry):
         the separator immediately before a key would stop the match dead and
         every entry would report as uncited.
 
-        **Fences are blanked here, not left to the caller.** This method has one
-        caller -- :func:`~kinemata.bypass.unused` -- and it reads whole files
-        without consulting ``match_mode``, so a registry that relied on the mode
-        alone would answer one question for the catch and a different one for the
-        review list. It did, on 2026-09-10: ``undeclared`` and ``cite`` both
-        reported this project as citing nothing while ``unused`` still counted an
-        illustration inside a fenced block as a mention.
+        **Fences are blanked here, on this registry's own behalf.** A caller
+        that hands over markdown gets one answer about what a document shows,
+        whoever it is, and that has to hold for an adopting project reaching
+        ``detect`` through :mod:`kinemata.access` as much as for the walk next
+        door. It did not once: on 2026-09-10 ``undeclared`` and ``cite`` both
+        reported this project as citing nothing while ``unused`` still counted
+        an illustration inside a fenced block as a mention.
+
+        **What a language other than markdown shows is the caller's to blank,
+        and that is a split rather than a second opinion.** This method is
+        handed text with no suffix attached, so it cannot know that a Python
+        file says *shown* with an illustration role where a document says it
+        with a fence. :func:`~kinemata.bypass.unused` holds the path, applies
+        the ``unfenced`` table for that suffix, and passes the reduced text
+        here. The two never disagree because they answer different questions:
+        this one is "never count what markdown displays", the caller's is
+        "which construct does *this* file display with".
+
+        Before the caller did that, a bibliography reading ``.py`` refused
+        outright -- this package's own ``stamps`` module illustrates a malformed
+        key to explain why the width is fixed, and read raw that is not an
+        illustration, it is a malformed citation.
 
         The mode is not the place to fix that generally. ``match_mode`` governs
         where an *antipattern* counts -- a re-derived value, which lives in a

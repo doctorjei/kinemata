@@ -5,9 +5,11 @@ a docstring are documentation, and flagging them is the over-reporting failure:
 escalation fires on nearly every file, the reader learns the list is usually
 noise, and the mechanism is disabled by being ignored.
 
-This is not hypothetical. Scanning kanibako-cli for the literal ``workset.yaml``
-finds 50 sites; 42 of them are comments and docstrings. The 8 that matter are
-invisible in that list.
+This is not hypothetical. Scanning kanibako-cli for the literal
+:shown:`workset.yaml` finds 50 sites; 42 of them are comments and docstrings.
+The 8 that matter are invisible in that list. Shown rather than cited because
+that is what it is: a filename their code composes at run time, and no file of
+that name exists in the repository being scanned.
 
 Blanking rather than deleting keeps line numbers stable, so a reported line
 number still points at the right line in the real file.
@@ -286,8 +288,9 @@ def python_message_skeletons(source: str) -> list[tuple[int, str, str]]:
     hides almost every user-facing message in modern Python, and duplicated
     messages are a large share of the undeclared-literal failure.
 
-    Evidence: kento-core ``e84b9504`` harmonized three resolver messages that
-    were each ``f"Error: no {thing} named '{name}'"``. Compared as raw tokens
+    Evidence: kento-core ``e84b9504`` [0TMVXHC-Cm0004] harmonized three
+    resolver messages that were each
+    ``f"Error: no {thing} named '{name}'"``. Compared as raw tokens
     they share nothing useful; compared as skeletons they are near-identical.
 
     Deliberately a separate function rather than a change to
@@ -616,11 +619,35 @@ PROSE_FILTERS = {".md": outside_code_spans, ".py": outside_code_spans}
 #: under-reports: the safe direction for a catch.
 DOCUMENTATION_FILTERS = {".py": python_prose_only}
 
+def shown_python(source: str) -> str:
+    """A source file reduced to the prose in it, minus what that prose shows.
+
+    The Python answer to a markdown fence, and the two are asked the same
+    question: which spans of this file are a citation, and which are a picture
+    of one. In a document, a fence draws that line; in a source file it takes
+    both reductions, because executable code is not prose at all and a marked
+    illustration is prose that is not asserting.
+
+    Built when a bibliography first had to read ``.py``. Before that
+    :data:`UNFENCED_FILTERS` had no entry for it, so the closed-world catch and
+    the reverse index read source files **whole** -- and this package's own
+    ``stamps`` module, whose docstrings display a malformed key to explain why
+    the width is fixed, refused every command that scanned it. Read raw, an
+    illustration of a citation is a citation, and a line of executable code is
+    prose.
+    """
+    return outside_illustrations(python_prose_only(source))
+
+
 #: Documents minus what they merely *show*. Selected by ``match_mode``
-#: ``"unfenced"``, and markdown only: the fence is a markdown construct, and a
-#: language with no entry here is scanned whole, which over-reports rather than
-#: under-reports.
-UNFENCED_FILTERS = {".md": outside_fenced_blocks}
+#: ``"unfenced"``, and by every scan that reads citations rather than claims.
+#: A language with no entry here is scanned whole, which over-reports rather
+#: than under-reports.
+#:
+#: The two entries do the same job through different constructs, which is why
+#: they are one table: markdown shows with a fence, Python with the illustration
+#: role over the part of the file that is documentation at all.
+UNFENCED_FILTERS = {".md": outside_fenced_blocks, ".py": shown_python}
 
 #: Documents minus the spans they merely *show*, marked inline with the
 #: illustration role. Applied by ``claims`` after

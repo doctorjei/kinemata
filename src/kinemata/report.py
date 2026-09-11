@@ -12,8 +12,8 @@ produces 1,537 matches. Three constants account for 1,054 of them::
     KIND_PROJECT  = 'project'    249 matches
 
 Nobody "bypassed" the word *workset* 419 times in a program about worksets. By
-contrast every genuine bypass found in the ``42ece129`` validation matched 6
-sites or fewer. Frequency separates the two cleanly.
+contrast every genuine bypass found in the ``42ece129`` [0TMVXHC-Cm0001]
+validation matched 6 sites or fewer. Frequency separates the two cleanly.
 
 **Suppression is reported, never silent.** A check that quietly stops checking
 is the inert-signal failure: it reports success while doing nothing. The report

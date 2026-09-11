@@ -115,7 +115,7 @@ class Accepted:
         shifts it, and churn reported as new findings trains people to
         re-record. The path is deliberately present: a bypass that moved to
         another file is a new site, and kanibako-cli's own tripwire failed
-        precisely by being scoped to one module (``42ece129``).
+        precisely by being scoped to one module (``42ece129`` [0TMVXHC-Cm0001]).
         """
         return (self.registry, self.entry_id, self.antipattern, self.path,
                 normalize(self.text))

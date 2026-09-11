@@ -235,8 +235,9 @@ class BaseRegistry(ABC):
     #:
     #: Distinct from the project's ``exclude``, which names build and test trees.
     #: This names the declaring machinery, and it exists because mentions there
-    #: are not uses: kanibako-cli ``d8037cf5`` records three keys with no reader
-    #: at all, and every one of them appears in the project's own key table.
+    #: are not uses: kanibako-cli ``d8037cf5`` [0TMVXHC-Cm0002] records three
+    #: keys with no reader at all, and every one of them appears in the
+    #: project's own key table.
     #: Only :func:`~kinemata.bypass.unused` reads it -- the machinery is where a
     #: declaration is *supposed* to be, so no other check treats it specially.
     machinery: tuple[str, ...] = ()
