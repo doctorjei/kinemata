@@ -7,8 +7,8 @@ disguise:
 
 * a registry declared over the wrong adapter produced no entries, so ``check``
   scanned for nothing and exited 0 **for six commits**;
-* ``doc-check.py``'s exclusion list grew until it reported a tree clean that its
-  replacement finds eight issues in;
+* a prototype documentation checker's exclusion list grew until it reported a
+  tree clean that its replacement finds eight issues in;
 * two numbers stated in prose -- an adoption cost and a test count -- had no
   oracle covering them and were both wrong when finally measured.
 

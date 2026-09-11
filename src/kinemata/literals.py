@@ -4,7 +4,7 @@ Everything else in this package detects re-derivation of something *already
 declared*. That leaves a gap: two new things duplicating each other, neither of
 them in a registry. Nothing fires, because there is no entry to bypass.
 
-A corpus pass over 196 consolidation commits (``greenfield-gap.md``) found that
+A corpus pass over 196 consolidation commits found that
 gap is not one failure but three, and that the largest *reachable* share of it
 is this one -- values and messages spelled in several places with no declared
 home:

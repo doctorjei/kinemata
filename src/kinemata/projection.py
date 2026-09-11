@@ -11,7 +11,7 @@ Two properties make it work, and both are mechanical:
   check is a catch: CI fails when the projection outgrows its ceiling, which is
   the moment it stops being a reminder and starts being more context to drown in.
 
-See ``canon/workbook/designs/registry-contract.md``.
+See ``docs/design.md``.
 """
 
 from __future__ import annotations

@@ -28,6 +28,24 @@ Kinds are declared in ``CLAIM_KINDS`` rather than spelled out in the loop, so
 adding one is a table entry and the loop never learns their names.
 
 Unlike ``undeclared``, this **gates**. A missing file is a fact, not a judgment.
+
+**And, like every other gate here, it ratchets.** A documentation gate that only
+works on a clean documentation tree is a gate almost nobody can turn on -- the
+argument :mod:`kinemata.baseline` already makes about code, unchanged when the
+subject is prose. It is not hypothetical in this repository: ``[claims]
+suffixes`` cannot include ``.py`` here because arming it leaves **10 unresolved
+claims**, every one a genuine citation of outside evidence -- three paths into
+other projects and seven commit hashes in corpus repositories that are
+gitignored here and absent from a clean clone. Nobody can make those resolve and
+no marker would be honest about them, so without a ratchet the only two states
+available were "check the docstrings and be permanently red" and "do not check
+the docstrings".
+
+:meth:`Verification.findings` is what closes that: broken claims leave here as
+:class:`kinemata.bypass.Bypass` records, which is what the ratchet already knows
+how to fingerprint. The reason is :mod:`kinemata.provenance`'s and is quoted
+rather than re-argued -- a second finding type would mean a second ratchet, and
+two ratchets eventually disagree about what a project has accepted.
 """
 
 from __future__ import annotations
@@ -45,7 +63,26 @@ from datetime import date
 from pathlib import Path, PurePosixPath
 
 from . import stamps
-from .bypass import GIT_DIR, _tree, _walk, git_ignored
+from .bypass import GIT_DIR, Bypass, _tree, _walk, git_ignored
+from .prose import DOCUMENTATION_FILTERS, ILLUSTRATION, ILLUSTRATION_FILTERS
+
+#: The name these findings travel under, so a baseline record says which check
+#: accepted it. Not a registry -- prose is not declared data -- but the ratchet
+#: tags every finding with the thing that produced it, and inventing a second
+#: tagging scheme for one check is how two spellings of one idea start. Same
+#: argument, same shape, as :data:`kinemata.provenance.PROVENANCE_REGISTRY`.
+CLAIMS_REGISTRY = "claims"
+
+#: How a broken claim names itself in a baseline record. Prefixed, so a reader
+#: scanning the file can tell an accepted dead reference from an accepted
+#: duplication at a glance -- the two are driven down by different people doing
+#: different work.
+#:
+#: Deliberately **not** spelled ``FINDING_PREFIX``, which is what the same
+#: constant is called in ``provenance``: that module imports from this one, and
+#: two identically named constants across an import edge is the one-letter
+#: neighbor problem with more letters.
+CLAIM_PREFIX = "claim:"
 
 #: How far back from a claim to look for a word that turns it into a mention.
 #: Scoped rather than whole-line: an earlier version skipped the entire line and
@@ -121,8 +158,8 @@ WINDOWS_SEPARATOR = "\\"
 ATTRIBUTE_REFERENCE = re.compile(r"^[A-Z][a-z0-9]+\.[A-Za-z0-9]+$")
 
 #: Suffixes the rule above does **not** apply to. It shipped costing a
-#: capitalized document name -- ``Introduction.md``, ``Changelog.md`` -- which
-#: is a spelling projects actually use, while an attribute called ``md`` is one
+#: capitalized document name -- :shown:`Introduction.md`, :shown:`Changelog.md`
+#: -- which is a spelling projects use, while an attribute called ``md`` is one
 #: nobody writes. The collision is real only where the tail is also a plausible
 #: method name, and ``json`` is the case that produced it. Narrowing the rule by
 #: suffix keeps the catch and drops the cost.
@@ -161,12 +198,28 @@ FILE_SUFFIXES = frozenset({
     ".ini", ".rst", ".lock", ".in", ".mk",
 })
 
-_BACKTICKED = re.compile(r"`([^`\s]+)`")
+#: An inline code span, with the run of backticks that opens it matched by an
+#: equal run closing it -- the same rule :data:`kinemata.prose.CODE_SPAN`
+#: applies, for the same reason.
+#:
+#: A single-backtick pattern read a reStructuredText inline literal by accident.
+#: Doubled backticks are the normal spelling for one, and the *inner* pair of a
+#: doubled delimiter is itself a markdown span, so the path between them fell
+#: out. That worked, and this project does not keep behavior that works by
+#: coincidence: it holds only while nobody writes a run of three, and the
+#: argument made everywhere else here is that precision belongs to declared
+#: syntax rather than to what a regex happens to do.
+#:
+#: The token is group 2; group 1 is the delimiter.
+_BACKTICKED = re.compile(r"(`+)([^`\s]+)\1")
 #: The bracket text is captured as well as the target, so that
 #: :func:`_link_claims` can tell a link from something that merely precedes a
 #: parenthesis. It is group 1; the target is group 2.
 _LINK = re.compile(r"\[([^\]]*)\]\(([^)#\s]+)[^)]*\)")
-_SHA = re.compile(r"`([0-9a-f]{7,12})`")
+#: A short hash in an inline code span. Delimiter run matched deliberately, for
+#: the reason :data:`_BACKTICKED` gives: this project's own docstrings spell a
+#: cited commit as a doubled literal.
+_SHA = re.compile(r"(`+)([0-9a-f]{7,12})\1")
 #: A web address, whether it sits in a link target, in backticks, or bare in
 #: prose. All three spellings appear in this project's own documents.
 _URL = re.compile(r"https?://[^\s)>\]\"'`]+")
@@ -204,9 +257,57 @@ class Claim:
     text: str
     path: str
     line: int
+    #: The whole line the claim was read from, which is what a baseline record
+    #: fingerprints. Carried rather than re-read: the line a reader would edit
+    #: is the reduced one -- fences and illustrations already blanked -- and
+    #: fingerprinting the raw file would key a record on text this check does
+    #: not look at.
+    source: str = ""
 
     def __str__(self) -> str:
         return f"{self.path}:{self.line}: {self.kind} does not resolve: {self.text}"
+
+    @property
+    def entry_id(self) -> str:
+        return f"{CLAIM_PREFIX}{self.kind}"
+
+    def finding(self) -> Bypass:
+        """This claim as the ratchet already knows how to record one.
+
+        **The kind is the entry and the cited target is the antipattern.** A
+        bypass names a declared entry and the spelling that went around it; a
+        claim names a sort of assertion and the target that did not resolve, and
+        those are the same two questions -- *what kind of thing is this* and
+        *which one*. ``provenance`` mapped them the same way and a third mapping
+        for a third finding type would make the baseline file unreadable by
+        pattern.
+
+        The line number rides along for the report and is absent from the
+        fingerprint; :meth:`kinemata.baseline.Accepted.key` is where that is
+        argued. What is in the fingerprint is the line's *text*, so a record
+        survives an edit above it and does not survive the sentence itself being
+        rewritten -- the same boundary every other finding here is held to.
+
+        **A counted claim's antipattern carries the true value as well as the
+        claimed one**, because that is what ``_verify_counts`` puts in the
+        claim's text, and the consequence is deliberate rather than tolerated:
+        accepting :shown:`**590 tests** (actually 597)` accepts a stated
+        disagreement, so when the oracle starts saying 600 the record goes stale
+        and the claim comes back as new. The alternative is a record that keeps
+        a wrong number quiet through every later change to the thing it is wrong
+        about, which is an exemption that outlives what somebody looked at.
+        """
+        return Bypass(
+            entry_id=self.entry_id,
+            antipattern=self.text,
+            path=self.path,
+            line=self.line,
+            # Falls back to the claim itself for a claim with no line behind it.
+            # `_verify_counts` had none until it was given one, and a fingerprint
+            # keyed on the empty string would have made every count claim in a
+            # file collide into one record.
+            text=self.source or self.text,
+        )
 
 
 @dataclass
@@ -317,11 +418,53 @@ class Verification:
     #: it, and left out of :meth:`text` on purpose -- these already went to
     #: stderr, and repeating them on stdout prints each one twice.
     warnings: list[str] = field(default_factory=list)
+    #: Spans a document marked as shown rather than asserted. **Never a
+    #: failure, and counted rather than listed.** Nothing reports fenced spans,
+    #: for the reason :func:`kinemata.prose.outside_fenced_blocks` gives: a
+    #: fence is incidental markup, so a list of them is correct by construction
+    #: and the reader's action is none. The illustration role is the opposite --
+    #: a deliberate declaration that a span is not a claim, the same shape as a
+    #: promise -- and a suppression nobody can count is an allowlist with a good
+    #: story. The number is the reading; the sites are not.
+    shown: int = 0
+
+    @property
+    def declarations_failed(self) -> bool:
+        """Failures the ratchet must never absorb, because they have no site.
+
+        A broken claim is a thing at a path on a line, which is what a baseline
+        record fingerprints. These four are about the *declarations* -- an
+        oracle that would not run, a promise the tree has kept, a promise
+        nothing cites any more, a promise past its date -- and none of them has
+        a site to key a record on.
+
+        That is the mechanical reason. The deciding one is that accepting an
+        overdue promise would build the one thing a ratchet must not have: a
+        deferral that never lapses. ``Promise`` refuses a value meaning "never"
+        and ``Baseline`` refuses a list with no date, and a route by which one
+        could be baselined into silence would undo both of them at once.
+        """
+        return bool(self.blocked or self.kept or self.uncovered or self.overdue)
 
     @property
     def failed(self) -> bool:
-        return bool(self.broken or self.blocked or self.kept
-                    or self.uncovered or self.overdue)
+        """Every failure, before any baseline is consulted.
+
+        The unratcheted truth, and it stays that way: a caller that wants the
+        gate's answer asks the baseline, and a caller that wants to know what is
+        actually wrong with the tree asks this. ``review`` and ``check`` draw
+        the same line for the same reason -- an advisory scan that hid known
+        problems would be lying about the tree.
+        """
+        return bool(self.broken) or self.declarations_failed
+
+    def findings(self) -> list[tuple[str, Bypass]]:
+        """Broken claims, tagged the way the ratchet expects them.
+
+        Only the broken ones: see :attr:`declarations_failed` for what is
+        deliberately not here.
+        """
+        return [(CLAIMS_REGISTRY, claim.finding()) for claim in self.broken]
 
     def text(self) -> str:
         out = [f"  {claim}" for claim in self.broken]
@@ -477,7 +620,7 @@ def _path_claims(
     line: str, previous: str = "", file_suffixes: frozenset[str] = FILE_SUFFIXES
 ) -> Iterator[str]:
     for match in _BACKTICKED.finditer(line):
-        token = match.group(1)
+        token = match.group(2)
         if SCHEME in token or token.startswith(EXTERNAL_PREFIXES):
             continue
         if WINDOWS_SEPARATOR in token:
@@ -540,7 +683,7 @@ def _commit_claims(
     line: str, previous: str = "", file_suffixes: frozenset[str] = FILE_SUFFIXES
 ) -> Iterator[str]:
     for match in _SHA.finditer(line):
-        sha = match.group(1)
+        sha = match.group(2)
         # Hex is a superset of decimal, so every seven-to-twelve digit number a
         # document quotes matched this. An adopter's byte count of eleven digits
         # was reported as a dead commit on 2026-09-09; git does not mint
@@ -559,8 +702,8 @@ def _url_claims(
 
     Deliberately not restricted to markdown link targets. The dead
     OpenFastTrace link that motivated this kind was a bare URL in a list, and a
-    checker that only reads ``[text](target)`` would have walked past it -- which
-    is what happened for the whole life of the project.
+    checker that only reads :shown:`[text](target)` would have walked past it,
+    which is what happened for the whole life of the project.
 
     **A token with no authority is not an address.** Prose that elides a URL --
     scheme, separator, then an ellipsis -- lost its dots to the punctuation
@@ -682,10 +825,10 @@ def counted_claims(text: str, spec: Counted) -> Iterator[tuple[str, str]]:
     """The values a line states, however the pattern chose to capture them.
 
     The first *matching* group, not group 1. A claim like this is naturally
-    written as alternation -- "**103 tests**" or "103 tests pass" -- and every
-    branch but the one that matched captures ``None``. Reading group 1 blindly
-    crashes on the second phrasing, which is how this was found; this project's
-    own test-count pattern now carries four branches.
+    written as alternation -- :shown:`**103 tests**` or :shown:`103 tests pass`
+    -- and every branch but the one that matched captures ``None``. Reading
+    group 1 blindly crashes on the second phrasing, which is how this was
+    found; this project's own test-count pattern now carries four branches.
     """
     for match in re.finditer(spec.pattern, text):
         value = next((group for group in match.groups() if group), None)
@@ -876,19 +1019,48 @@ def _index(root: Path, exclusions: Sequence[str]) -> tuple[set[str], set[str]]:
     return files, directories
 
 
+def _as_documentation(source: str, suffix: str) -> tuple[str, int]:
+    """The part of a file that is prose, minus what that prose only shows.
+
+    Both reductions in one place because they compose in one order and every
+    reader of a declared document wants both. ``_verify_counts`` read the file
+    raw, which was harmless here only by luck: a ``[[count]]`` pattern is a
+    regex the *project* writes, and one that matches a number in a sentence will
+    match the same number in a default value.
+
+    Returns the reduced text and how many illustrations were blanked. The second
+    caller drops the count deliberately -- both walks read the same files, so
+    counting in each would report every illustration twice.
+    """
+    document = DOCUMENTATION_FILTERS.get(suffix)
+    if document is not None:
+        source = document(source)
+    shown = ILLUSTRATION_FILTERS.get(suffix)
+    if shown is None:
+        return source, 0
+    # Counted before blanking, from the same pattern that does the blanking:
+    # afterwards there is nothing left to count.
+    return shown(source), len(ILLUSTRATION.findall(source))
+
+
 def _report_inert_suffixes(
     read: dict[str, int], yielded: dict[str, int], root: Path, found: Verification
 ) -> None:
     """Say which declared document suffix settled nothing, and which kind of nothing.
 
     ``[claims] suffixes`` reads as "scan these documents", and every extractor
-    behind it is bound to markdown syntax: a single-backticked token, a bracket
-    and parenthesis link, a backticked hex run. A format that happens to share
-    that syntax works by coincidence -- a double-backticked literal in
-    reStructuredText contains a markdown span, and the path inside it is found.
-    A format sharing none of it contributes nothing. An adopter added a YAML
-    suffix on 2026-09-09 and got byte-identical output: no extra claims, no
-    note, and a green run that meant less than the one before it.
+    behind it is bound to markdown syntax: a backticked token, a bracket and
+    parenthesis link, a backticked hex run. A format sharing none of it is read
+    and contributes nothing. An adopter added a YAML suffix on 2026-09-09 and
+    got byte-identical output: no extra claims, no note, and a green run that
+    meant less than the one before it.
+
+    reStructuredText is the near miss rather than the miss, and it is the one
+    that matters here because Python docstrings are written in it: its inline
+    literal is a doubled delimiter, whose inner pair *is* a markdown span, so
+    the token inside was extracted by accident. The delimiter run is matched
+    deliberately now -- see :data:`_BACKTICKED` -- and ``.py`` is reduced to its
+    docstrings and comments before any extractor sees it.
 
     A warning rather than a failure, because a suffix matching no files is a
     thing a shared config legitimately does. The two messages are kept apart
@@ -950,9 +1122,9 @@ def verify(
         somebody made, in a file a reviewer can read, countable on every run.
 
         Matched by exact spelling for the same reason: a promise of
-        ``docs/plan.md`` that also silenced every other ``plan.md`` in the tree
-        would suppress claims nobody chose to defer. Two spellings mean two
-        entries.
+        :shown:`docs/plan.md` that also silenced every other :shown:`plan.md` in
+        the tree would suppress claims nobody chose to defer. Two spellings mean
+        two entries.
     :param file_suffixes: extensions that make a backticked bare filename a
         path claim, **added to** :data:`FILE_SUFFIXES` rather than replacing
         it. Without this the allowlist is fourteen names chosen here, and a
@@ -1015,7 +1187,7 @@ def verify(
         roots.append(elsewhere)
         more_files, more_directories = _index(elsewhere, git_ignored(elsewhere))
         # Indexed twice: bare, and under the tree's own name. Notes beside a
-        # repository call it by name -- `workspace/docs/design.md` -- and
+        # repository call it by name -- :shown:`workspace/docs/design.md` -- and
         # indexing only the inside of that tree reports the reference dead.
         label = elsewhere.name
         files |= more_files | {f"{label}/{rel}" for rel in more_files}
@@ -1041,6 +1213,13 @@ def verify(
         except OSError:
             continue
         read[path.suffix] += 1
+        # A declared suffix says "read these as documents". For a source file
+        # that is true of the docstrings and comments and false of everything
+        # else, and the difference is not cosmetic: scanned whole, one line of
+        # this package's own executable code reads as a markdown link and
+        # reports its target as a dead path.
+        source, illustrations = _as_documentation(source, path.suffix)
+        found.shown += illustrations
         before = len(pending)
 
         previous = ""
@@ -1049,7 +1228,9 @@ def verify(
                 if historic and kind.current_only:
                     continue
                 for text in kind.extract(line, previous, known_suffixes):
-                    pending.append((kind, text, Claim(kind.name, text, rel, number)))
+                    pending.append(
+                        (kind, text, Claim(kind.name, text, rel, number, line))
+                    )
             previous = line
         yielded[path.suffix] += len(pending) - before
 
@@ -1152,10 +1333,16 @@ def _verify_counts(
                 source = path.read_text(errors="ignore")
             except OSError:
                 continue
+            # Counted claims read the same reduced text every other kind does.
+            # A declared suffix means "these are documents", and honoring that
+            # for paths while reading the same file raw for values would let a
+            # value be shown in one sentence and asserted in the next.
+            source, _ = _as_documentation(source, path.suffix)
             for number, line in enumerate(source.splitlines(), start=1):
                 for claimed, text in counted_claims(line, spec):
                     found.checked += 1
                     if claimed != truth:
                         found.broken.append(
-                            Claim(spec.label, f"{text} (actually {truth})", rel, number)
+                            Claim(spec.label, f"{text} (actually {truth})",
+                                  rel, number, line)
                         )
