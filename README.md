@@ -903,6 +903,9 @@ model this project has produced.
   to keep it from quietly rotting, and how to know whether it works. Applies
   beyond the mechanism shipped here.
 - `docs/design.md` — the registry contract in full.
+- `docs/citations.md` — the citation stamp, the bibliography, and what settled each choice:
+  why a citation needs a time, and what a dated one buys that a path glob does not. Read it
+  before declaring `[citations]`.
 
 ## License
 

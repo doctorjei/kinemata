@@ -3,7 +3,8 @@
 **How to build scaffolding for an agent-run project that actually holds.**
 
 `kinemata` ships a handful of mechanisms — the registry layer specified in `docs/design.md`,
-plus the checks over undeclared text and documentation claims described in `README.md`. This
+plus the checks over undeclared text and documentation claims described in `README.md`, and the
+citation policy specified in `docs/citations.md`. This
 document is the other half: the method that produced them, stated generally enough to apply to
 mechanisms this project does not ship, and to ones it built, measured, and threw away.
 
@@ -136,8 +137,15 @@ mistakes an agent makes; both are statements about one mechanism.
 | | Reads source text at rest | Runs a declared oracle | The project's own run |
 |---|---|---|---|
 | **Negative** — *this must not appear* | the duplication scan, the closed-world catch, `clusters`, `unused` | — | — |
-| **Positive** — *this must hold* | `path`, `link` and `[[gate]]` claims; the context ceiling | `commit` (git), `url` (the network), `[[count]]` (any declared command) | — |
+| **Positive** — *this must hold* | `path`, `link` and `[[gate]]` claims; the context ceiling; the citation policy and the resource list | `commit` (git), `url` (the network), `[[count]]` (any declared command), `confirm` re-verifying what it dates | — |
 | **Behavioral** — *what the program did* | out of reach | out of reach | the run-time surface, asserted by the project's own tests |
+
+⚑ **The citation layer was missing from this table until it was audited**, two days after it began
+gating in this repository — and every finding the shared baseline accepts here today is one of
+its. Leaving a gating family out of the map is the same failure as the mis-definition the table
+replaced, told the other way round: one understated the tool by describing it wrongly, the other by
+not describing it at all. Its polarity is positive — *a citation must carry provenance* — and it
+reads source text at rest, which is where it now sits.
 
 Two things that table is meant to stop.
 
@@ -532,3 +540,4 @@ published; this is one, and the alternative it lost to covers more for a fractio
 
 - `README.md` — what the tool does and how to run it.
 - `docs/design.md` — the registry contract in full.
+- `docs/citations.md` — the citation stamp and the bibliography, with what settled each choice.
