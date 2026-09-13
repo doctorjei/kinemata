@@ -10,7 +10,8 @@ when there is a reader for it to grow for.
 Commits are in `git log`; the reasoning behind a design decision stays in the document that
 carries the decision. A changelog repeating either becomes a second carrier and goes stale.
 
-## Unreleased
+## 0.1.0a1
 
-Nothing published yet. **The first entry gets written when the first version is tagged** — a
-changelog line dated in advance is a claim about something that has not happened.
+First release. Registry declarations, the duplication and closed-world catches, documentation
+checked as claims, the citation layer, and a shared ratchet across the gates — published as an
+alpha to exercise the release path, not because the interfaces are settled.

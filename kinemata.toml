@@ -168,6 +168,22 @@ pattern = 'projection budget `(\d+)` B'
 command = ["{python}", "-c", "from kinemata.contract import DEFAULT_BUDGET; print(f'budget={DEFAULT_BUDGET}')"]
 extract = 'budget=(\d+)'
 
+# The changelog's newest heading against the version being shipped. A changelog
+# is *required* to name a version, so this is one fact with two carriers by
+# nature rather than by mistake -- and the honest answer to that is an oracle,
+# not a convention. Declared with the first release, because the drift it
+# catches is only possible once there is something to drift from: bumping
+# `version` and forgetting the heading, or writing the heading for a release
+# that was never cut.
+#
+# Matches any release heading, so an older entry edited to a version nobody
+# shipped fails too. `## Unreleased` does not match and is not meant to.
+[[count]]
+label = "changelog version"
+pattern = '## (\d+\.\d+\.\d+[a-zA-Z0-9.]*)'
+command = ["{python}", "-c", "import tomllib, pathlib; print('version=' + tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])"]
+extract = 'version=(\S+)'
+
 # The checks that must run, and the workflow that must run them. Deleting a
 # step from CI now fails this gate instead of quietly passing; the only way to
 # make it pass again is to delete the declaration too, which is a visible edit.
