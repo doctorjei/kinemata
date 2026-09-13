@@ -51,7 +51,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from .bypass import Bypass
+from .bypass import Bypass, is_strays_scope
 
 #: Where a project's accepted findings live when it does not say otherwise.
 #: Dotted and in the project root: it belongs to the repository, not to a
@@ -122,6 +122,15 @@ class Accepted:
 
     def __str__(self) -> str:
         times = f" (x{self.count})" if self.count > 1 else ""
+        # Catch A's records read as their own sentence. "bypasses" is the wrong
+        # verb for a stray -- nothing was bypassed, the identifier is simply
+        # declared nowhere -- and a reader auditing an exemption list is the one
+        # reader who should not have to translate.
+        if is_strays_scope(self.registry):
+            return (
+                f"{self.path}: {self.entry_id} declared by nothing{times} "
+                f"-- {self.text[:60]}"
+            )
         return (
             f"{self.path}: {self.antipattern!r} bypasses {self.entry_id}{times} "
             f"-- {self.text[:60]}"

@@ -351,6 +351,35 @@ def scan(
     return found
 
 
+#: Scope prefix for a stray's baseline records, namespaced by registry --
+#: ``undeclared:keyspace``.
+#:
+#: Catch A had no ratchet for the whole life of the project, so a tree with any
+#: pre-existing undeclared identifier could only adopt it by fixing every one
+#: first. That is the adoption story the citation catch already needed and got:
+#: the list is shared, because two exemption lists eventually disagree about
+#: what a project accepted.
+#:
+#: **Prefixed rather than bare**, and this is the part that would have been a
+#: silent defect. ``check`` scopes its split by plain registry name, so a bare
+#: ``keyspace`` would put a stray's records inside ``check``'s scope -- where
+#: ``check``, which produces bypasses and never strays, would match none of
+#: them and report every one as :attr:`~kinemata.baseline.Split.stale`,
+#: pointing the reader at ``--prune``. That is a command that would then delete
+#: live exemptions on the strength of a scan that never looked for them.
+STRAYS_SCOPE = "undeclared"
+
+
+def strays_scope(registry: str) -> str:
+    """The baseline scope a registry's undeclared identifiers are recorded in."""
+    return f"{STRAYS_SCOPE}:{registry}"
+
+
+def is_strays_scope(name: str) -> bool:
+    """Does this baseline record come from Catch A rather than from a scan?"""
+    return name == STRAYS_SCOPE or name.startswith(f"{STRAYS_SCOPE}:")
+
+
 @dataclass(frozen=True)
 class Stray:
     """One use of an identifier the registry does not declare."""
@@ -358,9 +387,33 @@ class Stray:
     path: str
     line: int
     identifier: str
+    #: The source line, carried for the fingerprint rather than for the report.
+    #: ``__str__`` does not show it -- an identifier and a site are the whole of
+    #: what a reader needs -- but the baseline key needs something that tells
+    #: two uses apart, and ``Claim`` learned the same lesson: a fingerprint
+    #: keyed on the empty string collapses every occurrence in a file into one
+    #: record, so the fourth one stops being an increase.
+    text: str = ""
 
     def __str__(self) -> str:
         return f"{self.path}:{self.line}: {self.identifier}"
+
+    def finding(self) -> Bypass:
+        """The record the ratchet fingerprints.
+
+        ``antipattern`` is deliberately empty. A bypass has a pattern that
+        matched; a stray has no pattern at all -- that is what makes it a
+        stray -- and filling the field with a second copy of the identifier
+        would invite a reader of the baseline to look for a difference between
+        two fields that cannot differ.
+        """
+        return Bypass(
+            entry_id=self.identifier,
+            antipattern="",
+            path=self.path,
+            line=self.line,
+            text=self.text or self.identifier,
+        )
 
 
 def strays(
@@ -415,9 +468,10 @@ def strays(
 
         extractor = LITERAL_EXTRACTORS.get(path.suffix) if strings_only else None
         if extractor is not None:
-            for number, content, _line in extractor(source):
+            for number, content, line in extractor(source):
                 for identifier in undeclared(registry, content):
-                    found.append(Stray(path=rel, line=number, identifier=identifier))
+                    found.append(Stray(path=rel, line=number,
+                                       identifier=identifier, text=line))
             continue
 
         table = MODE_FILTERS.get(mode, FILTERS)
@@ -425,7 +479,8 @@ def strays(
         text = blank(source) if blank else source
         for number, line in enumerate(text.splitlines(), 1):
             for identifier in undeclared(registry, line):
-                found.append(Stray(path=rel, line=number, identifier=identifier))
+                found.append(Stray(path=rel, line=number,
+                                   identifier=identifier, text=line))
     return found
 
 

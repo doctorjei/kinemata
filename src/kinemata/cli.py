@@ -39,6 +39,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from collections.abc import Iterable
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -46,7 +47,7 @@ from pathlib import Path
 from . import stamps
 from .adapters.bibliography import EXTERNAL, Bibliography, undeclared_key
 from .baseline import Baseline, BaselineError, Split, record
-from .bypass import Bypass, crossings, strays, unused
+from .bypass import Bypass, Stray, crossings, is_strays_scope, strays, strays_scope, unused
 from .citations import citations, index
 from .claims import CLAIMS_REGISTRY, ClaimsError, Verification, verify
 from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
@@ -386,6 +387,63 @@ def _strong(reports: list[tuple[str, Report]]) -> list[tuple[str, Bypass]]:
     return [(name, hit) for name, report in reports for hit in report.strong]
 
 
+def _strays(
+    args: argparse.Namespace, settings: Settings, target: Path
+) -> list[tuple[object, list[Stray]]]:
+    """Catch A's scan, per registry that can answer.
+
+    Shared by ``undeclared`` and ``baseline`` for the reason ``_run_review`` is
+    shared by ``check`` and ``baseline``: the command that writes the exemption
+    list has to run every check that feeds it, and a source it did not run is a
+    set of records ``--prune`` deletes in silence.
+
+    **Returns an empty list rather than refusing when nothing can answer.** The
+    refusal belongs to ``undeclared``, whose whole output would otherwise be a
+    clean closed world nobody asked about; ``baseline`` legitimately runs on a
+    project where no registry recognizes its own identifiers and simply has no
+    strays to record.
+    """
+    answered: list[tuple[object, list[Stray]]] = []
+    for registry in settings.registries:
+        if args.registry and registry.name != args.registry:
+            continue
+        try:
+            found = strays(
+                registry,
+                target,
+                # The registry's own file set wins, as it already does for
+                # `review` and `unused`. This command was the one that ignored
+                # it, which had no visible effect only because nothing closable
+                # declared its own suffixes: a bibliography does, and pointing
+                # a closed one at the project's `.py` default would find no
+                # citations anywhere and report a clean closed world.
+                suffixes=registry.suffixes or settings.suffixes,
+                exclude=settings.exclude,
+            )
+        except NotImplementedError:
+            continue  # cannot recognize an identifier; reported by the caller
+        answered.append((registry, found))
+    return answered
+
+
+def _gating_strays(
+    answered: Iterable[tuple[object, list[Stray]]]
+) -> list[tuple[str, Bypass]]:
+    """The half of Catch A that can fail a build, tagged with its scope.
+
+    **Closed registries only**, which is the same rule ``_strong`` applies to
+    weak signals and for the same reason: an open registry advises and exits 0,
+    so ratcheting its findings would record exemptions against a check that was
+    never going to fail. Open one deliberately and its findings arrive here.
+    """
+    return [
+        (strays_scope(registry.name), stray.finding())
+        for registry, found in answered
+        if getattr(registry, "closed", False)
+        for stray in found
+    ]
+
+
 def _silent(settings: Settings) -> tuple[int, int]:
     """How many declared entries nothing can be reported about, and of how many.
 
@@ -503,7 +561,21 @@ def cmd_undeclared(args: argparse.Namespace) -> int:
 
     **Closed gates; open advises.** A legacy codebase cannot close on day one,
     so an open registry routes undeclared identifiers to a review list and exits
-    0. Closing is the ratchet.
+    0.
+
+    **Ratcheted against the same baseline ``check`` and ``claims`` read**, as of
+    2026-09-13. Until then "closing is the ratchet" was the whole of the
+    adoption story, and it was the wrong shape: closing is a cliff, not a
+    ratchet. A project with one pre-existing undeclared identifier had two
+    options -- leave the registry open and get an advisory list nobody reads, or
+    close it and fail every build until the last one was declared -- which is
+    exactly the position the citation catch was in before it was given the same
+    list. Now a closed registry can be adopted on a tree that does not yet
+    satisfy it, and a *new* undeclared identifier fails.
+
+    Only **closed** registries' findings are ratcheted: an open one exits 0
+    anyway, so recording exemptions for it would be an allowlist against a
+    check that was never going to fail.
 
     **Refuses when no registry can answer.** Only a registry that recognizes its
     own identifiers can say what is undeclared, and today that is a mapping
@@ -515,25 +587,7 @@ def cmd_undeclared(args: argparse.Namespace) -> int:
     _needs_registries(settings, "check against")
     target = _target(args, settings)
 
-    answered: list[tuple[object, list[object]]] = []
-    for registry in settings.registries:
-        try:
-            found = strays(
-                registry,
-                target,
-                # The registry's own file set wins, as it already does for
-                # `review` and `unused`. This command was the one that ignored
-                # it, which had no visible effect only because nothing closable
-                # declared its own suffixes: a bibliography does, and pointing
-                # a closed one at the project's `.py` default would find no
-                # citations anywhere and report a clean closed world.
-                suffixes=registry.suffixes or settings.suffixes,
-                exclude=settings.exclude,
-            )
-        except NotImplementedError:
-            continue  # cannot recognize an identifier; reported below
-        answered.append((registry, found))
-
+    answered = _strays(args, settings, target)
     if not answered:
         raise ConfigError(
             "no declared registry can recognize its own identifiers, so none "
@@ -542,19 +596,51 @@ def cmd_undeclared(args: argparse.Namespace) -> int:
             "Running anyway would report nothing and mean nothing."
         )
 
+    # A `Bypass` is what the ratchet fingerprints; a `Stray` is what a reader
+    # should be shown. Paired by identity through the split, exactly as `claims`
+    # pairs its `Claim` objects: `split` hands back the very objects it was
+    # given, which is what `id` keys on.
+    gating = _gating_strays(answered)
+    shown = [stray for registry, found in answered
+             if getattr(registry, "closed", False) for stray in found]
+    behind = {id(hit): stray for (_, hit), stray
+              in zip(gating, shown, strict=True)}
+
+    baseline = Baseline.load(settings.baseline)
+    split = baseline.split(
+        gating, scope=[strays_scope(registry.name) for registry, _ in answered]
+    )
+    exempt = {id(behind[id(hit)]) for _, hit in split.accepted}
+
     failed = 0
     for registry, found in answered:
         closed = getattr(registry, "closed", False)
         label = "closed" if closed else "open"
-        if not found:
+        # Accepted findings leave the listing but not the accounting below. A
+        # reader of this output is looking for what to fix; a list that mixes
+        # the exempt with the live teaches them to cross-reference the baseline
+        # to tell which is which.
+        live = [s for s in found if id(s) not in exempt] if closed else found
+        if not live:
             if not args.quiet:
                 print(f"# {registry.name} ({label}): no undeclared identifiers.")
             continue
         print(f"# {registry.name} ({label})")
-        for stray in found:
+        for stray in live:
             print(f"  {stray}")
         if closed:
-            failed += len(found)
+            failed += len(live)
+
+    # Printed for the reason `check` prints its own baseline size: a run that
+    # silently applied part of an exemption list reads exactly like a clean one.
+    if split.accepted and not args.quiet:
+        until = f", until {baseline.until}" if baseline.until else ""
+        print(f"\nbaseline: {len(split.accepted)} undeclared identifier(s) "
+              f"accepted as pre-existing in {settings.baseline.name}{until}")
+    if split.stale and not args.quiet:
+        gone = sum(item.count for item in split.stale)
+        print(f"{gone} accepted record(s) no longer present "
+              "-- `kinemata baseline --prune` drops them.")
 
     if failed:
         print(
@@ -1335,6 +1421,21 @@ def cmd_stale(args: argparse.Namespace) -> int:
     return 0  # advisory, always
 
 
+def _gate_for(scope: str) -> str:
+    """Which command fails on a record from this finding source.
+
+    Three sources feed one exemption list, and naming the wrong one sends a
+    reader to a green run. That already happened once with two: a reader told a
+    dead reference was exempt from ``check`` went and looked at a command that
+    was never going to report it.
+    """
+    if scope == CLAIMS_REGISTRY:
+        return "`kinemata claims`"
+    if is_strays_scope(scope):
+        return "`kinemata undeclared`"
+    return "`kinemata check`"
+
+
 def _narrowed(args: argparse.Namespace) -> str | None:
     """Why this scan does not cover the whole project, if it does not.
 
@@ -1483,6 +1584,17 @@ def cmd_baseline(args: argparse.Namespace) -> int:
     if args.registry in (None, CLAIMS_REGISTRY):
         findings += _verify(args, settings).findings()
 
+    # Catch A, for the same reason and with the same cost. Added 2026-09-13 when
+    # the catch was ratcheted: a finding source the writing command does not run
+    # is a set of records `--prune` deletes in silence, and this one is worse
+    # than the documentation half because a dropped stray record re-fails a
+    # *closed* registry -- the gate nobody can open again without editing the
+    # config.
+    #
+    # `_strays` honors `--registry` like every other scan here, and `_narrowed`
+    # has already refused `--record`/`--prune` if one was given.
+    findings += _gating_strays(_strays(args, settings, _target(args, settings)))
+
     try:
         baseline = Baseline.load(settings.baseline)
     except BaselineError:
@@ -1527,13 +1639,17 @@ def cmd_baseline(args: argparse.Namespace) -> int:
             # Growth is the failure mode. Say so at the moment it happens, since
             # the alternative is noticing it in a diff nobody reads closely.
             #
-            # Both gates named, not one. This list stopped being `check`'s alone
+            # Every gate named, not one. This list stopped being `check`'s alone
             # when documentation started riding it, and a reader told that a
             # dead reference is exempt from `check` would go look at a command
-            # that was never going to report it.
+            # that was never going to report it. Catch A joined them 2026-09-13,
+            # which is why this is now derived from the records rather than
+            # spelled out -- a hand-written list of gates is the thing that went
+            # stale the first time.
+            named = ", ".join(sorted({_gate_for(name) for name, _ in split.new}))
             print(f"{delta} finding(s) newly accepted. Every one is now exempt "
-                  f"from `check` and `claims` until it is fixed and the "
-                  f"baseline re-recorded.")
+                  f"from {named or '`kinemata check`'} until it is fixed and "
+                  f"the baseline re-recorded.")
         return 0
 
     if args.prune:
@@ -1555,8 +1671,7 @@ def cmd_baseline(args: argparse.Namespace) -> int:
         # Named by the gate that would fail, not by one of them: this list feeds
         # two commands and telling a reader to look at `check` for a dead link
         # sends them to a green run.
-        gates = sorted({"`kinemata claims`" if name == CLAIMS_REGISTRY
-                        else "`kinemata check`" for name, _ in split.new})
+        gates = sorted({_gate_for(name) for name, _ in split.new})
         print(f"{len(split.new)} finding(s) not accepted -- "
               f"{', '.join(gates)} fails on these.")
     if scope:

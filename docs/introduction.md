@@ -428,15 +428,22 @@ multiplicity counted. Line numbers are excluded; path is included.
 
 `review` is unaffected by the baseline: the ratchet governs the gate, not the advice.
 
-**One list, both gates.** `check` puts the code findings through it and `claims` puts the
-documentation findings through it, each reading the half it scans. A second exemption list for
-documentation was the alternative and is the failure mode: two lists eventually disagree about
-what a project accepted, and the one nobody is reading is the one still exempting something
-real. Records are tagged with the check that produced them, so neither gate reports the other's
-as fixed — it names them instead, because silence about part of an exemption list reads exactly
-like having accounted for all of it. `kinemata baseline` runs both, being the only command that
-writes the file; a `--prune` that covered one half would delete the other's records on the
-strength of never having looked.
+**One list, three gates.** `check` puts the code findings through it, `claims` puts the
+documentation findings through it, and `undeclared` puts a closed registry's strays through it
+— each reading the part it scans. A second exemption list was the alternative and is the failure
+mode: two lists eventually disagree about what a project accepted, and the one nobody is reading
+is the one still exempting something real. Records are tagged with the check that produced them,
+so no gate reports another's as fixed — it names them instead, because silence about part of an
+exemption list reads exactly like having accounted for all of it. `kinemata baseline` runs all
+three, being the only command that writes the file; a `--prune` that covered two of them would
+delete the third's records on the strength of never having looked.
+
+⚑ **Catch A joined the list 2026-09-13, and until then closing a registry was a cliff.** A
+project with one pre-existing undeclared identifier had to choose between an open registry whose
+advisory list nobody reads and a closed one that fails every build until the last identifier is
+declared. Strays are tagged `undeclared:<registry>` rather than with the registry's bare name,
+which is not cosmetic: under a bare name `check` would find no matching record, call every one of
+them stale and recommend a prune — deleting the exemptions holding a *closed* registry green.
 
 The four failures `claims` reports that are **not** claims about a site — a declared oracle that
 would not run, and a promise kept, uncited or past its date — are never offered to the ratchet.
@@ -567,6 +574,30 @@ transforms, sum bytes, compare to `budget`. `-v` lists files largest-first.
   before: closing it would have turned that example into a failing gate, until `match_mode =
   "unfenced"` taught the scan that a fenced block is display rather than use. So an undeclared
   reference key exits 1 here, which is this repository's first real closed-world catch.
+
+  ⚑ **Settled 2026-09-13, because "cannot be closed" had sat here as an open gap while two of the
+  three cases are permanent.** Catch A asks a *membership* question — is this identifier one of
+  the namespace's members? — and answering it needs a namespace with recognizable syntax plus an
+  authoritative membership list.
+
+  * **`code-patterns` and `substitutions` are a boundary, not a gap.** Both are **negative**
+    registries: they declare what must *not* appear — a shape to avoid, a spelling to replace —
+    and the complement of "not a forbidden spelling" is every other string in the language. There
+    is nothing to enumerate, so there is no membership question to ask. Their entry ids are names,
+    and a syntax over those names would recognize the wrong thing: an entry names a value's
+    canonical *home*, while what the scan matches is the value. **Neither will ever be closable,
+    and that is a property of the data model rather than a missing feature.**
+  * **`python-constants` is a gap, and a deliberately unclosed one.** A constant name is
+    recognizable, so `candidates()` could be implemented. The namespace is what stops it:
+    SCREAMING_CASE is shared with the standard library, every dependency, and every module the
+    registry does not list, so closing it would report `os.O_RDONLY` and an enum member in an
+    undeclared file. This project already measured what that costs — the permissive keyspace
+    syntax on kanibako-cli gave 48,685 findings raw and 7,266 in string literals, **neither a
+    usable gate.** A project wanting it closed would have to declare a narrowing, and none has
+    asked.
+
+  So the honest scope of Catch A: **registries whose entries are members of a namespace the
+  project can describe.** Keys and reference keys are; code shapes and forbidden spellings are not.
 - **~~Text a project carries but did not author can only be excluded.~~** A vendored licence or a
   policy adopted as received cannot carry a stamp, because stamping it means editing text that is
   not the project's to edit — so its citations were findings the project could never drive down,
