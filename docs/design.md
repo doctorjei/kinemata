@@ -154,9 +154,15 @@ match_mode: str        # which filter table the scan reads through
 **`closed`** — kanibako's keyspace is closed: an undeclared key is not a key, and
 reading or setting one is an error that names it. Not every registry can start that way;
 a legacy codebase cannot close on day one. So `closed` is declared, and an open registry
-routes undeclared identifiers to a **review list** rather than a failure. Closing is a
-ratchet: record the baseline, fail on any increase, drive it down on a separate schedule
-that does not block feature work.
+routes undeclared identifiers to a **review list** rather than a failure.
+
+⚑ **This section said "closing is a ratchet" until 2026-09-13, and that was the wrong shape.**
+Closing is a *cliff*: it turns every pre-existing undeclared identifier into a build failure at
+once, which leaves an adopter choosing between a review list nobody reads and a gate that stays
+red until the last one is declared. The ratchet is the **baseline**, and Catch A now rides the
+same one `check` and `claims` do — record the accepted population, fail on any increase, drive it
+down on a schedule that does not block feature work. Closing and ratcheting are two decisions, and
+naming them one thing hid the fact that only one of them had been built.
 
 **`machinery` and `mentions_are_uses`** both serve one question — *what does this registry
 declare that nothing uses?* — and both narrow it rather than widening it. `machinery` names
@@ -268,15 +274,24 @@ property of the syntax a project declares, not of anything kinemata supplies.** 
 adopting it should expect to tune that syntax and to record a baseline first, exactly as
 the duplication scan does.
 
-**Two limits that follow.** kinemata dogfoods Catch A only through its bibliography —
-`code-patterns` and `substitutions` cannot recognize their own identifiers and so cannot
-be closed, and until a bibliography was declared, `kinemata undeclared` run here refused
-rather than reporting a false clean. A reference key is recognizable because the stamp's
-delimiters were chosen to make it so, which is why that one registry can answer. And the
-catch is not yet wired to
-the ratchet, so there is no way to accept an existing population and fail only on new
-ones; on a mature codebase that is the difference between a usable gate and one that gets
-switched off.
+**One limit that follows, and one that was closed.** kinemata dogfoods Catch A only through its
+bibliography: a reference key is recognizable because the stamp's delimiters were chosen to make it
+so, which is why that one registry can answer, and until a bibliography was declared `kinemata
+undeclared` run here refused rather than reporting a false clean.
+
+⚑ **Closability is a boundary for two of the three kinds, settled 2026-09-13** rather than left as
+an open gap. `code-patterns` and `substitutions` are **negative** registries — they declare what
+must *not* appear, and the complement of "not a forbidden spelling" is every other string in the
+language, so there is no membership list to enumerate and no closed-world question to ask. They
+will never be closable, and that is a property of the data model. `python-constants` is a genuine
+gap left unclosed deliberately: a constant name is recognizable, but the namespace is shared with
+the standard library and every module a registry does not list. **Catch A's honest scope is
+registries whose entries are members of a namespace the project can describe.**
+
+⚑ **"The catch is not yet wired to the ratchet" was true until 2026-09-13 and is not now.** A
+closed registry's strays go through the same baseline, scoped `undeclared:<registry>` so no other
+gate mistakes them for its own records — on a mature codebase that is the difference between a
+usable gate and one that gets switched off.
 
 ---
 

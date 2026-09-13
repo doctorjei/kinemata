@@ -412,7 +412,7 @@ What this project ships, read back against its own rules:
 
 | Principle | How the registry layer answers it |
 |---|---|
-| §1 reminder or catch | `ids`, `review`, `clusters` and `unused` are reminders; `check` and `claims` are catches only in CI, and only as far as branch protection reaches — which is the job existing, not the job checking anything; `baseline` is a catch with an escape hatch, below |
+| §1 reminder or catch | `ids`, `review`, `clusters` and `unused` are reminders; `check`, `claims` and `undeclared` are catches only in CI, and only as far as branch protection reaches — which is the job existing, not the job checking anything; `baseline` is a catch with an escape hatch, below |
 | §1 one source | `review` and `check` run identical analysis; only the exit code differs |
 | §1 carrier | the baseline is stored in the tree the agent writes, so the ratchet cannot be a catch however it is wired — recorded below rather than papered over |
 | §2 spend test | duplication scores yes/no/no — cheap to commit, invisible in a diff, silent on landing |
@@ -421,7 +421,7 @@ What this project ships, read back against its own rules:
 | §3 threshold | the context ceiling has no default — a project declares a number it measured, or the command refuses to run |
 | §3 break it on purpose | the self-check's five entries were each verified by injecting the bypass and watching the gate fail |
 | §6 validation | labeled history from real repositories, with the components that failed labeled as failing |
-| §4 classify first | `clusters` reports; `check` and `claims` gate. A missing file is a fact; text repeating with no declared home is a judgment |
+| §4 classify first | `clusters` reports; `check`, `claims` and `undeclared` gate. A missing file is a fact; text repeating with no declared home is a judgment |
 
 One of those rows was added late, and the reason generalizes past this project. Every
 mechanism above was built and validated on the question *does it find the thing?* — and all

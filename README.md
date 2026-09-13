@@ -163,11 +163,13 @@ kinemata review      # advisory. Always exits 0. Run in-box, during the work.
 kinemata clusters    # advisory. Repeated text with no declared home.
 kinemata undeclared  # the closed-world catch. Exits 1 on an identifier a
                      # closed registry does not declare; advisory while open.
+                     # Ratcheted: reads the same baseline check and claims do.
 kinemata unused      # advisory. Declared entries nothing mentions. Refuses
                      # unless something says where a declaration lives.
 kinemata check       # the gate. Exits 1 on a strong finding. Run in CI.
 kinemata claims      # the gate, for documentation. Exits 1 on a dead claim.
-kinemata baseline    # what the gate already accepts. --record to change it.
+kinemata baseline    # what the gates already accept. --record to change it;
+                     # runs all three scans, being the one that writes.
 kinemata context     # the gate, for what a session loads. Exits 1 over the ceiling.
 kinemata init        # a starting config, and optionally the CI to run it.
 kinemata stamp       # mint a citation stamp, or decode one. Needs no config.
@@ -237,6 +239,15 @@ that has since been renamed: the claim survives, its provenance does not.
 `check` then reports only findings the baseline does not cover, and prints the
 size of the exemption list **on every run, including clean ones**. `review` is
 deliberately unaffected — the ratchet governs the gate, not the advice.
+
+**One list, three gates.** `claims` and `undeclared` read the same baseline, so a
+documentation tree or a closed registry that is already failing can be adopted
+the same way. A second exemption list was the alternative and is the failure
+mode: two lists eventually disagree about what a project accepted, and the one
+nobody reads is the one still exempting something real. Records carry the check
+that produced them, so no gate reports another's as fixed — it names them
+instead, and `kinemata baseline` runs all three, being the only command that
+writes the file.
 
 **A baseline is an allowlist, and allowlists rot.** Three properties exist
 against that, each one because the vaguer alternative fails quietly:
