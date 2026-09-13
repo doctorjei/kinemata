@@ -91,10 +91,18 @@ the only question that matters — did this need to exist?
 ## Usage
 
 ```bash
-pip install -e ".[dev]"
-kinemata init          # a starting config; --ci also writes a workflow and
-                       # declares it as a gate. Refuses to overwrite either.
+pip install kinemata            # add [yaml] if a registry is kind = "yaml-mapping"
+kinemata init                   # a starting config; --ci also writes a workflow and
+                                # declares it as a gate. Refuses to overwrite either.
 ```
+
+**Pin the version.** What is published is an alpha, the interfaces are not settled, and the
+classifiers say so. It is also currently the *only* release, which means a plain install resolves
+to it — that stops being true the moment a final version exists, so an unpinned dependency will
+change what it means without changing what it says.
+
+Working on kinemata itself is a different install — `pip install -e ".[dev]"` from a clone, which
+is what every command below assumes.
 
 What `init` writes runs immediately, because it declares `[claims]` and nothing
 else: **a config does not need a registry.** It needs at least one check —
