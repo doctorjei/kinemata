@@ -1182,9 +1182,9 @@ def _build_context(spec: dict[str, Any] | None, path: Path) -> ContextBudget | N
     # escape, in `include` worked -- by accident of two library behaviors rather
     # than by contract -- so a config could weigh anything on the filesystem
     # with nothing in the file saying so. The capability is kept, because an
-    # adopter measured 36,056 B of assembled instructions through it and that is
-    # the one thing a ceiling most wants to see; what changed is that it has to
-    # be asked for by name.
+    # adopter had a measured use for it -- an assembled instruction file living
+    # outside any repository, which is the one thing a ceiling most wants to
+    # see; what changed is that it has to be asked for by name.
     #
     # Symmetrically refused, because a one-way rule would leave `external`
     # accepting contained patterns and quietly labeling in-tree bytes "outside".

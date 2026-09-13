@@ -249,9 +249,10 @@ def measure(
     of ``Path.__truediv__`` discarding its left operand and ``glob`` resolving a
     parent segment without complaint, so a config could weigh a compiled
     artifact from anywhere on the filesystem and nothing in the file said so.
-    The capability is kept -- an adopter measured 36,056 B of assembled
-    instructions through it -- and now has to be asked for: ``include`` refuses
-    an escape and names this list.
+    The capability is kept -- an adopter had a real, measured use for it,
+    weighing an assembled instruction file that lives outside any repository --
+    and now has to be asked for: ``include`` refuses an escape and names this
+    list.
     """
     root = Path(root)
     base = root.resolve()

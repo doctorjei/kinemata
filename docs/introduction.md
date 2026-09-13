@@ -993,9 +993,16 @@ down, and the two shapes at the end are the findings that matter most.
 - **~~`[context] include` accepts absolute paths, absolute globs and `../` escapes~~** — but by
   accident of two library behaviors rather than by contract, and nothing validates containment.
   **Decided and contracted 2026-09-13**, in the direction of keeping the capability rather than
-  refusing it: an adopter measured 36,056 B of assembled instructions through the escape, and an
-  assembled file is exactly what a ceiling most wants to weigh — a `context` that cannot see it is
-  measuring the wrong thing.
+  refusing it: an adopter had a real, measured use for the escape — weighing an assembled
+  instruction file that lives outside any repository — and an assembled file is exactly what a
+  ceiling most wants to weigh; a `context` that cannot see it is measuring the wrong thing.
+  ⚑ **The byte figure that used to sit in this sentence has been withdrawn by the party who
+  measured it** (2026-09-13): it came from a session whose artifact is no longer available, so it
+  is **re-derived if it is ever wanted again, never re-quoted.** The decision never rested on the
+  size — only on the file existing and being outside the tree — so the argument is unchanged and
+  the number is gone rather than updated. *A number that has stopped being measured is not a
+  number*, which is their formulation and a better one than this project's own rule about counts
+  with no oracle.
   **`include` is now contained and refuses an escape; `[context] external` is the escape and
   refuses a contained pattern.** Both refusals are symmetric, because a one-way rule would leave
   `external` accepting in-tree patterns and the report calling bytes that never left "outside".
