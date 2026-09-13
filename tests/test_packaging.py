@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import ast
 import re
+import sys
 import tomllib
 from pathlib import Path
 
@@ -73,7 +74,19 @@ def test_the_floor_check_can_actually_fail():
     newer = "type Alias = int\n"          # PEP 695, 3.12+
     with pytest.raises(SyntaxError):
         ast.parse(newer, feature_version=floor)
-    ast.parse(newer, feature_version=(3, 12))     # ...and is fine one version up
+
+    # ...and is fine one version up -- but only where the *running* interpreter
+    # can parse it at all. `feature_version` makes the parser stricter, never
+    # newer, so on 3.11 this line raises whatever is passed to it, and the
+    # control fails for the one reason it is not testing.
+    #
+    # ⚠ **This is why the floor job was red from the day it was added.** The
+    # matrix went in on 2026-09-09 to catch a 3.12-only stdlib call, and instead
+    # failed here on every run for four days -- so the signal it exists to give
+    # was never once delivered. A check that has been red since it landed is not
+    # a check, and this file is where that was finally read.
+    if sys.version_info >= (3, 12):
+        ast.parse(newer, feature_version=(3, 12))
 
 
 def test_the_floor_is_exercised_in_ci():

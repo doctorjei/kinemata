@@ -52,7 +52,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: pip install -e .
+      # **The dev extra, because a declared oracle has to be runnable.** This
+      # job installed the runtime alone until 2026-09-13, and `kinemata claims`
+      # failed here on every run from the day the test-count oracle was added:
+      # the oracle is `python -m pytest --collect-only`, pytest was not
+      # installed, the command produced no value, and a value that cannot be
+      # read is never a pass. Four days of a red gate for a missing test
+      # dependency, in the job whose whole purpose is running the gates.
+      - run: pip install -e ".[dev]"
       - run: kinemata check
       # Documentation is a registry of claims about this tree.
       - run: kinemata claims
