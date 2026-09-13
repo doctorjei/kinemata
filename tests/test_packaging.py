@@ -83,9 +83,19 @@ def test_the_floor_is_exercised_in_ci():
     and fail at run time. Only running the suite on the floor catches those, so
     the workflow has to name it -- and a matrix that quietly drops the floor
     would leave this file asserting something nothing performs.
+
+    ⚠ **Skips when the workflow is absent**, which is the case inside a source
+    distribution: ``MANIFEST.in`` prunes ``.github``, because CI configuration is
+    not part of what a consumer builds. Found by building an sdist and running
+    the tests it ships -- this was the one failure, and the package had been
+    sending a test somewhere it could not pass. Same convention as the corpus
+    skips.
     """
     floor = declared_floor()
-    workflow = (ROOT / ".github/workflows/checks.yml").read_text()
+    checks = ROOT / ".github/workflows/checks.yml"
+    if not checks.is_file():
+        pytest.skip("no workflow here -- a source distribution prunes .github")
+    workflow = checks.read_text()
     spelled = f'"{floor[0]}.{floor[1]}"'
     assert spelled in workflow, (
         f"{spelled} does not appear in checks.yml, so the declared floor is never run. "

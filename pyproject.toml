@@ -6,13 +6,32 @@ build-backend = "setuptools.build_meta"
 name = "kinemata"
 version = "0.1.0.dev0"
 description = "One declared place per fact; find the code that re-derives it."
+readme = "README.md"                 # without this a built distribution ships no
+                                     # long description at all: the PyPI page and
+                                     # `pip show` would both be the one line above.
 requires-python = ">=3.11"          # tomllib
 dependencies = []                    # core takes none, deliberately
 license = "GPL-3.0-only"
+authors = [{ name = "Jei Blanchard", email = "jjb@eng.ufl.edu" }]
+
+# Deliberately short. `Programming Language :: Python :: 3.11` and friends are
+# **not** here: `requires-python` above already declares the floor, and a
+# classifier list restating it is a second carrier for one fact -- which is the
+# thing this package exists to report. Same reasoning as the absent
+# `[tool.ruff] target-version` below.
+classifiers = [
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Topic :: Software Development :: Quality Assurance",
+]
+
+[project.urls]
+Homepage = "https://github.com/doctorjei/kinemata"
+Repository = "https://github.com/doctorjei/kinemata"
 
 [project.optional-dependencies]
 yaml = ["PyYAML>=6"]                 # only for kind = "yaml-mapping"
-dev = ["pytest>=8", "PyYAML>=6", "ruff>=0.16,<0.17"]  # bounded: see [tool.ruff.lint]
+dev = ["pytest>=8", "PyYAML>=6", "ruff>=0.16,<0.17", "build>=1"]  # ruff bounded: see [tool.ruff.lint]
 
 [project.scripts]
 kinemata = "kinemata.cli:main"

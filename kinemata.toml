@@ -258,6 +258,29 @@ note = "the writer, dry run. --write is deliberately not run unattended"
 command = "kinemata stamp"
 note = "the codec; reads no config, which is the property being pinned"
 
+# **The artifact, declared like every other thing that must keep running.**
+#
+# Added 2026-09-13, when building a source distribution by hand for the first
+# time found the package shipping a test that could not pass where it was sent:
+# the CI-matrix check reads a workflow file an sdist does not carry. The suite
+# was green here and red one directory away, and nothing in this inventory could
+# have said so, because nothing had ever left the repository.
+#
+# `python -m build` is not a kinemata command, and that is the point -- this
+# inventory asks whether a declared step still runs, and the step being somebody
+# else's tool changes nothing about the question.
+[[gate]]
+command = "python -m build"
+note = "the sdist and wheel are produced at all"
+
+[[gate]]
+command = "/tmp/wheelenv/bin/kinemata --help"
+note = "the console script runs from an installed wheel, not from the source tree"
+
+[[gate]]
+command = "cd /tmp/sdist && /tmp/sdistenv/bin/pytest -q"
+note = "the sdist builds and tests itself away from this tree"
+
 # Asserted at exit 2 rather than run for a zero. This repository has never
 # declared `[context]`, so refusing is what the command does here and a refusal
 # is a claim like any other -- see the step, which fails on any other code.

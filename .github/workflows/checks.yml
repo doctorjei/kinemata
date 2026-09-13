@@ -62,6 +62,57 @@ jobs:
       # does not run where the agent cannot reach it is not a catch.
       - run: kinemata undeclared
 
+  distribution:
+    # **The artifact, built and installed the way somebody else would get it.**
+    #
+    # Nothing checked this until 2026-09-13. Building the sdist by hand that day
+    # found the package shipping a test that could not pass where it was sent:
+    # `test_the_floor_is_exercised_in_ci` reads `.github/workflows/checks.yml`,
+    # which an sdist does not carry. The suite was green in the repository and
+    # red the moment it left it, and no gate could tell.
+    #
+    # So this job leaves the repository deliberately. It installs from the built
+    # wheel into a clean interpreter -- not `-e .`, which every other job uses
+    # and which reads the source tree -- and it runs the sdist's own tests from
+    # the unpacked sdist rather than from here.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install build
+      - run: python -m build
+      # The console script, from an installed wheel. A `pip install -e .` would
+      # pass this while the wheel shipped nothing importable.
+      - name: the wheel installs and the command runs
+        run: |
+          python -m venv /tmp/wheelenv
+          /tmp/wheelenv/bin/pip install dist/*.whl
+          /tmp/wheelenv/bin/kinemata --help
+          /tmp/wheelenv/bin/python -c "from kinemata import registry; import kinemata.cli"
+      # The sdist has to be able to build and test itself, away from this tree.
+      - name: the sdist is self-sufficient
+        run: |
+          mkdir /tmp/sdist && tar xzf dist/*.tar.gz -C /tmp/sdist --strip-components=1
+          python -m venv /tmp/sdistenv
+          /tmp/sdistenv/bin/pip install "/tmp/sdist[dev]"
+          cd /tmp/sdist && /tmp/sdistenv/bin/pytest -q
+      # Declared contents, checked. `MANIFEST.in` exists so that what ships is a
+      # declaration rather than a default; a declaration nothing verifies is the
+      # thing this project reports in other people's repositories.
+      - name: the sdist carries what MANIFEST.in declares and nothing else
+        run: |
+          tar tzf dist/*.tar.gz | sed 's|^[^/]*/||' > /tmp/shipped.txt
+          for want in README.md LICENSE.md CHANGELOG.md AIPOLICY.md pyproject.toml \
+                      kinemata.toml docs/design.md docs/introduction.md \
+                      examples/ci-github-actions.yml src/kinemata/cli.py; do
+            grep -qx "$want" /tmp/shipped.txt || { echo "missing from sdist: $want"; exit 1; }
+          done
+          for never in corpus canon-files keyspace-manifest.yaml .github; do
+            ! grep -q "^$never" /tmp/shipped.txt || { echo "must not ship: $never"; exit 1; }
+          done
+
   commands:
     # **Every other command, run for the fact that it still runs.**
     #

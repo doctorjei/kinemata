@@ -1,0 +1,31 @@
+# What a source distribution carries.
+#
+# This file changes almost nothing: setuptools' defaults already produced a
+# correct sdist, verified by building one and running its tests. It exists so
+# that what ships is **declared** rather than whatever the build backend
+# happened to decide -- which is the same argument this package makes about
+# every other undeclared fact, applied to itself.
+#
+# The documents are included because README.md points at them by relative path.
+# An sdist that carries the pointer and not the target is a broken reference in
+# the one file everybody opens first.
+include kinemata.toml
+include AIPOLICY.md
+include CHANGELOG.md
+graft docs
+graft examples
+
+# Never ship: other projects' material, kept in this tree as test corpora and
+# examples only, and all of it gitignored. Named here as well because gitignore
+# and sdist contents are two different mechanisms, and relying on one to enforce
+# the other is exactly the coupling this package reports elsewhere.
+prune corpus
+prune canon-files
+exclude keyspace-manifest.yaml
+exclude clause-traceability-*.md
+exclude settings-keyspace-*.md
+exclude system-design-*.md
+
+# Build and test residue.
+prune .github
+global-exclude *.py[cod] __pycache__ .DS_Store
