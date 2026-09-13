@@ -31,6 +31,11 @@ key = "Pa0003"
 target = "docs/design.md"
 note = "the registry contract"
 
+[[entry]]
+key = "Pa0004"
+target = "docs/introduction.md"
+note = "the reference sheet, and the carrier for what the mechanisms cannot do"
+
 # Evidence in other people's repositories.
 #
 # These are the citations that forced the `Px` and `Cx` codes. The docstrings in
