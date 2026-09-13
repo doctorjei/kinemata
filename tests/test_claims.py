@@ -224,6 +224,42 @@ def test_a_declared_oracle_that_cannot_run_is_a_failure(tmp_path):
     result = verify(tmp_path, counts=[spec])
     assert result.broken == []
     assert result.blocked and result.failed
+    assert "could not be run" in result.blocked[0]
+
+
+def test_an_oracle_that_never_returns_is_killed_and_fails(tmp_path):
+    """A hung oracle must fail, not hang the gate.
+
+    The one failure a declared check cannot report about itself: with no bound,
+    a command that never returns leaves CI waiting rather than red, and nothing
+    downstream ever runs to notice.
+    """
+    from kinemata.claims import Counted
+
+    write(tmp_path, "doc.md", "The suite has **4 tests**.\n")
+    spec = Counted(
+        pattern=r"\*\*(\d+) tests\*\*",
+        command=("{python}", "-c", "import time; time.sleep(30)"),
+        extract=r"(\d+)",
+    )
+    result = verify(tmp_path, counts=[spec], oracle_timeout=0.5)
+    assert result.broken == []
+    assert result.blocked and result.failed
+    assert "did not finish within 0.5s" in result.blocked[0]
+
+
+def test_an_oracle_that_prints_nothing_matching_says_so(tmp_path):
+    """Ran, and settled nothing. A different act from never having run."""
+    from kinemata.claims import Counted
+
+    write(tmp_path, "doc.md", "The suite has **4 tests**.\n")
+    spec = Counted(
+        pattern=r"\*\*(\d+) tests\*\*",
+        command=("{python}", "-c", "print('nothing numeric here')"),
+        extract=r"(\d+) tests collected",
+    )
+    result = verify(tmp_path, counts=[spec])
+    assert result.blocked and "produced no value" in result.blocked[0]
 
 
 def test_a_count_pattern_may_use_alternation(tmp_path):

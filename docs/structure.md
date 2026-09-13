@@ -137,7 +137,7 @@ mistakes an agent makes; both are statements about one mechanism.
 | | Reads source text at rest | Runs a declared oracle | The project's own run |
 |---|---|---|---|
 | **Negative** — *this must not appear* | the duplication scan, the closed-world catch, `clusters`, `unused` | — | — |
-| **Positive** — *this must hold* | `path`, `link` and `[[gate]]` claims; the context ceiling; the citation policy and the resource list | `commit` (git), `url` (the network), `[[count]]` (any declared command), `confirm` re-verifying what it dates | — |
+| **Positive** — *this must hold* | `path`, `link` and `[[gate]]` claims; the context ceiling; the citation policy and the resource list | `commit` (git), `url` (the network), `[[count]]` (any declared command), membership parity (`[[parity]]`), `confirm` re-verifying what it dates | — |
 | **Behavioral** — *what the program did* | out of reach | out of reach | the run-time surface, asserted by the project's own tests |
 
 ⚑ **The citation layer was missing from this table until it was audited**, two days after it began
@@ -147,10 +147,21 @@ replaced, told the other way round: one understated the tool by describing it wr
 not describing it at all. Its polarity is positive — *a citation must carry provenance* — and it
 reads source text at rest, which is where it now sits.
 
+⚑ **Membership parity joined a cell that already had occupants, and the table does not show what
+is new about it.** `kinemata parity` is positive — *what a registry declares and what the code
+produces must agree* — and it runs a declared oracle, which is exactly where `[[count]]` already
+sat, so neither axis moves. What separates them is the **subject**: a count settles a value a
+document states, parity settles the membership of a *declared set*. Nothing in this classification
+asks what a mechanism reads, so two mechanisms can share a cell and still answer different
+questions, and a reader taking the cell as the description would miss it. Said here rather than
+patched with a column the axes do not support; `docs/introduction.md` § Commands is where parity's
+behavior and its refusals live.
+
 Two things that table is meant to stop.
 
-**Do not read the top-left cell as the tool.** The registry layer is negative and static because
-duplication is the class of mistake it was built for, not because the tool is. `[[count]]` runs
+**Do not read the top-left cell as the tool.** The registry *scan* is negative and static because
+duplication is the class of mistake it was built for, not because the tool is — and the registry
+layer is no longer only that, since parity reads the same declarations positively. `[[count]]` runs
 an arbitrary declared command and compares its output to a value a document states — positive
 polarity, executing code — and it has done so since before the first outside audit called this
 tool *"entirely static."* That characterization was accepted here without being checked, and

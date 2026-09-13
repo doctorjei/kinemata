@@ -176,8 +176,11 @@ kinemata unused      # advisory. Declared entries nothing mentions. Refuses
                      # unless something says where a declaration lives.
 kinemata check       # the gate. Exits 1 on a strong finding. Run in CI.
 kinemata claims      # the gate, for documentation. Exits 1 on a dead claim.
+kinemata parity      # the gate, for membership: what a registry declares against
+                     # the set an oracle says the code produces. Exits 1 on a
+                     # disagreement either way; refuses without a [[parity]].
 kinemata baseline    # what the gates already accept. --record to change it;
-                     # runs all three scans, being the one that writes.
+                     # runs every scan that feeds it, being the one that writes.
 kinemata context     # the gate, for what a session loads. Exits 1 over the ceiling.
 kinemata init        # a starting config, and optionally the CI to run it.
 kinemata stamp       # mint a citation stamp, or decode one. Needs no config.
@@ -455,7 +458,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **714 tests**, and
+The companion guard is a number with an oracle. This suite is **737 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 
@@ -880,6 +883,12 @@ declared command and compares its output to a value a document states, and has s
 The characterization was taken on report and never measured. **`docs/structure.md` § The second
 axis carries the classification that replaced these sentences** — polarity and what a mechanism
 observes, per mechanism.
+
+⚑ **The first bullet is half-closed as of 2026-09-13.** `kinemata parity` sets a registry's
+declared identifiers against the set a declared oracle says the code produces, gating on a
+disagreement in either direction — which reaches the *membership* half of those 125 functions and
+not the half asserting a row's values. The mark, the scope and what still has no expression are in
+**`docs/introduction.md` § Known limits**.
 
 **The classification is selectable, not a ceiling.** A project that wants only the static,
 negative subset declares only that subset and gets exactly it: no oracle commands, no network,

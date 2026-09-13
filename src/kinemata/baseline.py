@@ -52,6 +52,7 @@ from datetime import date
 from pathlib import Path
 
 from .bypass import Bypass, is_strays_scope
+from .parity import is_parity_scope
 
 #: Where a project's accepted findings live when it does not say otherwise.
 #: Dotted and in the project root: it belongs to the repository, not to a
@@ -131,6 +132,15 @@ class Accepted:
                 f"{self.path}: {self.entry_id} declared by nothing{times} "
                 f"-- {self.text[:60]}"
             )
+        # Parity records read as their own sentence too, and which *way* the
+        # disagreement runs is in the scope rather than in a field -- so the
+        # scope is what this reads, instead of restating the direction here.
+        if is_parity_scope(self.registry):
+            way = self.registry.rsplit(":", 1)[-1]
+            missing = "declared by nothing" if way == "undeclared" else (
+                "produced by nothing"
+            )
+            return f"{self.path}: {self.entry_id} {missing}{times}"
         return (
             f"{self.path}: {self.antipattern!r} bypasses {self.entry_id}{times} "
             f"-- {self.text[:60]}"

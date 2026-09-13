@@ -59,7 +59,14 @@ from .adapters.substitutions import Substitutions
 from .baseline import BASELINE_NAME
 from .bypass import MODE_FILTERS, git_ignored
 from .citations import DEFAULT_ACCOMPANY_MAX
-from .claims import CLAIMS_REGISTRY, EXTERNAL_TIMEOUT, Counted, Promise, _excluded
+from .claims import (
+    CLAIMS_REGISTRY,
+    EXTERNAL_TIMEOUT,
+    ORACLE_TIMEOUT,
+    Counted,
+    Promise,
+    _excluded,
+)
 from .context import STRIPPERS, escapes
 from .contract import (
     BaseRegistry,
@@ -69,6 +76,7 @@ from .contract import (
     usable_boundary,
 )
 from .gates import Gate
+from .parity import Oracle
 from .provenance import DEFAULT_STALE_AFTER, PROVENANCE_REGISTRY
 from .resources import (
     RESOURCE_TABLE,
@@ -147,6 +155,9 @@ class Settings:
     #: number of links it therefore skips is printed rather than assumed.
     external: bool = False
     external_timeout: float = EXTERNAL_TIMEOUT
+    #: How long any declared oracle subprocess may run before it is killed and
+    #: reported unreachable. See :data:`kinemata.claims.ORACLE_TIMEOUT`.
+    oracle_timeout: float = ORACLE_TIMEOUT
     #: Paths a design says it will produce. Held open while absent, and failing
     #: once they exist, once nothing cites them, or once their date has passed --
     #: three ways of noticing that the list has outlived the work it describes.
@@ -156,6 +167,10 @@ class Settings:
     #: :class:`kinemata.claims.Counted` for why the comparison is exact.
     #: Empty unless declared: no project spawns a process it did not ask for.
     counts: tuple[Counted, ...] = ()
+    #: Registry-level oracles: what the project's code actually produces, set
+    #: against what a registry declares. See :mod:`kinemata.parity`. Empty
+    #: unless declared, for the reason above.
+    parities: tuple[Oracle, ...] = ()
     #: Where accepted findings are recorded. Always a path, even when no file is
     #: there yet -- ``baseline --record`` has to know where to write the first
     #: one, and a project that has never recorded is the normal starting state.
@@ -620,6 +635,7 @@ def load(path: str | Path) -> Settings:
     declared_checks = {
         "[[registry]]": bool(declarations),
         "[[count]]": bool(raw.get("count")),
+        "[[parity]]": bool(raw.get("parity")),
         "[[gate]]": bool(raw.get("gate")),
         "[claims]": raw.get("claims") is not None,
         "[context]": raw.get("context") is not None,
@@ -756,9 +772,13 @@ def load(path: str | Path) -> Settings:
         commits_in=tuple(claims.get("commits_in", ())),
         external=bool(claims.get("external", False)),
         external_timeout=float(claims.get("external_timeout", EXTERNAL_TIMEOUT)),
+        oracle_timeout=float(claims.get("oracle_timeout", ORACLE_TIMEOUT)),
         promised=_promised(raw.get("promise"), claims, path),
         counts=_build_counts(raw.get("count", []), path,
                              _commands(raw.get("command"), path)),
+        parities=_build_parities(raw.get("parity", []), path,
+                                 _commands(raw.get("command"), path),
+                                 [built.name for built in registries]),
         baseline=root / project.get("baseline", BASELINE_NAME),
         gates=_build_gates(raw.get("gate", []), path),
         unfitted=tuple(unfitted),
@@ -1299,6 +1319,65 @@ def _build_counts(
                 command=argv,
                 extract=str(spec["extract"]),
                 label=str(spec.get("label", "count")),
+                directory=str(spec.get("directory", ".")),
+            )
+        )
+    return tuple(built)
+
+
+def _build_parities(
+    declarations: list[dict[str, Any]],
+    path: Path,
+    commands: dict[str, tuple[str, ...]] | None,
+    registries: list[str],
+) -> tuple[Oracle, ...]:
+    """``[[parity]]`` tables, refused rather than skipped when incomplete.
+
+    A parity declaration naming a registry that does not exist is refused here
+    rather than at the command, because the two failures look identical from
+    the outside and only one of them is the project's mistake: a run that
+    reports nothing because the name was misspelled is indistinguishable from a
+    project whose declaration and code agree.
+    """
+    known = commands or {}
+    built: list[Oracle] = []
+    for index, spec in enumerate(declarations):
+        if spec.get("command") and spec.get("run"):
+            raise ConfigError(
+                f"{path}: [[parity]] {index} declares both 'command' and 'run'; "
+                "one names the oracle inline, the other names a declared one."
+            )
+        if spec.get("run"):
+            name = str(spec["run"])
+            if name not in known:
+                raise ConfigError(
+                    f"{path}: [[parity]] {index} runs {name!r}, which no "
+                    f"[command] declares (known: {', '.join(sorted(known)) or 'none'})"
+                )
+            argv: tuple[str, ...] = known[name]
+        else:
+            argv = tuple(str(part) for part in spec.get("command", ()))
+
+        missing = [key for key in ("registry", "extract") if not spec.get(key)]
+        if not argv:
+            missing.append("command")
+        if missing:
+            raise ConfigError(
+                f"{path}: [[parity]] {index} is missing {', '.join(missing)}"
+            )
+        target = str(spec["registry"])
+        if target not in registries:
+            raise ConfigError(
+                f"{path}: [[parity]] {index} names registry {target!r}, which "
+                f"no [[registry]] declares "
+                f"(known: {', '.join(sorted(registries)) or 'none'})"
+            )
+        argv += tuple(str(part) for part in spec.get("args", ()))
+        built.append(
+            Oracle(
+                registry=target,
+                command=argv,
+                extract=str(spec["extract"]),
                 directory=str(spec.get("directory", ".")),
             )
         )

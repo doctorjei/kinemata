@@ -304,6 +304,14 @@ note = "the sdist builds and tests itself away from this tree"
 command = "kinemata context"
 note = "the session-load ceiling; refuses here, and the step pins the refusal"
 
+# The same shape, for the same reason. This repository declares no `[[parity]]`
+# -- no registry here has a set the code can print, the bibliography being a
+# list of citations rather than something produced -- so the command refuses,
+# and the refusal is what the step asserts.
+[[gate]]
+command = "kinemata parity"
+note = "declaration against what the code produces; refuses here, and the step pins it"
+
 # Two findings from `kinemata unused`, reviewed 2026-09-09 and set aside. This
 # is the second kind of promise -- not a file the project will produce, but a
 # question somebody answered and dated so the answer expires rather than

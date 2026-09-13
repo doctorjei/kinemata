@@ -180,3 +180,20 @@ jobs:
             echo "step should now run it and expect 0." >&2
             exit 1
           fi
+      # The same claim about the same kind of refusal. No registry here has a
+      # set the code can print -- the bibliography is a list of citations, not
+      # something produced -- so nothing declares `[[parity]]` and the command
+      # refuses by design.
+      - name: parity refuses, this repository declaring no oracle
+        run: |
+          set +e
+          kinemata parity
+          status=$?
+          set -e
+          if [ "$status" -ne 2 ]; then
+            echo "kinemata parity exited $status; expected 2." >&2
+            echo "This repository declares no [[parity]], so a refusal is the" >&2
+            echo "claim being pinned. If one was just declared, this step" >&2
+            echo "should now run it and expect 0." >&2
+            exit 1
+          fi

@@ -56,6 +56,8 @@ from .context import measure
 from .contract import BaseRegistry, Entry
 from .gates import WORKFLOW_DIR, enforced
 from .literals import clusters
+from .parity import Disagreement, Parity, parity_scope
+from .parity import survey as parity_survey
 from .projection import project
 from .prose import ILLUSTRATION_ROLE
 from .provenance import (
@@ -652,6 +654,114 @@ def cmd_undeclared(args: argparse.Namespace) -> int:
     return 0
 
 
+def _parity(
+    args: argparse.Namespace, settings: Settings, target: Path
+) -> list[Parity]:
+    """The parity run, shared by ``parity`` and ``baseline``.
+
+    Shared for the reason ``_strays`` is: the command that writes the exemption
+    list has to run every check that feeds it, or ``--prune`` deletes records
+    for a source it never looked at.
+    """
+    specs = [
+        spec for spec in settings.parities
+        if not args.registry or spec.registry == args.registry
+    ]
+    return parity_survey(
+        settings.registries, specs, target, settings.oracle_timeout
+    )
+
+
+def cmd_parity(args: argparse.Namespace) -> int:
+    """Declared entries against the set the project's code actually produces.
+
+    The positive twin of the registry scan: everywhere else a second spelling is
+    the finding, and here a **disagreement** is. Both directions gate, because
+    they are different mistakes -- a declaration that is short, and one that has
+    outlived the code -- and a check reporting only one of them would leave the
+    other looking settled.
+
+    **Refuses when nothing declares an oracle** (exit 2), the way ``context``
+    refuses a project with no ceiling. Running with no ``[[parity]]`` would
+    print a clean sheet about a question nobody asked, which is the inert signal
+    this package exists to prevent.
+
+    **A blocked oracle fails.** Not a note: in CI, "printed a warning and exited
+    0" is indistinguishable from a pass, and an oracle that cannot answer means
+    the check is not running at all.
+    """
+    settings = _settings(args)
+    if not settings.parities:
+        print(
+            "error: no [[parity]] declared: nothing says what this project's "
+            "code actually produces. Declare a registry, an oracle command and "
+            "an extract, or do not run this.",
+            file=sys.stderr,
+        )
+        return 2
+
+    results = _parity(args, settings, _target(args, settings))
+    paired: list[tuple[str, Bypass, Disagreement]] = []
+    for result in results:
+        for item in result.disagreements():
+            paired.append(
+                (parity_scope(result.registry, item.direction),
+                 item.finding(), item)
+            )
+
+    baseline = Baseline.load(settings.baseline)
+    split = baseline.split(
+        [(scope, hit) for scope, hit, _ in paired],
+        scope=[name for result in results for name in result.scopes()],
+    )
+    exempt = {id(hit) for _, hit in split.accepted}
+    # Keyed off the pairing built above rather than by asking each result for
+    # its disagreements again: those are fresh objects every call, so a second
+    # ask would match nothing against the exemptions just resolved.
+    live: dict[str, list[Disagreement]] = {}
+    for _, hit, item in paired:
+        if id(hit) not in exempt:
+            live.setdefault(item.registry, []).append(item)
+
+    failed = 0
+    for result in results:
+        shown = live.get(result.registry, [])
+        if result.blocked:
+            print(f"# {result.registry}")
+            print(f"  BLOCKED: {result.blocked}", file=sys.stderr)
+            failed += 1
+            continue
+        if not shown:
+            if not args.quiet:
+                print(
+                    f"# {result.registry}: {result.declared} declared, "
+                    f"{result.produced} produced, in agreement."
+                )
+            continue
+        print(f"# {result.registry}")
+        for item in shown:
+            print(f"  {item}")
+        failed += len(shown)
+
+    if split.accepted and not args.quiet:
+        until = f", until {baseline.until}" if baseline.until else ""
+        print(f"\nbaseline: {len(split.accepted)} disagreement(s) accepted as "
+              f"pre-existing in {settings.baseline.name}{until}")
+    if split.stale and not args.quiet:
+        gone = sum(item.count for item in split.stale)
+        print(f"{gone} accepted record(s) no longer present "
+              "-- `kinemata baseline --prune` drops them.")
+
+    if failed:
+        print(
+            f"\nFAIL: {failed} disagreement(s) between a declaration and what "
+            "the code produces.",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
 def cmd_unused(args: argparse.Namespace) -> int:
     """Declared entries nothing in the tree mentions. **Advisory, always.**
 
@@ -784,6 +894,7 @@ def _verify(args: argparse.Namespace, settings: Settings) -> Verification:
         promised=settings.promised,
         external=settings.external,
         timeout=settings.external_timeout,
+        oracle_timeout=settings.oracle_timeout,
     )
 
 
@@ -1596,6 +1707,16 @@ def cmd_baseline(args: argparse.Namespace) -> int:
     # has already refused `--record`/`--prune` if one was given.
     findings += _gating_strays(_strays(args, settings, _target(args, settings)))
 
+    # Parity, for the third time and the same reason. Its oracles are declared
+    # commands, so this is the second place `baseline` spawns a subprocess --
+    # accepted knowingly, because a scan that does not run cannot author the
+    # exemptions it is about to rewrite.
+    findings += [
+        finding
+        for result in _parity(args, settings, _target(args, settings))
+        for finding in result.findings()
+    ]
+
     try:
         baseline = Baseline.load(settings.baseline)
     except BaselineError:
@@ -1759,6 +1880,12 @@ def build_parser() -> argparse.ArgumentParser:
                               "declare (advisory while the registry is open)")
     und.add_argument("path", nargs="?", help="limit the scan to this path")
     und.set_defaults(func=cmd_undeclared)
+
+    par = sub.add_parser("parity", parents=[common],
+                         help="gate: a declaration and what the code actually "
+                              "produces, set against each other")
+    par.add_argument("path", nargs="?", help="limit the scan to this path")
+    par.set_defaults(func=cmd_parity)
 
     unu = sub.add_parser("unused", parents=[common],
                          help="advisory: declared entries nothing mentions "

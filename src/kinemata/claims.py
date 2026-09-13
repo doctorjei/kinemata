@@ -237,6 +237,14 @@ USER_AGENT = "kinemata-claims/1.0 (documentation link check)"
 
 EXTERNAL_TIMEOUT = 10.0
 
+#: How long an oracle subprocess may run before it is killed and reported
+#: unreachable. Deliberately far above any plausible oracle -- one may run the
+#: subject's whole test suite -- because this bound is not here to keep oracles
+#: quick. It is here so that an oracle which never returns **fails** instead of
+#: hanging the gate forever, which is the one failure a declared check cannot
+#: report about itself. Settable as ``[claims] oracle_timeout``.
+ORACLE_TIMEOUT = 600.0
+
 
 class ClaimsError(Exception):
     """A claims declaration that cannot be honored.
@@ -888,24 +896,55 @@ def counted_claims(text: str, spec: Counted) -> Iterator[tuple[str, str]]:
 INTERPRETER = "{python}"
 
 
-def actual_count(spec: Counted, root: Path) -> str | None:
-    """Run the oracle. ``None`` when it cannot be reached -- never a pass.
+def run_oracle(
+    command: Sequence[str],
+    root: Path,
+    directory: str = ".",
+    timeout: float = ORACLE_TIMEOUT,
+) -> tuple[str | None, str]:
+    """What an oracle printed, or ``None`` and why not -- never a pass.
+
+    **The reason is returned rather than inferred by the caller**, because the
+    ways to reach ``None`` are not one condition and a reader acts on them
+    differently: a command that is not installed, and one that had to be
+    killed, read identically in a gate that only says the check did not settle.
+
+    ``stdout`` and ``stderr`` are joined and the exit status is ignored, so the
+    oracle is the text rather than the return code -- a collector that reports
+    its total on a non-zero exit is the motivating case and is not an error.
+
+    Kept here, and used by every declared oracle in this package, so that a
+    second caller does not grow a second copy of the ``{python}`` substitution
+    and the timeout rule.
+    """
+    argv = [sys.executable if part == INTERPRETER else part for part in command]
+    try:
+        result = subprocess.run(
+            argv, cwd=str(root / directory), capture_output=True, text=True,
+            check=False, timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return None, f"did not finish within {timeout:g}s and was killed"
+    except (OSError, ValueError) as error:
+        return None, f"could not be run ({type(error).__name__})"
+    return result.stdout + result.stderr, ""
+
+
+def actual_count(
+    spec: Counted, root: Path, timeout: float = ORACLE_TIMEOUT
+) -> tuple[str | None, str]:
+    """Run the oracle: the value, or ``None`` and why not -- never a pass.
 
     The value comes back as the text the oracle printed, stripped at the edges
     only; see :class:`Counted` for why nothing further is done to it.
     """
-    command = [
-        sys.executable if part == INTERPRETER else part for part in spec.command
-    ]
-    try:
-        result = subprocess.run(
-            command, cwd=str(root / spec.directory), capture_output=True, text=True,
-            check=False,
-        )
-    except (OSError, ValueError):
-        return None
-    found = re.search(spec.extract, result.stdout + result.stderr)
-    return found.group(1).strip() if found else None
+    output, why = run_oracle(spec.command, root, spec.directory, timeout)
+    if output is None:
+        return None, why
+    found = re.search(spec.extract, output)
+    if found is None:
+        return None, "produced no value"
+    return found.group(1).strip(), ""
 
 
 @dataclass(frozen=True)
@@ -1159,6 +1198,7 @@ def verify(
     today: date | None = None,
     external: bool = False,
     timeout: float = EXTERNAL_TIMEOUT,
+    oracle_timeout: float = ORACLE_TIMEOUT,
 ) -> Verification:
     """Falsify every claim the prose makes about this tree.
 
@@ -1430,7 +1470,9 @@ def verify(
                 f"{promise.described()} (deferred until {promise.until.isoformat()})"
             )
 
-    _verify_counts(root, suffixes, exclusions, archives, counts, found)
+    _verify_counts(
+        root, suffixes, exclusions, archives, counts, found, oracle_timeout
+    )
     found.broken.sort(key=lambda c: (c.path, c.line))
     return found
 
@@ -1442,15 +1484,16 @@ def _verify_counts(
     archives: Sequence[str],
     counts: Sequence[Counted],
     found: Verification,
+    oracle_timeout: float = ORACLE_TIMEOUT,
 ) -> None:
     """Values the prose states, against what the oracle actually reports."""
     for spec in counts:
-        truth = actual_count(spec, root)
+        truth, why = actual_count(spec, root, oracle_timeout)
         if truth is None:
             # Declared and unreachable is a failure, not a note. The project
             # asked for this check; a broken oracle means it is not running.
             found.blocked.append(
-                f"{spec.label}: {' '.join(spec.command)} produced no value"
+                f"{spec.label}: {' '.join(spec.command)} {why}"
             )
             continue
         for path in _walk(root, suffixes):

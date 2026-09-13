@@ -138,6 +138,8 @@ suffixes = [".md"]
 historical = ["archives/"]         # records that cite what was true when written
 external = true                    # check cited URLs; off by default, and the
                                    # number skipped is printed when it is off
+oracle_timeout = 600               # seconds an oracle may run before it is
+                                   # killed and reported as a failure
 
 # Something deferred, and the date the deferral lapses. `path` for a file the
 # project will produce; `what` for anything else. `until` is required on both.
@@ -165,6 +167,15 @@ pattern = 'the brief is \*\*(\d+) lines\*\*'
 run = "lines"
 args = ["docs/brief.md"]
 extract = '(\d+)'
+
+# What a registry declares, against the set the project's code actually
+# produces. Same oracle form as `[[count]]`: `command` names it inline, `run`
+# names a `[command]` one, never both. Group 1 of every `extract` match is one
+# identifier, matched against the whole output -- anchor with an inline `(?m)`.
+[[parity]]
+registry = "constants"
+command = ["{python}", "-m", "pkg.settings", "--keys"]
+extract = '(?m)^([A-Z_]+)$'
 
 # Checks that must run, and the file that must run them.
 [[gate]]
@@ -215,13 +226,13 @@ TOML. Subclass `kinemata.contract.BaseRegistry` and everything but `entries()` i
 
 ⚑ **This makes the config name code that gets executed.** That line was already crossed by
 `[[count]]`, whose oracles are shell commands run through `subprocess`. kinemata still reads the
-code it *checks* with `ast` and never executes it; the count oracle and a named adapter are the
-two exceptions, both explicit in the config file.
+code it *checks* with `ast` and never executes it; a declared oracle — `[[count]]`'s or
+`[[parity]]`'s — and a named adapter are the exceptions, all explicit in the config file.
 
-A config needs **at least one check** — a registry, a count, a gate, `[claims]` or `[context]` —
-and is refused if it declares none. It does **not** need a registry: `claims` and `context` run
-on a config that declares no registry at all, and a registry-shaped command refuses rather than
-scanning nothing.
+A config needs **at least one check** — a registry, a count, a parity, a gate, `[claims]`,
+`[context]` or `[citations] provenance` — and is refused if it declares none. It does **not** need
+a registry: `claims` and `context` run on a config that declares no registry at all, and a
+registry-shaped command refuses rather than scanning nothing.
 
 **Per-registry options:** `suffixes`, `boundary`, `match_mode`, `machinery`, `case_sensitive`,
 `allow_empty`, `source`, `modules`, `closed`, on `bibliography` — `interpreted` and
@@ -301,6 +312,7 @@ does not want this.
 | `kinemata unused` | declared entries nothing mentions outside the files declaring them | never; refuses outright if no registry can say (needs `machinery` or entry `home`) |
 | `kinemata check` | the gate | a strong finding not covered by the baseline, or a baseline past its `until` |
 | `kinemata claims` | documentation gate, ratcheted; also verifies `[[gate]]` declarations | a dead claim the baseline does not already accept, a baseline past its `until` that exempts claims here, or a declared gate that does not run |
+| `kinemata parity` | membership gate, ratcheted — what a registry declares, against the set an oracle says the code produces. Both directions: produced and declared by nothing, declared and produced by nothing | a disagreement in either direction that the baseline does not already accept, or an oracle that could not answer. Refuses outright (exit 2) if no `[[parity]]` is declared |
 | `kinemata context` | session-load gate | measured bytes exceed `budget` |
 | `kinemata baseline` | shows accepted findings; `--record --until`, `--prune` | — |
 | `kinemata stamp` | mints a citation stamp, or decodes one; reads no config | the text given is not a stamp |
@@ -352,6 +364,13 @@ outside, so the following are `ConfigError`, not silent skips:
 - a config declaring **no check at all** — every command it configures would pass by doing nothing
 - a `[[promise]]` with no `until`, an unparseable date, or a `note` with no `by`
 - a `[[count]]` naming a `run` no `[command]` declares, or giving both `command` and `run`
+- a `[[parity]]` naming a `registry` no `[[registry]]` declares — refused at load rather than at
+  the command, because a misspelled name and a project whose declaration and code agree produce
+  the same silence, and only one of them is a mistake
+- a `[[parity]]` giving both `command` and `run`, naming a `run` no `[command]` declares, or
+  missing `registry`, `extract` or a command. `extract` has no default: whole lines would read a
+  traceback or a shell warning as identifiers, and the disagreement would then be reported against
+  the project's declaration
 - an unknown `boundary` on a `substitutions` registry
 - a `match_mode` that selects no filter table. An unknown one used to *work*: it landed on a
   table with no entry for the suffix, filtered nothing, and so behaved as `raw` by accident
@@ -439,15 +458,19 @@ multiplicity counted. Line numbers are excluded; path is included.
 
 `review` is unaffected by the baseline: the ratchet governs the gate, not the advice.
 
-**One list, three gates.** `check` puts the code findings through it, `claims` puts the
-documentation findings through it, and `undeclared` puts a closed registry's strays through it
-— each reading the part it scans. A second exemption list was the alternative and is the failure
+**One list, every gate that ratchets.** `check` puts the code findings through it, `claims` puts
+the documentation findings through it, `undeclared` puts a closed registry's strays through it,
+and `parity` puts the disagreements between a declaration and its oracle through it — each
+reading the part it scans. A second exemption list was the alternative and is the failure
 mode: two lists eventually disagree about what a project accepted, and the one nobody is reading
 is the one still exempting something real. Records are tagged with the check that produced them,
 so no gate reports another's as fixed — it names them instead, because silence about part of an
-exemption list reads exactly like having accounted for all of it. `kinemata baseline` runs all
-three, being the only command that writes the file; a `--prune` that covered two of them would
-delete the third's records on the strength of never having looked.
+exemption list reads exactly like having accounted for all of it. `kinemata baseline` runs every
+one of those scans, being the only command that writes the file; a `--prune` covering some of
+them would delete the rest's records on the strength of never having looked. Parity's records are
+tagged `parity:<registry>:undeclared` and `parity:<registry>:unproduced`, and **both scopes are
+reported as judged on every run, including the empty ones** — a direction that found nothing is
+still a direction that looked.
 
 ⚑ **Catch A joined the list 2026-09-13, and until then closing a registry was a cliff.** A
 project with one pre-existing undeclared identifier had to choose between an open registry whose
@@ -476,13 +499,21 @@ They have no path and line to fingerprint, and accepting one would build the thi
 | `[[count]]` | the declared oracle command's output |
 | `[[gate]]` | the text of the file declared in `where` |
 
-**`[[count]]` settles a value, of which a number is one kind.** It is the one positive check
-here: everywhere else a second spelling is the finding, while this one fails when the document
-and the oracle *disagree*. The comparison is exact — edge whitespace is stripped from both
-sides and nothing else is touched. Nothing is converted, coerced or rounded, so a document
+**`[[count]]` settles a value, of which a number is one kind.** It is the one claim kind that
+fails on a *disagreement*: everywhere else in this table a missing or dead thing is the finding,
+while this one fails when the document and the oracle say different things. The comparison is
+exact — edge whitespace is stripped from both sides and nothing else is touched. Nothing is
+converted, coerced or rounded, so a document
 saying "16 KB" is not settled by an oracle that emits the byte count; a project wanting both
 spellings checked declares two entries, each with its own `pattern` and `extract`. That limit
 is deliberate: a wrong normalization does not fail, it passes.
+
+**One oracle discipline, and `[claims]` is where it is declared for all of it.** `kinemata parity`
+runs declared commands too, and inherits the rule above rather than restating it — edge whitespace
+stripped from the oracle's output, nothing else normalized. `oracle_timeout` is read from
+`[claims]` and bounds **every** declared oracle this package runs, a parity oracle as much as a
+count's: one that never returns has to fail rather than hang the gate, and expiry is reported the
+way any other unreachable oracle is.
 
 Negation is parsed: a claim inside a negated clause is a mention, not an assertion. Clause
 boundaries are `;:`, `but`, `however`, `whereas`, `while` — commas deliberately excluded.
@@ -582,16 +613,33 @@ limit is closed, in the same commit that closes it.**
   either. Review list, never a cut list — and it does not apply at all to a registry whose entries
   are declared to be *absent*, which it says rather than answering.
   ⚑ **It asks a positive question with a negative, static instrument**, which is why no amount of
-  tuning fixes it: separating a reader from a mention needs dataflow. The complement is published
-  instead — a project that needs the real answer asserts it against the same declaration during
-  its own test run, through `kinemata.access`.
+  tuning fixes it: separating a reader from a mention needs dataflow. Two complements are
+  published instead. A project that needs the real answer at run time asserts it against the same
+  declaration during its own test run, through `kinemata.access`. A project whose code can
+  **print** the set it produces declares a `[[parity]]` instead, and the `unproduced` direction is
+  the question this entry approximates, answered from an oracle rather than from a mention: no
+  search, so nothing to mistake.
   ⚑ **Measured, and worth knowing before turning it on: no true positive is recorded anywhere.**
   0/3 against the labeled incident, four reports at the first adopter and all four false, and six
   in this repository today with none of them defects — two of those six carry declarations saying
   they are correct, and four are bibliography keys, where uncited means *ready* rather than dead.
-  ⚑ **This mark is the one most likely to move.** It is a boundary of the negative, static
-  classification; an instrument that made *"this declared entry must be reached"* expressible
-  would dissolve it rather than improve it.
+  ⚑ **The mark stays, and it is now scoped to this instrument rather than to the question.**
+  Mention scanning cannot separate a reader from a mention, which is permanent; but *"this
+  declared entry must be produced"* stopped being unexpressible on 2026-09-13, when `kinemata
+  parity` began answering it for a registry whose project can print its set. So the boundary is
+  `unused()`'s, not the tool's — and where a set can be printed, `unused` is the weaker of two
+  instruments and should not be the one a project relies on. Where nothing can print it, this is
+  still all there is.
+- **boundary** · **Parity reaches only a set the project can print, and it trusts the oracle.**
+  The comparison is against what a declared command prints, so a registry whose membership nothing
+  can produce is out of reach — not for want of work here, but because there is no oracle to ask.
+  And the oracle is a **reminder** in the sense `docs/structure.md` §1 uses: the config naming the
+  command and the command itself both live in the tree the constrained agent writes, so a
+  disagreement can be made to go away by editing either one. What makes that survivable is what
+  makes the baseline survivable — it is a visible file change. The one thing it will not accept
+  quietly is an oracle that cannot answer: not installed, killed on timeout, or an `extract` with
+  no capture group is a **failure**, never a skip. An oracle that runs and matches nothing is a
+  different thing — an empty set, which is a real answer and usually a finding.
 - **boundary** · **A baseline is an allowlist.** An agent can silence a finding by re-recording
   it. What makes that survivable is that it is a committed file change, visible in review.
 - **boundary** · **`[[gate]]` verifies text presence, not execution.** Blind to a step disabled by
@@ -656,6 +704,17 @@ limit is closed, in the same commit that closes it.**
 
   So the honest scope of Catch A: **registries whose entries are members of a namespace the
   project can describe.** Keys and reference keys are; code shapes and forbidden spellings are not.
+
+  ⚑ **A recognizer stopped being the only route on 2026-09-13.** The membership question is also
+  what `kinemata parity` asks, and an oracle needs no `candidates()` because it does no searching
+  — so the *dependence on a recognizer* is a property of the static catch rather than of the
+  question. No disposition above moves, and the reasons differ: `code-patterns` and
+  `substitutions` stay a **boundary**, since a negative registry has no membership list for a
+  command to print either; `python-constants` stays a deliberately unclosed **gap in the static
+  catch**, because the shared namespace is what makes scanning a tree for stray SCREAMING_CASE
+  unusable and parity never scans the tree. What a project gets for `python-constants` today is
+  the other question — *does this declaration equal the set the code produces* — answerable
+  without closing the registry at all.
 - **accepted** · **~~Text a project carries but did not author can only be excluded.~~** A vendored licence or a
   policy adopted as received cannot carry a stamp, because stamping it means editing text that is
   not the project's to edit — so its citations were findings the project could never drive down,
@@ -698,19 +757,28 @@ down, and the two shapes at the end are the findings that matter most.
 
 **What the model does not reach:**
 
-- **accepted** · **The registry mechanism is purely negative.** ⚑ **Marked `accepted`, not
-  `boundary`** — the polarity is a property of *that mechanism*, not of the tool, and the twin is
-  reachable by an instrument nobody has built rather than by one that cannot exist. Marking it
-  permanent is the mistake this whole section was corrected for on 2026-09-13.
-  It expresses *"this value must not be re-spelled
+- **accepted** · **~~The registry mechanism is purely negative.~~ The registry *scan* is.**
+  ⚑ **Marked `accepted`, not `boundary`** — the polarity is a property of *that mechanism*, not of
+  the tool, and the twin was reachable by an instrument nobody had built rather than by one that
+  cannot exist. Marking it permanent is the mistake this whole section was corrected for on
+  2026-09-13; the instrument was built the same day, which is the argument for the mark rather
+  than a coincidence beside it.
+  The scan expresses *"this value must not be re-spelled
   outside its home"*, and under negative polarity agreement produces a finding while disagreement
   produces silence. Of 326 conformance checks in that project's suite, **291 were not expressible
   (89%)**, and this shape was the single largest reason — 125 test functions across four
   manifest-parity files.
   ⚑ **The twin is expressible for a value a document states, and was already** when this entry
   said it was not: a `[[count]]` declares the pattern, an oracle command and an exact comparison.
-  What has no expression is the twin aimed at **declared data** — *this registry entry must equal
-  what the code produces* — which is the empty quadrant rather than a property of the tool.
+  ⚑ **Partly closed 2026-09-13. This entry said the twin aimed at declared data had no expression
+  — "the empty quadrant" — and the cell it meant was the one `[[count]]` was already sitting in.**
+  `kinemata parity` now sits there too: a registry's declared identifiers against the set an
+  oracle says the code produces, both directions, gating on either. **What it closes is
+  membership**, the half of that project's 125 manifest-parity test functions needing no new
+  surface on `Entry`. The other half is still unexpressed — a declared entry's *fields* against
+  the row the code builds — which is why the entry stays open and `accepted` rather than closed:
+  the shape it names is reachable, and not all of it has been reached. `docs/structure.md` § The
+  second axis is where the mechanism is classified.
 - **accepted** · **Nothing here observes a running program.** A rule about what a program *does at run time* — a
   session-wide interposition on a write funnel, for instance — is outside every mechanism, and
   the complement is published instead: the project's own tests import the same declaration and

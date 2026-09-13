@@ -174,6 +174,12 @@ meaning nothing. `mentions_are_uses` is false for a registry whose entries are d
 *absent* — a list of retired names is honored precisely when nothing says them, so the question
 does not apply and is refused rather than answered with the whole list.
 
+⚑ **Both knobs narrow a question that mention-scanning can only approximate, and since 2026-09-13
+there is an instrument that answers it outright** for a registry whose project can *print* the set
+its code produces: `[[parity]]` compares the declaration against that set instead of searching the
+tree for evidence of use. It does not retire these knobs — most registries have no such oracle, and
+the scan is what those still get.
+
 **`boundary` and `match_mode`** are declared because a data model's idea of an identifier is not
 the contract's. A dotted keyspace key must not match inside a longer dotted key, so a dot may not
 abut it; a Python constant is routinely read through its module, so a dot **must** be allowed to.
