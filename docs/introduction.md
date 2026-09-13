@@ -566,11 +566,15 @@ limit is closed, in the same commit that closes it.**
 - **boundary** · **Semantic duplication is out of reach by design.** Rules enforced twice in
   dissimilar code are not detectable syntactically.
 - **boundary** · **Greenfield coverage: 4 of 13 instances** across 37 attributable commits (31%).
-  Split: 5 literal / 4 code / 4 semantic. ⚑ **The ceiling is derived, not asserted:** the nine
-  instances out of reach are the semantic ones and the drifted copies, and both of those are
-  boundaries in their own right, immediately above and below. So this figure is what the
-  instrument can do rather than how far it has got — which is why it is marked permanent while
-  being a measurement rather than a property.
+  Split: 5 literal / 4 code / 4 semantic. ⚑ **The ceiling is derived, not asserted — and the
+  derivation names three reasons, not the two this entry published until it was audited.** Four of
+  the nine out of reach are semantic and four are drifted copies, each a boundary in its own right
+  immediately above and below; **the ninth is out of reach by locus** — both of its carriers live
+  in a configuration file another tool writes, and nothing here reads outside the source tree it is
+  pointed at. The third reason is the one worth keeping, because it says reach is decided by
+  resemblance **and** by where the carriers sit, and exactly one measured instance separates them.
+  So this figure is what the instrument can do rather than how far it has got — which is why it is
+  marked permanent while being a measurement rather than a property.
 - **boundary** · **Drift defeats shape matching.** The copies worth catching are the drifted
   ones; drift removes the signal. This is why clone detection was not shipped.
 - **boundary** · **`unused()` detects mention, not use.** Every declared entry is mentioned by
