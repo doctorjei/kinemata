@@ -856,14 +856,28 @@ The third was an adopter who ran this across three of their own repositories and
 their **326-check conformance suite** against what these mechanisms can express. **291 were not
 expressible (89%)**, and the reasons were structural rather than gaps:
 
-- **This model is purely negative.** It says *a declared value must not be re-spelled elsewhere*.
-  Most conformance says the twin — *this row must equal what the code produces* — and under
-  negative polarity, agreement is a finding and disagreement is silence.
-- **This model is entirely static.** Checks about run-time behavior are outside it by
-  construction.
+- **The registry mechanism is purely negative.** It says *a declared value must not be re-spelled
+  elsewhere*. Most conformance says the twin — *this row must equal what the code produces* — and
+  under negative polarity, agreement is a finding and disagreement is silence. That accounted for
+  125 test functions in their suite, across four manifest-parity files.
+- **Nothing here observes a running program.** Checks about what the product *does* at run time —
+  their largest single item interposes on a write funnel during a test run — are outside every
+  mechanism described above.
 
-Neither is a defect and neither is being fixed on reflex; both are recorded because a project
-adopting the first idea usually already owns a pile of the second. The full defect list from that
+⚑ **Both bullets said "this model" until 2026-09-13, and both were wrong that way.** The first is
+a property of the *registry* layer; `kinemata claims` has been positive since before that audit —
+a path must exist, a link must resolve, a declared check must still run. The second said
+*"entirely static"*, which was already false when it was published: `[[count]]` runs an arbitrary
+declared command and compares its output to a value a document states, and has since 2026-09-05.
+The characterization was taken on report and never measured. **`docs/structure.md` § The second
+axis carries the classification that replaced these sentences** — polarity and what a mechanism
+observes, per mechanism.
+
+**The classification is selectable, not a ceiling.** A project that wants only the static,
+negative subset declares only that subset and gets exactly it: no oracle commands, no network,
+nothing executed. What is *not* implied is that other classes of mistake are out of scope — this
+tool's charge is checking for the mistakes an agent makes, and duplication is the class it was
+pointed at first. The full defect list from that
 audit, each item re-verified here, is in **`docs/introduction.md` § Known limits** — this section
 does not repeat it.
 

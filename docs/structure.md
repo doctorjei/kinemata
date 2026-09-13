@@ -124,22 +124,42 @@ optimizing for finishing.
 > whose constraints live only in its prose is a job description, and a job description does
 > not fail a build.
 
-### The second axis: a catch is still only as wide as what it can observe
+### The second axis: a catch is only as wide as what it can observe
 
 Reminder-versus-catch says who can disable a mechanism. It says nothing about *what the
 mechanism can see*, and that is a separate wall — the harder one.
 
-Every catch described in this document reads **source text at rest**. A rule about what a
-program does while running — which key paths a write funnel actually receives, what a request
-handler emits under load — is outside all of it, however well-declared. The first project to
-adopt this layer inventoried 326 conformance checks against it and found their largest single
-item was exactly that shape: a session-wide interposition on a write funnel, judging every path
-written during a test run. No amount of declaring reaches it.
+**Classify a mechanism on two properties, and say which one a proposal fails before arguing
+about it.** Neither property is a statement about this tool's charge, which is checking for the
+mistakes an agent makes; both are statements about one mechanism.
 
-**Say which axis a proposal fails before arguing about it.** A check that a rogue agent could
-switch off is a reminder and may still be worth building. A check whose subject never appears in
-the source is not a weak catch — it is a different instrument, and calling it a gap in this one
-sends people looking for a config key that cannot exist.
+| | Reads source text at rest | Runs a declared oracle | The project's own run |
+|---|---|---|---|
+| **Negative** — *this must not appear* | the duplication scan, the closed-world catch, `clusters`, `unused` | — | — |
+| **Positive** — *this must hold* | `path`, `link` and `[[gate]]` claims; the context ceiling | `commit` (git), `url` (the network), `[[count]]` (any declared command) | — |
+| **Behavioral** — *what the program did* | out of reach | out of reach | the run-time surface, asserted by the project's own tests |
+
+Two things that table is meant to stop.
+
+**Do not read the top-left cell as the tool.** The registry layer is negative and static because
+duplication is the class of mistake it was built for, not because the tool is. `[[count]]` runs
+an arbitrary declared command and compares its output to a value a document states — positive
+polarity, executing code — and it has done so since before the first outside audit called this
+tool *"entirely static."* That characterization was accepted here without being checked, and
+published in four places; the sentences are gone, and the table is what replaced them.
+
+**Do read the classification as something a project may choose.** A project that wants only the
+static, negative subset can declare only that subset and get exactly it — no oracle commands, no
+network, nothing executed. That is a supported configuration and a reasonable one, especially
+where a check runs against code nobody has reviewed. **Selectable is not the same as
+unreachable**, and the two were conflated here for four days.
+
+What stays genuinely out of reach is the bottom row's first two cells: a rule about what a
+program does while running — which key paths a write funnel actually receives, what a request
+handler emits under load. The first project to adopt this layer inventoried 326 conformance
+checks against it and found their largest single item was exactly that shape: a session-wide
+interposition on a write funnel, judging every path written during a test run. No amount of
+declaring reaches it, which is why the far side is published rather than approximated.
 
 The honest pairing is that static checking and run-time assertion are complements: declare the
 fact once here, and let the run-time suite assert the behavior, rather than expecting either to

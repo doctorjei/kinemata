@@ -1,12 +1,19 @@
 """Reaching a declared registry from the project's own code, while it runs.
 
-Every other mechanism here reads **source text at rest**, and that is a real
+No other mechanism here observes a **running program**, and that is a real
 boundary rather than a missing feature -- ``docs/structure.md`` draws it as the
 second axis. The first project to adopt this layer inventoried its 326-check
 conformance suite against the tool on 2026-09-09 and found 291 of the checks,
 89%, not expressible. Their largest single item was exactly the shape nothing
-static can see: a session-wide interposition on a key-store write funnel,
-judging every key path written during a test run.
+here can see: a session-wide interposition on a key-store write funnel, judging
+every key path written during a test run.
+
+⚠ **This paragraph said "reads source text at rest" until 2026-09-13, and that
+was wrong in a way worth naming.** :mod:`kinemata.claims` runs ``git``, reaches
+the network, and runs whatever command a ``[[count]]`` declares -- comparing its
+output against a value a document states. The boundary is not *static versus
+dynamic*; it is that kinemata executes **oracles about** a project and never the
+project under observation.
 
 This module is the complement to that boundary, not a way around it. A registry
 built from ``kinemata.toml`` is already a live Python object carrying

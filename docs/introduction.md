@@ -540,37 +540,80 @@ transforms, sum bytes, compare to `budget`. `-v` lists files largest-first.
 
 ## Known limits
 
-- **Semantic duplication is out of reach by design.** Rules enforced twice in dissimilar code
-  are not detectable syntactically.
-- **Greenfield coverage: 4 of 13 instances** across 37 attributable commits (31%). Split:
-  5 literal / 4 code / 4 semantic.
-- **Drift defeats shape matching.** The copies worth catching are the drifted ones; drift
-  removes the signal. This is why clone detection was not shipped.
-- **`unused()` detects mention, not use.** Every declared entry is mentioned by construction, so
-  it needs `machinery` or an entry `home` to mean anything and refuses without either. Review
-  list, never a cut list — and it does not apply at all to a registry whose entries are declared
-  to be *absent*, which it says rather than answering.
-- **A baseline is an allowlist.** An agent can silence a finding by re-recording it. What makes
-  that survivable is that it is a committed file change, visible in review.
-- **`[[gate]]` verifies text presence, not execution.** Blind to a step disabled by `if:`, a
-  job nothing triggers, or a command that runs and checks nothing. It does not parse YAML.
+**Every entry carries a disposition, and the two mean different things to someone deciding
+whether to adopt this.**
+
+- **boundary** — a property of the model rather than unfinished work. Reaching past it needs a
+  *different instrument*, not a fix here, and none is planned. Read these as permanent.
+- **accepted** — real, contingent, and revisitable. Nobody is working on it; more work would
+  move it. Read these as *decided for now*, not as settled forever.
+
+⚑ **The marks were added 2026-09-13 and are the point of the list, not decoration.** Until then
+every entry read the same way, so a permanent property of the data model and a sample size nobody
+had extended were published in one voice — and a reader had no way to tell which of the two they
+were looking at. A limits list that cannot distinguish those understates a tool to the people most
+carefully reading it.
+
+⚑ **Nothing mechanical checks these marks.** They are not falsifiable claims, so `kinemata claims`
+cannot see them; a mark that goes wrong goes wrong silently. **Re-read this section whenever a
+limit is closed, in the same commit that closes it.**
+
+- **boundary** · **Semantic duplication is out of reach by design.** Rules enforced twice in
+  dissimilar code are not detectable syntactically.
+- **boundary** · **Greenfield coverage: 4 of 13 instances** across 37 attributable commits (31%).
+  Split: 5 literal / 4 code / 4 semantic. ⚑ **The ceiling is derived, not asserted:** the nine
+  instances out of reach are the semantic ones and the drifted copies, and both of those are
+  boundaries in their own right, immediately above and below. So this figure is what the
+  instrument can do rather than how far it has got — which is why it is marked permanent while
+  being a measurement rather than a property.
+- **boundary** · **Drift defeats shape matching.** The copies worth catching are the drifted
+  ones; drift removes the signal. This is why clone detection was not shipped.
+- **boundary** · **`unused()` detects mention, not use.** Every declared entry is mentioned by
+  construction, so it needs `machinery` or an entry `home` to mean anything and refuses without
+  either. Review list, never a cut list — and it does not apply at all to a registry whose entries
+  are declared to be *absent*, which it says rather than answering.
+  ⚑ **It asks a positive question with a negative, static instrument**, which is why no amount of
+  tuning fixes it: separating a reader from a mention needs dataflow. The complement is published
+  instead — a project that needs the real answer asserts it against the same declaration during
+  its own test run, through `kinemata.access`.
+  ⚑ **Measured, and worth knowing before turning it on: no true positive is recorded anywhere.**
+  0/3 against the labeled incident, four reports at the first adopter and all four false, and six
+  in this repository today with none of them defects — two of those six carry declarations saying
+  they are correct, and four are bibliography keys, where uncited means *ready* rather than dead.
+  ⚑ **This mark is the one most likely to move.** It is a boundary of the negative, static
+  classification; an instrument that made *"this declared entry must be reached"* expressible
+  would dissolve it rather than improve it.
+- **boundary** · **A baseline is an allowlist.** An agent can silence a finding by re-recording
+  it. What makes that survivable is that it is a committed file change, visible in review.
+- **boundary** · **`[[gate]]` verifies text presence, not execution.** Blind to a step disabled by
+  `if:`, a job nothing triggers, or a command that runs and checks nothing. It does not parse
+  YAML.
   ⚑ It is also the only declaration available for *"this command must still work"*, which is a
   different claim from *"this check must run"* and is counted in the same number. Deliberate — the
   inventory asks whether every declared command is still run here, and that question is the same
   for both — but a reader of `gates: N of N` should know the count mixes them.
-- **`context` bounds bytes, not attention.** It measures what you *declare* is loaded; the
-  flattening is a model of a harness, not the harness.
-- **A CI workflow in the repository is editable by the agent it constrains.** Branch protection
+  ⚑ **Reading what a step *does* is a different instrument** — a YAML parse plus a model of the
+  runner, which would then be a second model of CI that drifts from the real one. Declined on that
+  basis rather than on cost, and the mirror-image hole in branch protection is the entry below.
+- **boundary** · **`context` bounds bytes, not attention.** It measures what you *declare* is
+  loaded; the flattening is a model of a harness, not the harness.
+- **boundary** · **A CI workflow in the repository is editable by the agent it constrains.**
+  Branch protection
   with the jobs as required status checks, and bypass disallowed, narrows this — but it catches
   a required job that **disappears or is renamed**, not one that still runs and checks nothing.
   `[[gate]]` has the mirror-image hole. Neither is a guarantee, and where the agent has no push
   credential at all, the credential's absence is already the stronger boundary.
-- **A dead external link is `404`/`410` and nothing else.** The `url` kind closed the gap where
+- **boundary** · **A dead external link is `404`/`410` and nothing else.** The `url` kind closed the gap where
   a scheme-carrying target was skipped entirely, but what replaced it is narrower than "the link
   works": a page that now redirects to a parking domain answers `200`, and a host that refuses
   an unfamiliar client answers `403`, which this reports as unchecked rather than dead. It
   settles *gone*, not *good*.
-- **The catch is dogfooded here only through the bibliography.** `code-patterns` and
+- **boundary** · **The catch is dogfooded here only through the bibliography.** ⚑ The mark covers
+  the *scope statement* below — Catch A reaches registries whose entries are members of a
+  describable namespace — which is permanent. It does **not** cover `python-constants`, which the
+  same entry calls a deliberately unclosed gap; that one is **accepted**, and a project that
+  declared a narrowing would close it. Two dispositions in one entry, said out loud rather than
+  averaged into one mark. `code-patterns` and
   `substitutions` cannot recognize their own identifiers and so cannot be closed; until a
   bibliography was declared, `kinemata undeclared` refused in this repository rather than
   reporting a false clean. A reference key *is* recognizable — that is what the stamp's
@@ -604,7 +647,7 @@ transforms, sum bytes, compare to `budget`. `-v` lists files largest-first.
 
   So the honest scope of Catch A: **registries whose entries are members of a namespace the
   project can describe.** Keys and reference keys are; code shapes and forbidden spellings are not.
-- **~~Text a project carries but did not author can only be excluded.~~** A vendored licence or a
+- **accepted** · **~~Text a project carries but did not author can only be excluded.~~** A vendored licence or a
   policy adopted as received cannot carry a stamp, because stamping it means editing text that is
   not the project's to edit — so its citations were findings the project could never drive down,
   and `[project] exclude` was the only answer. **Partly closed 2026-09-11** by the resource list:
@@ -613,7 +656,7 @@ transforms, sum bytes, compare to `budget`. `-v` lists files largest-first.
   a real one: `exclude` drops the file from every check, a resource entry keeps the claims check
   over it and relocates only the date. This repository still excludes its two verbatim documents,
   because a dead link inside a licence is not its to fix either.
-- **A resource entry dates a whole document, not a citation.** A citation added after the last
+- **accepted** · **A resource entry dates a whole document, not a citation.** A citation added after the last
   confirmation sits under a date that predates it. The unit was chosen deliberately — citation- or
   target-level entries would copy into a registry the facts the documents already state, which is
   the duplication this tool reports — and the cost is bounded rather than absent: the claims check
@@ -621,15 +664,22 @@ transforms, sum bytes, compare to `budget`. `-v` lists files largest-first.
   is not what keeps the citations true. Requiring the entry's date to be no older than the file's
   last commit would close it and was rejected: every documentation commit would then demand a
   re-confirmation, including the ones that touch no citation.
-- **The tree walk follows symlinked directories and says so.** Each directory is entered once by
-  real identity, and a link leaving the tree is announced on stderr. Before 2026-09-08 it did
-  not follow them at all, and a project reached that way scanned as empty.
-- **Run against two projects it did not grow up on** (`psf/requests`, `httpie/cli`), 2026-09-09.
-  756 documentation claims, 5 reports, **none true**; one `check` finding on httpie, and
-  `clusters` findings that were real. `requests` has no module-level string constants at all, so
-  the default adapter bound to nothing and the registry was refused as empty. Seven defects came
-  out of it, all boarded. **Two projects is not a survey** — both are widely-used Python
-  libraries with careful documentation, which is the easy case for a claims checker.
+- **boundary** · **The tree walk follows symlinked directories and says so.** Each directory is
+  entered once by real identity, and a link leaving the tree is announced on stderr. Before
+  2026-09-08 it did not follow them at all, and a project reached that way scanned as empty.
+- **accepted** · **Run against two projects it did not grow up on** (`psf/requests`,
+  `httpie/cli`), 2026-09-09. 756 documentation claims, 5 reports, **none true**; one `check`
+  finding on httpie, and `clusters` findings that were real. `requests` has no module-level string
+  constants at all, so the default adapter bound to nothing and the registry was refused as empty.
+  Seven defects came out of it, all boarded. **Two projects is not a survey** — both are
+  widely-used Python libraries with careful documentation, which is the easy case for a claims
+  checker.
+  ⚑ **This is the one entry on the list that more work would simply fix**, and it is marked
+  `accepted` rather than `boundary` for exactly that reason: nothing about the model limits the
+  sample, only effort has. The corpus is kept so the run can be repeated. **Treat every figure
+  above as measured on the easy case** — a project with sparse or stale documentation is the case
+  nobody here has run, and the claims checker is the mechanism most likely to behave differently
+  on it.
 
 ### Found by the first outside audit, 2026-09-09
 
@@ -639,15 +689,29 @@ down, and the two shapes at the end are the findings that matter most.
 
 **What the model does not reach:**
 
-- **The registry mechanism is purely negative.** It expresses *"this value must not be re-spelled
-  outside its home"*. Its natural twin — *"and here is the fact, which must **equal** what the
-  code produces"* — is not expressible, and under negative polarity agreement produces a finding
-  while disagreement produces silence. Of 326 conformance checks in that project's suite, **291
-  were not expressible (89%)**, and this shape was the single largest reason.
-- **Everything here is static.** Checks about what a program *does at run time* — a session-wide
-  interposition on a write funnel, for instance — are outside the tool by construction. This is a
-  real boundary and `structure.md` does not currently draw it: "reminder vs catch" says nothing
-  about static vs dynamic, and the second is the harder wall.
+- **accepted** · **The registry mechanism is purely negative.** ⚑ **Marked `accepted`, not
+  `boundary`** — the polarity is a property of *that mechanism*, not of the tool, and the twin is
+  reachable by an instrument nobody has built rather than by one that cannot exist. Marking it
+  permanent is the mistake this whole section was corrected for on 2026-09-13.
+  It expresses *"this value must not be re-spelled
+  outside its home"*, and under negative polarity agreement produces a finding while disagreement
+  produces silence. Of 326 conformance checks in that project's suite, **291 were not expressible
+  (89%)**, and this shape was the single largest reason — 125 test functions across four
+  manifest-parity files.
+  ⚑ **The twin is expressible for a value a document states, and was already** when this entry
+  said it was not: a `[[count]]` declares the pattern, an oracle command and an exact comparison.
+  What has no expression is the twin aimed at **declared data** — *this registry entry must equal
+  what the code produces* — which is the empty quadrant rather than a property of the tool.
+- **boundary** · **Nothing here observes a running program.** A rule about what a program *does at run time* — a
+  session-wide interposition on a write funnel, for instance — is outside every mechanism, and
+  the complement is published instead: the project's own tests import the same declaration and
+  assert against it.
+  ⚑ **This entry said *"everything here is static"* until 2026-09-13 and that was never true of
+  the whole tool.** `claims` runs `git`, reaches the network, and runs whatever command a
+  `[[count]]` declares — since 2026-09-05, four days before the audit that reported the tool as
+  entirely static. It was taken on report rather than measured. `structure.md` § The second axis
+  now classifies each mechanism by polarity and by what it observes, and that classification is
+  **selectable by a project, not a ceiling on the tool.**
 
 **Where a declaration cannot say what a project means:**
 
