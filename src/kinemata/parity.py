@@ -205,6 +205,17 @@ def compare(
     spelled, with edge whitespace stripped from the oracle's and nothing else
     touched. Nothing is lowercased, stripped of punctuation or otherwise made to
     match, because a normalization that is wrong does not fail -- it passes.
+
+    **Order is not part of the claim.** Sets, deliberately: the declarations this
+    checks are matched order-independently by the code that reads them, so
+    pinning a sequence would file a finding on a harmless reorder. Adopters
+    writing this assertion by hand reached the same rule and put it in their own
+    words -- assert the rule, not the inventory.
+
+    **Membership is the "and there is nothing else" half**, which is why it was
+    built before per-entry values. A declaration that pins only the members it
+    names passes while an unregistered addition walks past it; that is the defect
+    hand-written parity tests guard against most often.
     """
     printed, why = produced(spec, root, timeout)
     declared = {entry.id for entry in registry.entries()}

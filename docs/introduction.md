@@ -640,6 +640,29 @@ limit is closed, in the same commit that closes it.**
   quietly is an oracle that cannot answer: not installed, killed on timeout, or an `extract` with
   no capture group is a **failure**, never a skip. An oracle that runs and matches nothing is a
   different thing — an empty set, which is a real answer and usually a finding.
+  ⚑ **The failure that matters is not a hostile oracle but a permissive one, and it is inverted:
+  a too-permissive oracle reports agreement.** An oracle that derives its answer from the
+  declaration — reading the manifest it is supposed to be checked against, or reporting whatever it
+  was asked about — makes the comparison vacuous, and a vacuous parity run is indistinguishable
+  from a clean one at the output. The adopting project ruled a manifest-sourced oracle out on
+  exactly this ground on 2026-08-23, before this mechanism existed: a conformance instrument whose
+  failure mode is *looking clean* is worse than none. **The rule that avoids it is the one
+  inherited rather than invented — the oracle prints what the code does, and the declaration is a
+  separate statement about it.** Nothing here can check which of the two an oracle really did.
+- **accepted** · **A parity comparison has no place to put a declared translation.** Real rows
+  need at most one: a manifest writing a directory prefix with a trailing separator where the code
+  carries none, or a spec's outcome vocabulary mapped onto the code's own constants. Measured across three worked rows from an adopting
+  project, the accurate characterization of what they need is **exact after at most one declared,
+  single-purpose translation** — not fuzzy matching, and never more than one. Today the only place
+  to put it is inside the oracle command's output, which works and is invisible: a reader of the
+  config cannot see that a translation happened. The declaration form is what is missing, not the
+  capability.
+- **accepted** · **Parity cannot say which side is authoritative.** It reports that a declaration
+  and an oracle disagree, and says which side each identifier is on, but not which side is *right*.
+  For some rows that is a real property rather than a convention: where a manifest cell is the
+  expected value and the code is on trial, a divergence is an approved-breakage question, and a
+  form that lets either side be edited to match the other has lost what the check existed for.
+  Both directions gating is as close as this gets, and it is not the same thing.
 - **boundary** · **A baseline is an allowlist.** An agent can silence a finding by re-recording
   it. What makes that survivable is that it is a committed file change, visible in review.
 - **boundary** · **`[[gate]]` verifies text presence, not execution.** Blind to a step disabled by
