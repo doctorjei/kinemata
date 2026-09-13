@@ -711,10 +711,16 @@ down, and the two shapes at the end are the findings that matter most.
   said it was not: a `[[count]]` declares the pattern, an oracle command and an exact comparison.
   What has no expression is the twin aimed at **declared data** — *this registry entry must equal
   what the code produces* — which is the empty quadrant rather than a property of the tool.
-- **boundary** · **Nothing here observes a running program.** A rule about what a program *does at run time* — a
+- **accepted** · **Nothing here observes a running program.** A rule about what a program *does at run time* — a
   session-wide interposition on a write funnel, for instance — is outside every mechanism, and
   the complement is published instead: the project's own tests import the same declaration and
   assert against it.
+  ⚑ **Marked `accepted` rather than `boundary` on 2026-09-13.** An adopting project asked directly
+  whether an execution-time mechanism was ever coming — the interposition this entry describes is
+  theirs — and the answer was that one **can certainly be added** (user, 2026-09-13). Nothing
+  observes a running program today and nobody is building it; that is a decision about what has
+  been spent, not a property of the model. **The mark this entry carried said the opposite**, and
+  `boundary` is the one a reader is told to treat as permanent.
   ⚑ **This entry said *"everything here is static"* until 2026-09-13 and that was never true of
   the whole tool.** `claims` runs `git`, reaches the network, and runs whatever command a
   `[[count]]` declares — since 2026-09-05, four days before the audit that reported the tool as
@@ -739,10 +745,24 @@ down, and the two shapes at the end are the findings that matter most.
   it. Both are refused rather than defaulted when they cannot mean anything.
 - **accepted** · **Registry scoping is inverted, with no exception.** Entries fire everywhere
   except `home`; there is no "fires only inside this one file", which is what an import-discipline
-  check needs. Nothing about the model prevents the inverse scope; nobody has needed it enough.
+  check needs. Nothing about the model prevents the inverse scope. ⚑ **"Nobody has needed it
+  enough" until 2026-09-13**, when an adopting project named the check it needs one for — that
+  their bootstrap module stays import-free. One named need is not a queue, so the mark does not
+  move; what changed is that this entry can no longer justify itself by saying nobody asked.
 - **boundary** · **A `yaml-mapping` registry contributes nothing to `check`.** Its entries carry
   no antipatterns, so a green `check` over a mapping registry is not coverage of the mapping.
   **Declared data has no shape to re-derive** — that is a property of the kind, not a gap.
+- **accepted** · **Precision is Python-shaped, and declaring a suffix does not say so.** The
+  filters and the literal extractors in `prose.py` are keyed by suffix, and `.py` is the only key
+  any of them carries. A registry pointed at `.yaml`, `.sh` or `.toml` therefore gets raw line
+  matching — no comment stripping, nothing that knows where a string literal ends. Scanning an
+  unknown language whole over-reports rather than under-reports, which is the safe direction for a
+  catch and is deliberate. **What is not obvious from the knob is the second half: the strong/weak
+  split is computed only on the path where an extractor ran**, so on every other suffix a match
+  takes the default strength, and the default is `strong`. The weak tier does not exist outside
+  `.py` — a substring hit in a YAML comment is a gating finding, and `suffixes` gives a project no
+  way to say otherwise. Reported by an adopting project 2026-09-13 against the published package
+  and confirmed here.
 - **~~`PythonConstants` reads `ast.Assign` only.~~** True until 2026-09-09: a module-level
   `NAME: Final[str] = "..."` is an `ast.AnnAssign` and was invisible, which in that project hid 32
   annotated constants against 195 readable ones — concentrated in the module they most wanted to
