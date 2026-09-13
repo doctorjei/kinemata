@@ -576,13 +576,30 @@ transforms, sum bytes, compare to `budget`. `-v` lists files largest-first.
 
 ## Known limits
 
-**Every entry carries a disposition, and the two mean different things to someone deciding
-whether to adopt this.**
+**This section is what the mechanisms do not reach *today*.** It is not a list of things nobody
+will ever address, and it has no standing to be one: a document can describe what a tool does, but
+what gets built next is a decision somebody makes later rather than a property of the code.
 
-- **boundary** — a property of the model rather than unfinished work. Reaching past it needs a
-  *different instrument*, not a fix here, and none is planned. Read these as permanent.
-- **accepted** — real, contingent, and revisitable. Nobody is working on it; more work would
-  move it. Read these as *decided for now*, not as settled forever.
+**Every entry carries a disposition, and the two say different things to someone deciding whether
+to adopt this.**
+
+- **boundary** — **this instrument cannot reach it**, and no amount of work on *this* one will.
+  Getting there needs a different instrument. A statement about the mechanism, never about intent.
+- **accepted** — **not a wall, just undone.** Real, contingent, revisitable; more work moves it,
+  and some of it is work this project intends to do.
+
+⚑ **`boundary` read "and none is planned — read these as permanent" until 2026-09-13, and three
+entries falsified that in a single day.** *"Nothing here observes a running program"* was marked
+permanent and became `accepted` the same morning somebody asked whether a run-time hook was ever
+coming. `unused()`'s boundary turned out to belong to **mention scanning** rather than to the
+question, once an oracle could answer the question directly. And Catch A's dependence on an
+identifier recognizer stopped being the only route, on the same day. **Not one of the three moved
+because the model changed. Each moved because an instrument appeared** — which is the thing the old
+wording promised would not happen.
+⚑ **So a disposition says what it would take, never whether anyone will.** The failure direction is
+the bad one: an adopter reading *permanent* scopes their own work around a limit that one
+conversation would have removed, and that came within a day of happening to the project this tool
+was built alongside.
 
 ⚑ **The marks were added 2026-09-13 and are the point of the list, not decoration.** Until then
 every entry read the same way, so a permanent property of the data model and a sample size nobody
@@ -809,9 +826,15 @@ down, and the two shapes at the end are the findings that matter most.
   ⚑ **Marked `accepted` rather than `boundary` on 2026-09-13.** An adopting project asked directly
   whether an execution-time mechanism was ever coming — the interposition this entry describes is
   theirs — and the answer was that one **can certainly be added** (user, 2026-09-13). Nothing
-  observes a running program today and nobody is building it; that is a decision about what has
-  been spent, not a property of the model. **The mark this entry carried said the opposite**, and
-  `boundary` is the one a reader is told to treat as permanent.
+  observes a running program today; that is a decision about what has been spent, not a property of
+  the model. **The mark this entry carried said the opposite**, `boundary` having then been defined
+  as permanent — which is the entry that started the definitions above being rewritten.
+  ⚑ **The shape of the eventual instrument is known, and it is smaller than it looks.** The same
+  project reports that *observe a running program* and *compare what it produced against a
+  declaration* are two mechanisms, not one, and that in their own implementation the seam between
+  them is already cut and named: the adjudication half is substitutable and the classification rules
+  live outside it. What is missing here is only the first half — install an interposition on a
+  declared funnel, collect what crosses it, report and gate at the end of a run.
   ⚑ **This entry said *"everything here is static"* until 2026-09-13 and that was never true of
   the whole tool.** `claims` runs `git`, reaches the network, and runs whatever command a
   `[[count]]` declares — since 2026-09-05, four days before the audit that reported the tool as
