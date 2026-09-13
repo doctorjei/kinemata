@@ -659,7 +659,25 @@ down, and the two shapes at the end are the findings that matter most.
   spells an inline literal as a doubled delimiter, whose inner pair is itself a markdown span,
   so the token inside fell out of a single-backtick pattern. The delimiter run is matched
   deliberately now, and `.py` is a supported suffix rather than an accident.
-- **Docstrings are scannable and this repository does not scan them.** Measured 2026-09-10 by
+- **~~Docstrings are scannable and this repository does not scan them.~~** True until 2026-09-11,
+  when `[claims] suffixes` gained `.py` here. ⚑ **This entry went on asserting the opposite for a
+  day, in four separate sentences** — the headline, "the suffix stays off", "arming it here has not
+  been taken", and a residue of 10. Measured 2026-09-12: `claim_suffixes` is `('.md', '.py')` and
+  `kinemata claims` reports **78 claims, all resolving, with zero accepted in the baseline** — so
+  the residue is not 10 but **none**, and the open question below was answered rather than left.
+  **The sixth stale entry found in this section**, and the reason the list is re-read whenever a
+  limit closes: nothing can catch these, because a limit is not a falsifiable claim, and the
+  failure direction is the bad one — it understates the tool to the adopter reading it to decide
+  what kinemata can express.
+
+  **What closed it** was not a decision to accept the residue. The ten unresolved were real
+  citations of other projects' trees, absent from a clean clone; nine are now declared in
+  `docs/bibliography.toml` under the `Px`/`Cx` codes with the owning repository named, and the
+  tenth was not evidence at all. That is the *"reach that evidence some other way"* branch below,
+  taken.
+
+  The measurement that made the case is kept because it is the argument, not the state. Measured
+  2026-09-10 by
   adding `.py`: 95 claims, 24 unresolved, and the **two** real dead references it found — both in
   module docstrings pointing at a design document that had moved — are the whole yield. They were
   fixed by hand. The rest are correct as written: 7 short hashes belonging to the corpus
@@ -673,16 +691,18 @@ down, and the two shapes at the end are the findings that matter most.
   become **10**, and the 8 that went away were all illustrations rather than assertions. What is
   left is the part a marker cannot fix — 3 paths and 7 short hashes naming files and commits in
   the corpus repositories this project validated against. Those are true citations to trees that
-  are gitignored here and absent from a clean clone, so the suffix stays **off**, with a residue
-  of 10 and a named reason instead of a vague one.
+  are gitignored here and absent from a clean clone, which was the reason the suffix stayed off
+  while it did.
 
-  **That residue is what the claims ratchet was built for**, and it now exists: the 10 are
-  accepted once and a new dead reference fails. Demonstrated on a scratch copy of this
-  repository with the suffix armed — 11 findings (the 10, plus one test count this session made
-  stale), recorded, green, then red on a single new dead docstring reference. Arming it here is
-  a separate decision and has not been taken; the residue is genuine evidence of other people's
-  trees, and whether to accept it or to reach that evidence some other way is the open question.
-- **`suffixes` reaches `[[count]]` as well.** It was the sharper reason not to arm it here: the
+  **The claims ratchet was built for that residue** and was demonstrated on a scratch copy — 11
+  findings recorded, green, then red on a single new dead docstring reference. ⚑ **It was not
+  needed in the end, and that is the better outcome:** declaring the nine citations resolved the
+  residue to zero, so the suffix is armed here with **no exemptions at all**. An accepted set of
+  zero is the stronger position, because every exemption is a thing a later reader has to
+  re-derive the reason for.
+- **`suffixes` reaches `[[count]]` as well**, which was the sharper reason not to arm it *before
+  the illustration role existed*. ⚑ **Corrected 2026-09-12 with the entry above: the suffix is
+  armed, so this reads as a live objection when it is a settled one.** The case was: the
   docstring explaining the test-count oracle recounts the numbers this project's notes once
   claimed, and the oracle reported every one of them against the current suite — the fourth time
   here that a document about a mechanism tripped that mechanism, and unlike the others it could
