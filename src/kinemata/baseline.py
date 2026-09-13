@@ -52,7 +52,7 @@ from datetime import date
 from pathlib import Path
 
 from .bypass import Bypass, is_strays_scope
-from .parity import is_parity_scope
+from .parity import VALUE_DIRECTION, is_parity_scope
 
 #: Where a project's accepted findings live when it does not say otherwise.
 #: Dotted and in the project root: it belongs to the repository, not to a
@@ -137,6 +137,12 @@ class Accepted:
         # scope is what this reads, instead of restating the direction here.
         if is_parity_scope(self.registry):
             way = self.registry.rsplit(":", 1)[-1]
+            # A value divergence is the one parity record whose text carries
+            # something: both sides, so that a reader auditing the list can see
+            # what was accepted rather than only which entry it was about.
+            if way == VALUE_DIRECTION:
+                return (f"{self.path}: {self.entry_id} {self.antipattern} "
+                        f"differs{times} -- {self.text[:60]}")
             missing = "declared by nothing" if way == "undeclared" else (
                 "produced by nothing"
             )

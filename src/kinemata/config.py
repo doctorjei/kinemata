@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import re
 import tomllib
 from dataclasses import dataclass, field
 from datetime import date
@@ -76,7 +77,7 @@ from .contract import (
     usable_boundary,
 )
 from .gates import Gate
-from .parity import Oracle
+from .parity import AUTHORITIES, Oracle, Translation
 from .provenance import DEFAULT_STALE_AFTER, PROVENANCE_REGISTRY
 from .resources import (
     RESOURCE_TABLE,
@@ -1341,6 +1342,7 @@ def _build_parities(
     """
     known = commands or {}
     built: list[Oracle] = []
+    claimed: dict[str, int] = {}
     for index, spec in enumerate(declarations):
         if spec.get("command") and spec.get("run"):
             raise ConfigError(
@@ -1372,6 +1374,38 @@ def _build_parities(
                 f"no [[registry]] declares "
                 f"(known: {', '.join(sorted(registries)) or 'none'})"
             )
+        # One registry, one oracle. Two declarations would compare membership
+        # twice, so one disagreement would be reported and recorded as two --
+        # and a baseline whose counts are inflated by the config's shape is one
+        # nobody can audit against a scan.
+        if target in claimed:
+            raise ConfigError(
+                f"{path}: [[parity]] {index} names registry {target!r}, which "
+                f"[[parity]] {claimed[target]} already does. One registry, one "
+                "oracle: to check a second fact about the same data model, "
+                "declare a second [[registry]] view of it."
+            )
+        claimed[target] = index
+
+        value_field = str(spec.get("field", ""))
+        authority = str(spec.get("authority", ""))
+        if authority and authority not in AUTHORITIES:
+            raise ConfigError(
+                f"{path}: [[parity]] {index} declares authority {authority!r}; "
+                f"it must be one of {', '.join(AUTHORITIES)}."
+            )
+        # Required with a field and optional without, because the membership
+        # directions name their own side -- "produced, declared by nothing" says
+        # what to do -- while a value divergence is two strings and nothing
+        # saying which one is the claim.
+        if value_field and not authority:
+            raise ConfigError(
+                f"{path}: [[parity]] {index} compares the {value_field!r} field "
+                "but declares no authority. Say which side is the claim -- "
+                f"{' or '.join(AUTHORITIES)} -- because a divergence with no "
+                "authoritative side is a finding nobody can act on."
+            )
+
         argv += tuple(str(part) for part in spec.get("args", ()))
         built.append(
             Oracle(
@@ -1379,6 +1413,61 @@ def _build_parities(
                 command=argv,
                 extract=str(spec["extract"]),
                 directory=str(spec.get("directory", ".")),
+                field=value_field,
+                authority=authority,
+                translate=_build_translation(spec.get("translate"), path, index),
             )
         )
     return tuple(built)
+
+
+def _build_translation(
+    declared: object, path: Path, index: int
+) -> Translation | None:
+    """The one translation a ``[[parity]]`` may declare, or a refusal.
+
+    Compiled here rather than at the comparison, unlike ``extract``: an
+    unusable ``extract`` makes a run fail loudly as blocked, while an unusable
+    translation would make every comparison in it wrong. A project's mistake
+    belongs where a project's mistakes are refused.
+    """
+    if declared is None:
+        return None
+    where = f"{path}: [[parity]] {index}'s translate"
+    if not isinstance(declared, dict):
+        raise ConfigError(f"{where} must be a table, not a {type(declared).__name__}")
+    table, pattern = declared.get("map"), declared.get("pattern")
+    if table is not None and pattern is not None:
+        raise ConfigError(
+            f"{where} declares both 'map' and 'pattern'; a declaration carries "
+            "at most one translation, and two would be a pipeline nobody can "
+            "read off the config."
+        )
+    if table is not None:
+        if not isinstance(table, dict) or not table:
+            raise ConfigError(
+                f"{where} declares an empty or non-table 'map'. A map that "
+                "translates nothing is a comparison pretending to have one."
+            )
+        return Translation(
+            table={str(key): str(value) for key, value in table.items()}
+        )
+    if pattern is not None:
+        # Never defaulted: an empty replacement is a legitimate translation, so
+        # a missing one is a typo that would silently delete text.
+        if "replacement" not in declared:
+            raise ConfigError(
+                f"{where} declares a 'pattern' with no 'replacement'. Say what "
+                'the pattern becomes, even if that is "".'
+            )
+        try:
+            re.compile(str(pattern))
+        except re.error as error:
+            raise ConfigError(f"{where} has an unusable pattern ({error})") from error
+        return Translation(
+            pattern=str(pattern), replacement=str(declared["replacement"])
+        )
+    raise ConfigError(
+        f"{where} declares neither 'map' nor 'pattern', so it says nothing "
+        "about how the two sides differ."
+    )

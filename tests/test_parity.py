@@ -22,7 +22,14 @@ import pytest
 
 from kinemata.cli import main
 from kinemata.config import ConfigError, load
-from kinemata.parity import Oracle, compare, parity_scope, produced
+from kinemata.parity import (
+    VALUE_DIRECTION,
+    Oracle,
+    Translation,
+    compare,
+    parity_scope,
+    produced,
+)
 
 
 def write(tmp_path, rel, body):
@@ -76,18 +83,69 @@ def oracle(**kwargs):
     return Oracle(**spec)
 
 
+def declare_values(tmp_path, *, declared=(("app.name", "truecolor"),),
+                   prints=(("app.name", "truecolor"),), extra=""):
+    """The same, for a declaration that compares a field as well as membership."""
+    rows = "".join(
+        f'  {key}:\n    spec: "§1"\n    default: "{value}"\n'
+        for key, value in declared
+    )
+    write(tmp_path, "keys.yaml", f"keys:\n{rows}")
+    write(tmp_path, "src/a.py", 'NAME = "app.name"\n')
+    printer = "; ".join(
+        f"print({f'{key}={value}'!r})" for key, value in prints
+    ) or "pass"
+    write(tmp_path, "kinemata.toml", f"""
+        [project]
+        root = "."
+
+        [[registry]]
+        name = "keyspace"
+        kind = "yaml-mapping"
+        source = "keys.yaml"
+        section = "keys"
+        clause_field = "spec"
+        syntax = '\\bapp\\.[a-z_]+'
+
+        [[parity]]
+        registry = "keyspace"
+        command = ["{{python}}", "-c", "{printer}"]
+        extract = '(?m)^(\\S+)=(.*)$'
+        field = "default"
+        authority = "declared"
+        {extra}
+        """)
+    return tmp_path
+
+
+def value_oracle(**kwargs):
+    spec = {
+        "registry": "keyspace",
+        "command": ("{python}", "-c", "print('app.name=truecolor')"),
+        "extract": r"(?m)^(\S+)=(.*)$",
+        "field": "default",
+        "authority": "declared",
+    }
+    spec.update(kwargs)
+    return Oracle(**spec)
+
+
 class Registry:
     """The smallest thing `compare` needs: entries with ids."""
 
     name = "keyspace"
 
-    def __init__(self, *ids):
+    def __init__(self, *ids, extra=None):
         self._ids = ids
+        self._extra = extra or {}
 
     def entries(self):
         from kinemata.contract import Entry
 
-        return [Entry(id=identifier) for identifier in self._ids]
+        return [
+            Entry(id=identifier, extra=self._extra.get(identifier, {}))
+            for identifier in self._ids
+        ]
 
 
 # -- the two directions -------------------------------------------------------
@@ -165,7 +223,7 @@ def test_an_oracle_printing_nothing_is_an_empty_set_not_a_block(tmp_path):
     printed, why = produced(
         oracle(command=("{python}", "-c", "pass")), tmp_path
     )
-    assert printed == frozenset() and why == ""
+    assert printed is not None and printed.ids == frozenset() and why == ""
 
     result = compare(Registry("app.name"),
                      oracle(command=("{python}", "-c", "pass")), tmp_path)
@@ -198,6 +256,221 @@ def test_edge_whitespace_is_stripped_from_the_oracle(tmp_path):
     assert not result.failed
 
 
+# -- per-entry values ---------------------------------------------------------
+#
+# The hazard here is not the comparison, which is a string equality. It is that
+# a value check can be made vacuous without looking wrong: compare only the
+# identifiers both sides mention and an oracle that printed nothing reports
+# agreement. So most of what follows is about the membership half staying
+# attached, and about a declared value nobody can compare failing rather than
+# being skipped.
+
+
+def test_a_value_both_sides_agree_on_is_not_a_finding(tmp_path):
+    result = compare(
+        Registry("app.name", extra={"app.name": {"default": "truecolor"}}),
+        value_oracle(),
+        tmp_path,
+    )
+    assert not result.failed and result.compared == "default"
+
+
+def test_a_value_the_code_contradicts_is_a_finding(tmp_path):
+    result = compare(
+        Registry("app.name", extra={"app.name": {"default": "truecolour"}}),
+        value_oracle(),
+        tmp_path,
+    )
+    (found,) = result.divergent
+    assert (found.declared, found.produced) == (("truecolour",), ("truecolor",))
+    assert "declared 'truecolour', code produces 'truecolor'" in str(found)
+
+
+def test_membership_runs_even_when_a_field_is_compared(tmp_path):
+    """The anti-vacuity half: an oracle printing nothing is not agreement.
+
+    A value check comparing only the identifiers both sides mention would
+    report a clean sheet here, which is the permissive-oracle failure an
+    adopting project ruled out before this mechanism existed.
+    """
+    result = compare(
+        Registry("app.name", extra={"app.name": {"default": "truecolor"}}),
+        value_oracle(command=("{python}", "-c", "pass")),
+        tmp_path,
+    )
+    assert result.unproduced == ("app.name",) and result.divergent == ()
+    assert result.failed
+
+
+def test_an_unregistered_addition_still_walks_into_the_undeclared_direction(tmp_path):
+    result = compare(
+        Registry(extra={}),
+        value_oracle(),
+        tmp_path,
+    )
+    assert result.undeclared == ("app.name",)
+
+
+def test_a_field_the_declaration_does_not_carry_is_a_finding(tmp_path):
+    """Not a skip: half a registry silently exempt is the vacuity again."""
+    result = compare(Registry("app.name"), value_oracle(), tmp_path)
+    (found,) = result.divergent
+    assert found.absent
+    assert "the declaration records no default" in str(found)
+
+
+def test_a_list_valued_field_is_compared_as_a_set(tmp_path):
+    """Assert the rule, not the inventory: a reorder is not a finding."""
+    result = compare(
+        Registry("app.name", extra={"app.name": {"default": ["b", "a"]}}),
+        value_oracle(
+            command=("{python}", "-c",
+                     "print('app.name=a'); print('app.name=b')"),
+        ),
+        tmp_path,
+    )
+    assert not result.failed
+
+
+def test_a_set_valued_divergence_names_the_side_each_difference_is_on(tmp_path):
+    result = compare(
+        Registry("app.name", extra={"app.name": {"default": ["a", "gone"]}}),
+        value_oracle(
+            command=("{python}", "-c",
+                     "print('app.name=a'); print('app.name=new')"),
+        ),
+        tmp_path,
+    )
+    (found,) = result.divergent
+    assert "declared 'gone', code produces 'new'" in str(found)
+
+
+def test_a_declared_value_no_oracle_could_print_blocks(tmp_path):
+    """A container has no spelling two sides agree on by accident."""
+    result = compare(
+        Registry("app.name", extra={"app.name": {"default": {"a": 1}}}),
+        value_oracle(),
+        tmp_path,
+    )
+    assert result.failed and "not a scalar" in result.blocked
+
+
+def test_a_number_is_rendered_rather_than_coerced(tmp_path):
+    result = compare(
+        Registry("app.name", extra={"app.name": {"default": 3}}),
+        value_oracle(command=("{python}", "-c", "print('app.name=3')")),
+        tmp_path,
+    )
+    assert not result.failed
+
+
+def test_an_extract_with_one_group_blocks_when_a_field_is_compared(tmp_path):
+    result = compare(
+        Registry("app.name"),
+        value_oracle(extract=r"(?m)^(\S+)=.*$"),
+        tmp_path,
+    )
+    assert "one capture group" in result.blocked
+
+
+def test_a_value_comparison_with_no_authority_is_refused_in_code_too(tmp_path):
+    """The config refuses first; this is the answer for a direct caller."""
+    with pytest.raises(ValueError, match="needs an authority"):
+        compare(Registry("app.name"), value_oracle(authority=""), tmp_path)
+
+
+def test_the_message_says_which_side_is_the_claim(tmp_path):
+    """A divergence with no authoritative side is a finding nobody can act on."""
+    declared = compare(
+        Registry("app.name", extra={"app.name": {"default": "a"}}),
+        value_oracle(), tmp_path,
+    )
+    produced_side = compare(
+        Registry("app.name", extra={"app.name": {"default": "a"}}),
+        value_oracle(authority="produced"), tmp_path,
+    )
+    assert "the code is on trial" in str(declared.divergent[0])
+    assert "has not kept up" in str(produced_side.divergent[0])
+
+
+def test_the_value_direction_has_its_own_scope(tmp_path):
+    result = compare(
+        Registry("app.name", extra={"app.name": {"default": "a"}}),
+        value_oracle(), tmp_path,
+    )
+    assert [scope for scope, _ in result.findings()] == [
+        parity_scope("keyspace", VALUE_DIRECTION)
+    ]
+
+
+def test_a_membership_only_run_does_not_claim_the_value_scope(tmp_path):
+    """It has not looked, so a prune must not count its records as gone."""
+    membership = compare(Registry("app.name"), oracle(), tmp_path)
+    values = compare(
+        Registry("app.name", extra={"app.name": {"default": "truecolor"}}),
+        value_oracle(), tmp_path,
+    )
+    assert parity_scope("keyspace", VALUE_DIRECTION) not in membership.scopes()
+    assert parity_scope("keyspace", VALUE_DIRECTION) in values.scopes()
+
+
+# -- the one declared translation ---------------------------------------------
+
+
+def test_a_pattern_translation_applies_to_the_declared_identifiers(tmp_path):
+    """A manifest writing a directory prefix the code carries without."""
+    result = compare(
+        Registry("home/", "canon/handbook/"),
+        oracle(
+            command=("{python}", "-c",
+                     "print('home'); print('canon/handbook')"),
+            extract=r"(?m)^(\S+)$",
+            translate=Translation(pattern="/$", replacement=""),
+        ),
+        tmp_path,
+    )
+    assert not result.failed
+
+
+def test_a_map_translation_applies_to_the_declared_values(tmp_path):
+    """A spec's outcome vocabulary against the code's own constants."""
+    result = compare(
+        Registry("app.name", extra={"app.name": {"default": "refuse"}}),
+        value_oracle(
+            command=("{python}", "-c", "print('app.name=REFUSE_MOUNT')"),
+            translate=Translation(table={"refuse": "REFUSE_MOUNT"}),
+        ),
+        tmp_path,
+    )
+    assert not result.failed
+
+
+def test_a_value_the_map_does_not_name_passes_through(tmp_path):
+    """Pass-through is the exact comparison, not the absence of one."""
+    result = compare(
+        Registry("app.name", extra={"app.name": {"default": "sweep"}}),
+        value_oracle(
+            command=("{python}", "-c", "print('app.name=sweep')"),
+            translate=Translation(table={"refuse": "REFUSE_MOUNT"}),
+        ),
+        tmp_path,
+    )
+    assert not result.failed
+
+
+def test_a_translation_reaches_one_side_only(tmp_path):
+    """Translating the oracle's side too would be two translations, one name."""
+    result = compare(
+        Registry("app.name", extra={"app.name": {"default": "home"}}),
+        value_oracle(
+            command=("{python}", "-c", "print('app.name=home/')"),
+            translate=Translation(pattern="/$", replacement=""),
+        ),
+        tmp_path,
+    )
+    assert result.failed
+
+
 # -- the config surface -------------------------------------------------------
 
 
@@ -227,6 +500,86 @@ def test_a_parity_declaration_alone_is_a_declared_check(tmp_path):
     settings = load(Path(declare(tmp_path) / "kinemata.toml"))
     assert len(settings.parities) == 1
     assert settings.parities[0].registry == "keyspace"
+
+
+def test_a_second_parity_on_one_registry_is_refused(tmp_path):
+    """Two would compare membership twice and record one finding as two."""
+    declare(tmp_path, extra="""
+        [[parity]]
+        registry = "keyspace"
+        command = ["{python}", "-c", "pass"]
+        extract = '(app\\.[a-z_]+)'
+        """)
+    with pytest.raises(ConfigError, match="already does"):
+        load(tmp_path / "kinemata.toml")
+
+
+def test_a_field_without_an_authority_is_refused(tmp_path):
+    declare(tmp_path, extra='field = "default"')
+    with pytest.raises(ConfigError, match="declares no authority"):
+        load(tmp_path / "kinemata.toml")
+
+
+def test_an_unknown_authority_is_refused(tmp_path):
+    declare(tmp_path, extra='field = "default"\nauthority = "whoever"')
+    with pytest.raises(ConfigError, match="it must be one of"):
+        load(tmp_path / "kinemata.toml")
+
+
+def test_an_authority_without_a_field_is_allowed(tmp_path):
+    """Membership names its own sides, so this is optional rather than refused."""
+    declare(tmp_path, extra='authority = "declared"')
+    settings = load(tmp_path / "kinemata.toml")
+    assert settings.parities[0].authority == "declared"
+
+
+def test_a_translation_declaring_both_forms_is_refused(tmp_path):
+    declare(tmp_path, extra="""
+        [parity.translate]
+        map = { a = "b" }
+        pattern = "/$"
+        replacement = ""
+        """)
+    with pytest.raises(ConfigError, match="at most one translation"):
+        load(tmp_path / "kinemata.toml")
+
+
+def test_a_pattern_translation_without_a_replacement_is_refused(tmp_path):
+    """Defaulting it would silently delete text on a mistyped key."""
+    declare(tmp_path, extra="""
+        [parity.translate]
+        pattern = "/$"
+        """)
+    with pytest.raises(ConfigError, match="no 'replacement'"):
+        load(tmp_path / "kinemata.toml")
+
+
+def test_an_unusable_translation_pattern_is_refused_at_load(tmp_path):
+    declare(tmp_path, extra="""
+        [parity.translate]
+        pattern = "([a-"
+        replacement = ""
+        """)
+    with pytest.raises(ConfigError, match="unusable pattern"):
+        load(tmp_path / "kinemata.toml")
+
+
+def test_a_translation_declaring_neither_form_is_refused(tmp_path):
+    declare(tmp_path, extra="""
+        [parity.translate]
+        """)
+    with pytest.raises(ConfigError, match="neither 'map' nor 'pattern'"):
+        load(tmp_path / "kinemata.toml")
+
+
+def test_an_empty_map_is_refused(tmp_path):
+    """A comparison pretending to have a translation."""
+    declare(tmp_path, extra="""
+        [parity.translate]
+        map = {}
+        """)
+    with pytest.raises(ConfigError, match="empty or non-table"):
+        load(tmp_path / "kinemata.toml")
 
 
 # -- the command --------------------------------------------------------------
@@ -306,3 +659,36 @@ def test_the_baseline_writer_runs_the_parity_scan(tmp_path, capsys):
         item.registry.startswith("parity:") and item.entry_id == "app.legacy"
         for item in accepted.accepted
     )
+
+
+# -- values, end to end through the command -----------------------------------
+
+
+def test_the_command_gates_on_a_value_divergence(tmp_path, capsys):
+    declare_values(tmp_path, prints=(("app.name", "truecolour"),))
+    assert main(["parity", "-c", cfg(tmp_path)]) == 1
+    assert "code is on trial" in capsys.readouterr().out
+
+
+def test_the_command_is_clean_when_the_values_agree(tmp_path, capsys):
+    declare_values(tmp_path)
+    assert main(["parity", "-c", cfg(tmp_path)]) == 0
+    assert "agreeing on default" in capsys.readouterr().out
+
+
+def test_recording_turns_a_failing_value_parity_green(tmp_path, capsys):
+    declare_values(tmp_path, prints=(("app.name", "truecolour"),))
+    main(["baseline", "-c", cfg(tmp_path), "--record", "--until", "2099-01-01"])
+    capsys.readouterr()
+    assert main(["parity", "-c", cfg(tmp_path)]) == 0
+
+
+def test_a_divergence_that_changes_re_fires_after_recording(tmp_path, capsys):
+    """The record fingerprints both values, so a new disagreement is new."""
+    declare_values(tmp_path, prints=(("app.name", "truecolour"),))
+    main(["baseline", "-c", cfg(tmp_path), "--record", "--until", "2099-01-01"])
+    capsys.readouterr()
+
+    declare_values(tmp_path, prints=(("app.name", "something-else"),))
+    assert main(["parity", "-c", cfg(tmp_path)]) == 1
+    assert "something-else" in capsys.readouterr().out

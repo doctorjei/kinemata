@@ -56,7 +56,7 @@ from .context import measure
 from .contract import BaseRegistry, Entry
 from .gates import WORKFLOW_DIR, enforced
 from .literals import clusters
-from .parity import Disagreement, Parity, parity_scope
+from .parity import Disagreement, Divergence, Parity
 from .parity import survey as parity_survey
 from .projection import project
 from .prose import ILLUSTRATION_ROLE
@@ -689,6 +689,11 @@ def cmd_parity(args: argparse.Namespace) -> int:
     **A blocked oracle fails.** Not a note: in CI, "printed a warning and exited
     0" is indistinguishable from a pass, and an oracle that cannot answer means
     the check is not running at all.
+
+    ⚑ **A declaration naming a ``field`` compares values as well**, and does so
+    *in addition to* membership rather than instead of it -- so *"and there is
+    nothing else"* remains part of every value claim, and an oracle that printed
+    nothing cannot read as agreement.
     """
     settings = _settings(args)
     if not settings.parities:
@@ -701,13 +706,10 @@ def cmd_parity(args: argparse.Namespace) -> int:
         return 2
 
     results = _parity(args, settings, _target(args, settings))
-    paired: list[tuple[str, Bypass, Disagreement]] = []
+    paired: list[tuple[str, Bypass, Disagreement | Divergence]] = []
     for result in results:
-        for item in result.disagreements():
-            paired.append(
-                (parity_scope(result.registry, item.direction),
-                 item.finding(), item)
-            )
+        for item in result.reports():
+            paired.append((item.scope, item.finding(), item))
 
     baseline = Baseline.load(settings.baseline)
     split = baseline.split(
@@ -718,7 +720,7 @@ def cmd_parity(args: argparse.Namespace) -> int:
     # Keyed off the pairing built above rather than by asking each result for
     # its disagreements again: those are fresh objects every call, so a second
     # ask would match nothing against the exemptions just resolved.
-    live: dict[str, list[Disagreement]] = {}
+    live: dict[str, list[Disagreement | Divergence]] = {}
     for _, hit, item in paired:
         if id(hit) not in exempt:
             live.setdefault(item.registry, []).append(item)
@@ -733,9 +735,13 @@ def cmd_parity(args: argparse.Namespace) -> int:
             continue
         if not shown:
             if not args.quiet:
+                # What was compared, not only that it agreed: a value run and a
+                # membership-only run print the same clean line otherwise, and
+                # the difference is the whole reason one of them was declared.
+                also = f", agreeing on {result.compared}" if result.compared else ""
                 print(
                     f"# {result.registry}: {result.declared} declared, "
-                    f"{result.produced} produced, in agreement."
+                    f"{result.produced} produced, in agreement{also}."
                 )
             continue
         print(f"# {result.registry}")

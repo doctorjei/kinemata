@@ -172,10 +172,31 @@ extract = '(\d+)'
 # produces. Same oracle form as `[[count]]`: `command` names it inline, `run`
 # names a `[command]` one, never both. Group 1 of every `extract` match is one
 # identifier, matched against the whole output -- anchor with an inline `(?m)`.
+# One registry, one oracle: a second [[parity]] naming it is refused.
 [[parity]]
 registry = "constants"
 command = ["{python}", "-m", "pkg.settings", "--keys"]
 extract = '(?m)^([A-Z_]+)$'
+
+# The same, comparing a value per entry as well as membership. `field` names a
+# key the entry carries, group 2 of `extract` is what it must equal, and
+# `authority` says which side is the claim -- required here, because a
+# divergence with no authoritative side is a finding nobody can act on.
+# Membership still runs: "and there is nothing else" stays part of the claim.
+[[parity]]
+registry = "keyspace"
+command = ["{python}", "-m", "pkg.settings", "--defaults"]
+extract = '(?m)^(\S+)=(.*)$'
+field = "default"
+authority = "declared"      # or "produced"; the code is on trial either way
+                            # round, and this says which way
+
+# At most one translation, on the declared side, so a reader of the config can
+# see that a comparison is not literal. `map` or `pattern`/`replacement`,
+# never both.
+[parity.translate]
+pattern = '/$'              # the manifest writes a directory prefix with a
+replacement = ''            # trailing separator; the code carries none
 
 # Checks that must run, and the file that must run them.
 [[gate]]
@@ -312,7 +333,7 @@ does not want this.
 | `kinemata unused` | declared entries nothing mentions outside the files declaring them | never; refuses outright if no registry can say (needs `machinery` or entry `home`) |
 | `kinemata check` | the gate | a strong finding not covered by the baseline, or a baseline past its `until` |
 | `kinemata claims` | documentation gate, ratcheted; also verifies `[[gate]]` declarations | a dead claim the baseline does not already accept, a baseline past its `until` that exempts claims here, or a declared gate that does not run |
-| `kinemata parity` | membership gate, ratcheted — what a registry declares, against the set an oracle says the code produces. Both directions: produced and declared by nothing, declared and produced by nothing | a disagreement in either direction that the baseline does not already accept, or an oracle that could not answer. Refuses outright (exit 2) if no `[[parity]]` is declared |
+| `kinemata parity` | membership gate, ratcheted — what a registry declares, against the set an oracle says the code produces. Both directions: produced and declared by nothing, declared and produced by nothing. With `field`, **also** each entry's declared value against what the oracle prints for it | a disagreement in any of the three directions that the baseline does not already accept, an oracle that could not answer, or a declared value no oracle could be expected to print. Refuses outright (exit 2) if no `[[parity]]` is declared |
 | `kinemata context` | session-load gate | measured bytes exceed `budget` |
 | `kinemata baseline` | shows accepted findings; `--record --until`, `--prune` | — |
 | `kinemata stamp` | mints a citation stamp, or decodes one; reads no config | the text given is not a stamp |
@@ -371,6 +392,18 @@ outside, so the following are `ConfigError`, not silent skips:
   missing `registry`, `extract` or a command. `extract` has no default: whole lines would read a
   traceback or a shell warning as identifiers, and the disagreement would then be reported against
   the project's declaration
+- a second `[[parity]]` naming a registry another already names. Two would compare membership
+  twice, so one disagreement would be reported and recorded as two, and a baseline whose counts
+  come from the config's shape cannot be audited against a scan. To check a second fact about one
+  data model, declare a second `[[registry]]` view of it
+- a `[[parity]]` with a `field` and no `authority`, or an `authority` outside `declared` /
+  `produced`. Which side is the claim is a property of the row rather than a convention, and a
+  value divergence that does not say it is a finding nobody can act on. `authority` **without** a
+  `field` is allowed and shapes the message: the membership directions already name their own side
+- a `[parity.translate]` declaring both `map` and `pattern`, declaring neither, giving a `pattern`
+  with no `replacement`, an empty `map`, or a pattern that will not compile. The replacement is
+  never defaulted from the pattern's presence: an empty one is a legitimate translation, so
+  guessing it would silently delete text on a mistyped key
 - an unknown `boundary` on a `substitutions` registry
 - a `match_mode` that selects no filter table. An unknown one used to *work*: it landed on a
   table with no entry for the suffix, filtered nothing, and so behaved as `raw` by accident
@@ -470,7 +503,12 @@ one of those scans, being the only command that writes the file; a `--prune` cov
 them would delete the rest's records on the strength of never having looked. Parity's records are
 tagged `parity:<registry>:undeclared` and `parity:<registry>:unproduced`, and **both scopes are
 reported as judged on every run, including the empty ones** — a direction that found nothing is
-still a direction that looked.
+still a direction that looked. A declaration comparing values adds a third,
+`parity:<registry>:divergent`, and that one is reported as judged **only by a run that compared
+them**: the same rule read the other way, since a membership-only run has not looked at value
+records and must not be counted as having found them gone. A divergence record fingerprints both
+values, so a disagreement that turns into a different disagreement is a new finding rather than
+one resting under a record written for the old one.
 
 ⚑ **Catch A joined the list 2026-09-13, and until then closing a registry was a cliff.** A
 project with one pre-existing undeclared identifier had to choose between an open registry whose
@@ -657,6 +695,12 @@ limit is closed, in the same commit that closes it.**
   quietly is an oracle that cannot answer: not installed, killed on timeout, or an `extract` with
   no capture group is a **failure**, never a skip. An oracle that runs and matches nothing is a
   different thing — an empty set, which is a real answer and usually a finding.
+  ⚑ **A value comparison adds one more refusal and one structural guard.** A declared value that is
+  not a scalar or a flat list of them **blocks**: a nested container has an internal order and a
+  spelling no two sides agree on by accident, so rendering it would be a normalization that does not
+  fail. And membership runs whether or not a `field` is named, so *"and there is nothing else"* is
+  part of the shape rather than a discipline — the alternative, comparing values only for the
+  identifiers both sides happen to mention, reports agreement when the oracle prints nothing.
   ⚑ **The failure that matters is not a hostile oracle but a permissive one, and it is inverted:
   a too-permissive oracle reports agreement.** An oracle that derives its answer from the
   declaration — reading the manifest it is supposed to be checked against, or reporting whatever it
@@ -666,20 +710,27 @@ limit is closed, in the same commit that closes it.**
   failure mode is *looking clean* is worse than none. **The rule that avoids it is the one
   inherited rather than invented — the oracle prints what the code does, and the declaration is a
   separate statement about it.** Nothing here can check which of the two an oracle really did.
-- **accepted** · **A parity comparison has no place to put a declared translation.** Real rows
-  need at most one: a manifest writing a directory prefix with a trailing separator where the code
-  carries none, or a spec's outcome vocabulary mapped onto the code's own constants. Measured across three worked rows from an adopting
-  project, the accurate characterization of what they need is **exact after at most one declared,
-  single-purpose translation** — not fuzzy matching, and never more than one. Today the only place
-  to put it is inside the oracle command's output, which works and is invisible: a reader of the
-  config cannot see that a translation happened. The declaration form is what is missing, not the
-  capability.
-- **accepted** · **Parity cannot say which side is authoritative.** It reports that a declaration
-  and an oracle disagree, and says which side each identifier is on, but not which side is *right*.
-  For some rows that is a real property rather than a convention: where a manifest cell is the
-  expected value and the code is on trial, a divergence is an approved-breakage question, and a
-  form that lets either side be edited to match the other has lost what the check existed for.
-  Both directions gating is as close as this gets, and it is not the same thing.
+- **accepted** · **~~A parity comparison has no place to put a declared translation.~~ It has one
+  place, and one is the limit.** Closed 2026-09-13 with the per-entry value form:
+  `[parity.translate]` takes a `map`, or a `pattern`/`replacement`, applied to the **declared** side
+  of whatever the comparison is — the identifiers when no `field` is named, the values when one is.
+  Measured across three worked rows from an adopting project, the accurate characterization of what
+  they need is **exact after at most one declared, single-purpose translation** — not fuzzy
+  matching, and never more than one. The capability was never missing; an oracle can always print
+  whatever the declaration spells. What was missing is that there it is invisible, and a reader of
+  the config cannot see that a comparison is not literal.
+  ⚑ **What is still open is the mark's:** a row whose two sides differ in *both* their identifiers
+  and their values needs two translations and cannot say so. No real row has needed it, and a knob
+  added ahead of one is a pipeline nobody can read off the config.
+- **accepted** · **Parity records which side is authoritative and cannot enforce it.**
+  ⚑ **Half-closed 2026-09-13.** A `[[parity]]` comparing values must declare `authority`, and a
+  divergence says what it means — *the declaration is the expected value and the code is on trial*,
+  or the reverse. That was the missing half: for some rows this is a real property rather than a
+  convention, and where a manifest cell is the expected value a divergence is an approved-breakage
+  question. **What no declaration can do is stop the authoritative side being edited to make the
+  finding go away.** That is a *reminder* in the sense `docs/structure.md` §1 uses, with the same
+  answer the baseline has — it is a visible change to a committed file, and a form that lets either
+  side be quietly fixed to match the other has lost what the check existed for.
 - **boundary** · **A baseline is an allowlist.** An agent can silence a finding by re-recording
   it. What makes that survivable is that it is a committed file change, visible in review.
 - **boundary** · **`[[gate]]` verifies text presence, not execution.** Blind to a step disabled by
@@ -813,12 +864,17 @@ down, and the two shapes at the end are the findings that matter most.
   ⚑ **Partly closed 2026-09-13. This entry said the twin aimed at declared data had no expression
   — "the empty quadrant" — and the cell it meant was the one `[[count]]` was already sitting in.**
   `kinemata parity` now sits there too: a registry's declared identifiers against the set an
-  oracle says the code produces, both directions, gating on either. **What it closes is
+  oracle says the code produces, both directions, gating on either. **What it closed first is
   membership**, the half of that project's 125 manifest-parity test functions needing no new
-  surface on `Entry`. The other half is still unexpressed — a declared entry's *fields* against
-  the row the code builds — which is why the entry stays open and `accepted` rather than closed:
-  the shape it names is reachable, and not all of it has been reached. `docs/structure.md` § The
-  second axis is where the mechanism is classified.
+  surface on `Entry`.
+  ⚑ **The other half — a declared entry's *field* against what the code prints for it — landed the
+  same day**, with the translation and the authority marker the same project's worked rows asked
+  for. **The entry stays open and `accepted`**, and the reason has changed: what is left is not a
+  missing declaration form but a row whose fact is *the outcome of an execution*, reachable only by
+  constructing inputs through that suite's own fixtures. There is no product-only command that
+  prints it, so it belongs to the run-time entry below rather than to this one — and how much of
+  the 125 that is has not been measured. `docs/structure.md` § The second axis is where the
+  mechanism is classified.
 - **accepted** · **Nothing here observes a running program.** A rule about what a program *does at run time* — a
   session-wide interposition on a write funnel, for instance — is outside every mechanism, and
   the complement is published instead: the project's own tests import the same declaration and

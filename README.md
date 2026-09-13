@@ -176,9 +176,10 @@ kinemata unused      # advisory. Declared entries nothing mentions. Refuses
                      # unless something says where a declaration lives.
 kinemata check       # the gate. Exits 1 on a strong finding. Run in CI.
 kinemata claims      # the gate, for documentation. Exits 1 on a dead claim.
-kinemata parity      # the gate, for membership: what a registry declares against
-                     # the set an oracle says the code produces. Exits 1 on a
-                     # disagreement either way; refuses without a [[parity]].
+kinemata parity      # the gate, for what a registry declares against the set an
+                     # oracle says the code produces: membership either way, and
+                     # with a `field`, each entry's value too. Exits 1 on a
+                     # disagreement; refuses without a [[parity]].
 kinemata baseline    # what the gates already accept. --record to change it;
                      # runs every scan that feeds it, being the one that writes.
 kinemata context     # the gate, for what a session loads. Exits 1 over the ceiling.
@@ -458,7 +459,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **737 tests**, and
+The companion guard is a number with an oracle. This suite is **768 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 
@@ -884,11 +885,13 @@ The characterization was taken on report and never measured. **`docs/structure.m
 axis carries the classification that replaced these sentences** — polarity and what a mechanism
 observes, per mechanism.
 
-⚑ **The first bullet is half-closed as of 2026-09-13.** `kinemata parity` sets a registry's
+⚑ **The first bullet is largely closed as of 2026-09-13.** `kinemata parity` sets a registry's
 declared identifiers against the set a declared oracle says the code produces, gating on a
-disagreement in either direction — which reaches the *membership* half of those 125 functions and
-not the half asserting a row's values. The mark, the scope and what still has no expression are in
-**`docs/introduction.md` § Known limits**.
+disagreement in either direction, and a declaration naming a `field` compares each entry's value
+as well — with one declared translation and a marker saying which side is the claim, both drawn
+from worked rows that project supplied. What it does not reach is a row whose fact is *the outcome
+of an execution*, which belongs to the second bullet. The mark, the scope and what still has no
+expression are in **`docs/introduction.md` § Known limits**.
 
 **The classification is selectable, not a ceiling.** A project that wants only the static,
 negative subset declares only that subset and gets exactly it: no oracle commands, no network,

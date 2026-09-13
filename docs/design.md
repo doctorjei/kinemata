@@ -70,7 +70,15 @@ Returns every declared entry. An `Entry` requires exactly two fields:
 
 Any further fields are the project's own and are passed through untouched. Kanibako's
 entries carry `scope`, `type`, `default`, `since`, `migration`; a capability registry's
-would carry something else entirely. **The structure never reads them.**
+would carry something else entirely.
+
+⚑ **This said "the structure never reads them", and since 2026-09-13 that is not quite true.**
+A `[[parity]]` may name one of them — `field = "default"` — and compare it against what the
+project's own oracle prints for that entry. The durable half of the claim is what replaces it:
+**the structure never reads them on its own initiative, and never guesses which one matters.** A
+config names the field or no field is read, no meaning is attached to the name, and every other
+field stays untouched. That is the same bargain `machinery` and `clause_field` already strike —
+the project says which of its own fields answers a question the contract poses.
 
 ### 4.2 Derived, with overrides
 

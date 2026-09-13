@@ -137,7 +137,7 @@ mistakes an agent makes; both are statements about one mechanism.
 | | Reads source text at rest | Runs a declared oracle | The project's own run |
 |---|---|---|---|
 | **Negative** — *this must not appear* | the duplication scan, the closed-world catch, `clusters`, `unused` | — | — |
-| **Positive** — *this must hold* | `path`, `link` and `[[gate]]` claims; the context ceiling; the citation policy and the resource list | `commit` (git), `url` (the network), `[[count]]` (any declared command), membership parity (`[[parity]]`), `confirm` re-verifying what it dates | — |
+| **Positive** — *this must hold* | `path`, `link` and `[[gate]]` claims; the context ceiling; the citation policy and the resource list | `commit` (git), `url` (the network), `[[count]]` (any declared command), parity (`[[parity]]`) in both its membership and its per-entry value form, `confirm` re-verifying what it dates | — |
 | **Behavioral** — *what the program did* | out of reach | out of reach | the run-time surface, asserted by the project's own tests |
 
 ⚑ **The citation layer was missing from this table until it was audited**, two days after it began
@@ -156,6 +156,15 @@ asks what a mechanism reads, so two mechanisms can share a cell and still answer
 questions, and a reader taking the cell as the description would miss it. Said here rather than
 patched with a column the axes do not support; `docs/introduction.md` § Commands is where parity's
 behavior and its refusals live.
+
+⚑ **Per-entry value parity moved neither axis either, and this is worth saying because it looks
+like it should have.** *This declared field must equal what the code prints* is the same polarity
+and the same instrument; what changed is the **grain** — a set, then each member of it. It is
+still not behavioral. The oracle runs the project's code and reads what it prints, which is a
+declared command producing text, not an observation of a program doing its work: the row of that
+suite whose fact is *the outcome of an execution* remains in the bottom-left cells, and the
+declaration surface built for the other two does not reach it. A mechanism that runs code is not
+thereby watching a run.
 
 Two things that table is meant to stop.
 
