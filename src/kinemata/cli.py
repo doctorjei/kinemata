@@ -1145,6 +1145,7 @@ def cmd_context(args: argparse.Namespace) -> int:
         settings.context.include,
         ceiling=settings.context.budget,
         strip=settings.context.strip,
+        external=settings.context.external,
     )
     print(found.text(verbose=args.verbose))
     if found.failed:

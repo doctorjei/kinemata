@@ -60,7 +60,7 @@ from .baseline import BASELINE_NAME
 from .bypass import MODE_FILTERS, git_ignored
 from .citations import DEFAULT_ACCOMPANY_MAX
 from .claims import CLAIMS_REGISTRY, EXTERNAL_TIMEOUT, Counted, Promise, _excluded
-from .context import STRIPPERS
+from .context import STRIPPERS, escapes
 from .contract import (
     BaseRegistry,
     Registry,
@@ -108,6 +108,11 @@ class ContextBudget:
     include: tuple[str, ...]
     budget: int
     strip: tuple[str, ...] = ()
+    #: Patterns that deliberately leave the tree -- an assembled instruction
+    #: file, a compiled artifact. Separate from ``include`` so that reaching
+    #: off-tree is legible where it is declared rather than inferable from a
+    #: glob. See :func:`~kinemata.context.escapes`.
+    external: tuple[str, ...] = ()
 
 
 @dataclass
@@ -1152,10 +1157,38 @@ def _build_context(spec: dict[str, Any] | None, path: Path) -> ContextBudget | N
             f"{path}: [context] strip has unknown transform(s) {unknown} "
             f"(known: {', '.join(sorted(STRIPPERS))})"
         )
+    # `include` is contained; `external` is the escape, and each refuses the
+    # other's patterns. Until 2026-09-13 an absolute path, or a parent-directory
+    # escape, in `include` worked -- by accident of two library behaviors rather
+    # than by contract -- so a config could weigh anything on the filesystem
+    # with nothing in the file saying so. The capability is kept, because an
+    # adopter measured 36,056 B of assembled instructions through it and that is
+    # the one thing a ceiling most wants to see; what changed is that it has to
+    # be asked for by name.
+    #
+    # Symmetrically refused, because a one-way rule would leave `external`
+    # accepting contained patterns and quietly labeling in-tree bytes "outside".
+    include = tuple(str(pattern) for pattern in include)
+    external = tuple(str(pattern) for pattern in spec.get("external", ()))
+    leaving = [pattern for pattern in include if escapes(pattern)]
+    if leaving:
+        raise ConfigError(
+            f"{path}: [context] include must stay inside the project: "
+            f"{leaving} is absolute or escapes the tree. Declare it in "
+            "[context] external, which exists for an assembled file kept "
+            "outside the tree."
+        )
+    staying = [pattern for pattern in external if not escapes(pattern)]
+    if staying:
+        raise ConfigError(
+            f"{path}: [context] external is for patterns that leave the tree, "
+            f"and {staying} does not. Declare it in [context] include."
+        )
     return ContextBudget(
-        include=tuple(str(pattern) for pattern in include),
+        include=include,
         budget=int(budget),
         strip=strip,
+        external=external,
     )
 
 

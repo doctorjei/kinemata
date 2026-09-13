@@ -168,7 +168,13 @@ where = [".github/workflows/checks.yml"]   # default: every workflow
 
 # Ceiling on what a session loads.
 [context]
-include = ["docs/**/*.md"]
+include = ["docs/**/*.md"]         # must stay inside the tree; an absolute path
+                                   # or a `..` escape is refused and told to use
+                                   # `external`
+external = ["/etc/pkg/built.md"]   # patterns that deliberately leave the tree,
+                                   # for the assembled file no repository holds.
+                                   # Refuses a contained pattern, so the two
+                                   # keys cannot drift into meaning one thing
 budget = 24064
 strip = ["html-comments"]
 ```
@@ -769,6 +775,24 @@ down, and the two shapes at the end are the findings that matter most.
   class of finding it produced.
 - **`historical` is a path axis, but a changelog's currency varies by section.** A live
   `[Unreleased]` entry and an honest historical record in one file cannot be separated by config.
-- **`[context] include` accepts absolute paths, absolute globs and `../` escapes** — but by
+- **~~`[context] include` accepts absolute paths, absolute globs and `../` escapes~~** — but by
   accident of two library behaviors rather than by contract, and nothing validates containment.
-  Useful (it is how you would read a compiled artifact directly) and undesigned.
+  **Decided and contracted 2026-09-13**, in the direction of keeping the capability rather than
+  refusing it: an adopter measured 36,056 B of assembled instructions through the escape, and an
+  assembled file is exactly what a ceiling most wants to weigh — a `context` that cannot see it is
+  measuring the wrong thing.
+  **`include` is now contained and refuses an escape; `[context] external` is the escape and
+  refuses a contained pattern.** Both refusals are symmetric, because a one-way rule would leave
+  `external` accepting in-tree patterns and the report calling bytes that never left "outside".
+  The check is **syntactic** — absolute, or carrying a `..` segment — so it is decidable when the
+  config loads and verifiable by anyone reading the line; resolving first would accept
+  `/home/me/project/docs` on one machine and refuse it on another.
+  ⚑ **Two things this does *not* close, stated because the gap is narrower than the fix looks.**
+  A relative pattern reaching a **symlinked directory that leaves the tree** is not refused, and
+  must not be — following symlinks is what fixed an under-count this ceiling already had. Such a
+  file is labeled from its resolved path instead, so the bytes are reported honestly while the
+  declaration still looks contained. And an absolute pattern in `external` may resolve back
+  *inside* the root; that is allowed, and the label is measured rather than assumed for exactly
+  this reason. **The report says how many bytes came from outside and deliberately does not say
+  which key declared them** — it claimed `[context] external` and was wrong the first time a
+  symlink was pointed at it.

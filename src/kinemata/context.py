@@ -78,7 +78,7 @@ import glob
 import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 #: Transforms applied before measuring, declared by name in ``[context] strip``.
 #: A table rather than a branch, so adding one does not mean editing the caller
@@ -98,6 +98,19 @@ class Loaded:
     path: str
     raw: int
     size: int
+    #: Did this file resolve to somewhere outside the project tree?
+    #:
+    #: **Measured from the resolved path, not from the key that declared it.**
+    #: ``[context] external`` may name an absolute path that lands back inside
+    #: the root, and a report that called it off-tree because of which list
+    #: asked for it would be stating something false about where the bytes are.
+    #:
+    #: ``external`` rather than a fresh word: ``[claims] external`` reaches past
+    #: this tree to the network and the bibliography's ``EXTERNAL`` marks a
+    #: source this project does not own. All three mean *beyond this
+    #: repository*, which is overlap enough to reuse the term rather than teach
+    #: a reader a second one.
+    external: bool = False
 
     @property
     def stripped(self) -> int:
@@ -105,7 +118,8 @@ class Loaded:
 
     def __str__(self) -> str:
         note = f" ({self.stripped} B stripped)" if self.stripped else ""
-        return f"{self.size:>7} B  {self.path}{note}"
+        mark = "  [external]" if self.external else ""
+        return f"{self.size:>7} B  {self.path}{note}{mark}"
 
 
 @dataclass(frozen=True)
@@ -131,6 +145,11 @@ class Measurement:
     def failed(self) -> bool:
         return self.size > self.ceiling
 
+    @property
+    def external(self) -> tuple[Loaded, ...]:
+        """The files that resolved outside the project tree."""
+        return tuple(item for item in self.files if item.external)
+
     def text(self, *, verbose: bool = False) -> str:
         lines = []
         if verbose:
@@ -145,6 +164,22 @@ class Measurement:
             f" -- OVER by {self.over} B" if self.failed else f", {headroom} B spare"
         )
         lines.append(summary)
+        # Said on every run that has one, not only under `--verbose`. A ceiling
+        # met partly with bytes that are not in the repository is a different
+        # claim from one met entirely with bytes that are, and a reader
+        # comparing this number against a clean clone needs to know which.
+        #
+        # Deliberately silent about *how* they got out. Most arrive through
+        # `[context] external`, but a relative pattern can reach a symlinked
+        # directory that leaves the tree, and naming the key here asserted a
+        # declaration the run cannot see -- which it did, on the first symlink
+        # this was pointed at.
+        if self.external:
+            weight = sum(item.size for item in self.external)
+            lines.append(
+                f"  ({weight} B of that from {len(self.external)} file(s) "
+                "outside the project tree)"
+            )
         if self.raw != self.size:
             lines.append(
                 f"  ({self.raw - self.size} B stripped before measuring; "
@@ -163,12 +198,33 @@ def flatten(text: str, strip: Sequence[str]) -> str:
     return text
 
 
+def escapes(pattern: str) -> bool:
+    """Would this pattern reach outside the tree it is resolved against?
+
+    A **syntactic** question on purpose, decidable when the config loads and
+    verifiable by anyone reading the line: a pattern is an escape if it is
+    absolute or carries a ``..`` segment. That is what separates ``include``
+    from ``external``.
+
+    It deliberately does not resolve anything. An absolute path can land back
+    inside the root, and a check that resolved first would accept
+    ``/home/me/project/docs`` in ``include`` on one machine and refuse it on
+    another -- a config whose validity depends on where the tree is checked out.
+    Whether a file is *actually* off-tree is answered per file, after
+    resolution, and carried on :attr:`Loaded.external`.
+    """
+    if PurePosixPath(pattern).is_absolute() or PureWindowsPath(pattern).is_absolute():
+        return True
+    return ".." in PurePosixPath(pattern).parts
+
+
 def measure(
     root: str | Path,
     include: Iterable[str],
     *,
     ceiling: int,
     strip: Sequence[str] = (),
+    external: Iterable[str] = (),
 ) -> Measurement:
     """Weigh every file matching ``include``, flattened, against ``ceiling``.
 
@@ -185,10 +241,22 @@ def measure(
     ``.claude/`` file; and it expands a symlink loop about forty deep, which
     counted three files 120 times. Hence ``include_hidden`` and a key on the
     real file rather than on the path that reached it.
+
+    ``external`` is the same resolution for patterns that deliberately leave the
+    tree. It is a separate list rather than more entries in ``include`` because
+    reaching off-tree is a decision worth reading at the declaration site: an
+    absolute path or a parent-directory escape used to work here **by accident**
+    of ``Path.__truediv__`` discarding its left operand and ``glob`` resolving a
+    parent segment without complaint, so a config could weigh a compiled
+    artifact from anywhere on the filesystem and nothing in the file said so.
+    The capability is kept -- an adopter measured 36,056 B of assembled
+    instructions through it -- and now has to be asked for: ``include`` refuses
+    an escape and names this list.
     """
     root = Path(root)
+    base = root.resolve()
     seen: dict[Path, str] = {}
-    for pattern in include:
+    for pattern in [*include, *external]:
         for match in sorted(glob.glob(pattern, root_dir=root, recursive=True,
                                       include_hidden=True)):
             path = root / match
@@ -206,6 +274,10 @@ def measure(
                 path=relative,
                 raw=len(text.encode("utf-8")),
                 size=len(flatten(text, strip).encode("utf-8")),
+                # From the resolved path rather than from the list that asked:
+                # an absolute pattern in `external` can land back inside the
+                # root, and the report has to say where the bytes are.
+                external=not path.is_relative_to(base),
             )
         )
     return Measurement(files=tuple(files), ceiling=ceiling)

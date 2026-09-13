@@ -319,12 +319,23 @@ are what persist and what a commit changes.
 ```toml
 [context]
 include = ["bible/**/*.md", "handbook/**/*.md", "notebook/directives/*.md"]
+external = ["/etc/myproject/assembled.md"]
 budget = 25600
 strip = ["html-comments"]
 ```
 
 `kinemata context` weighs it and fails over the ceiling; `-v` lists the files
 largest-first, which is the part that tells you where to cut.
+
+**`include` stays inside the tree; `external` is how you leave it.** An absolute
+path or a `../` escape in `include` is refused and told where it belongs, and a
+contained pattern in `external` is refused the same way — the two keys mean
+different things and each rejects the other's patterns. Reaching off-tree is
+supported because the file worth weighing is often the *assembled* one that no
+repository holds, but it is a declaration you can see rather than a side effect
+of a glob. The report says how many of the counted bytes came from outside, on
+every run: a ceiling met partly with bytes that are not in the repository is a
+different claim from one met entirely with bytes that are.
 
 **Globs, not filenames.** A document added to a loaded directory has to be
 counted without anyone remembering to list it — a filename list is an allowlist
@@ -425,7 +436,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **707 tests**, and
+The companion guard is a number with an oracle. This suite is **714 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 

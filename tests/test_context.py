@@ -227,3 +227,112 @@ def test_a_declared_dotfile_is_still_counted(tmp_path):
     write(tmp_path, ".claude/CLAUDE.md", "c" * 120)
     found = measure(tmp_path, ["**/*.md"], ceiling=1000)
     assert [f.path for f in found.files] == [".claude/CLAUDE.md"]
+
+
+# -- leaving the tree, which used to happen by accident ----------------------
+#
+# `include` accepted an absolute path, an absolute glob and a parent-directory
+# escape for the whole life of the project -- by accident of
+# `Path.__truediv__` discarding its left operand and `glob` resolving a parent
+# segment without complaint, not by contract. Nothing validated containment and
+# nothing in the config said a declaration had left the tree. The capability is
+# worth keeping: an adopter measured 36,056 B of assembled instructions through
+# it, and an assembled file is exactly what a ceiling most wants to weigh. What
+# changed on 2026-09-13 is that it has to be asked for by name.
+
+
+def test_include_refuses_an_absolute_pattern_and_names_the_key(tmp_path):
+    write(tmp_path, "kinemata.toml", """
+        [context]
+        include = ["/etc/kanibako/compiled.md"]
+        budget = 1000
+        """)
+    with pytest.raises(ConfigError) as caught:
+        load(tmp_path / "kinemata.toml")
+    assert "must stay inside the project" in str(caught.value)
+    assert "[context] external" in str(caught.value)
+
+
+def test_include_refuses_a_parent_escape(tmp_path):
+    write(tmp_path, "kinemata.toml", """
+        [context]
+        include = ["../elsewhere/*.md"]
+        budget = 1000
+        """)
+    with pytest.raises(ConfigError) as caught:
+        load(tmp_path / "kinemata.toml")
+    assert "escapes the tree" in str(caught.value)
+
+
+def test_external_refuses_a_contained_pattern(tmp_path):
+    """Refused symmetrically, or `external` would accept in-tree patterns and
+    the report would call bytes that never left the tree "outside"."""
+    write(tmp_path, "kinemata.toml", """
+        [context]
+        include = ["docs/*.md"]
+        external = ["docs/*.md"]
+        budget = 1000
+        """)
+    with pytest.raises(ConfigError) as caught:
+        load(tmp_path / "kinemata.toml")
+    assert "is for patterns that leave the tree" in str(caught.value)
+
+
+def test_external_weighs_a_file_outside_the_tree(tmp_path):
+    """The capability the separate key preserves."""
+    outside = tmp_path.parent / "assembled-elsewhere"
+    outside.mkdir(exist_ok=True)
+    (outside / "compiled.md").write_text("x" * 300)
+    write(tmp_path, "docs/guide.md", "g" * 50)
+
+    found = measure(tmp_path, ["docs/*.md"], ceiling=1000,
+                    external=[str(outside / "compiled.md")])
+    assert found.size == 350
+    assert [item.external for item in found.files] == [True, False]
+
+
+def test_the_report_says_how_much_came_from_outside(tmp_path):
+    """A ceiling met partly with bytes that are not in the repository is a
+    different claim from one met entirely with bytes that are, and a reader
+    comparing the number against a clean clone needs to know which."""
+    outside = tmp_path.parent / "assembled-report"
+    outside.mkdir(exist_ok=True)
+    (outside / "compiled.md").write_text("x" * 300)
+
+    found = measure(tmp_path, [], ceiling=1000,
+                    external=[str(outside / "compiled.md")])
+    assert "300 B of that from 1 file(s) outside the project tree" in found.text()
+
+
+def test_a_symlink_out_of_the_tree_is_labeled_external_from_include(tmp_path):
+    """The asymmetry, pinned rather than left to be discovered.
+
+    Containment is checked on the *pattern*, so a relative glob reaching a
+    symlinked directory that leaves the tree is not refused -- and must not be,
+    since following symlinks is what fixed an under-count this ceiling already
+    had. It is labeled from the resolved path instead, so the bytes are
+    reported honestly even though the declaration looks contained.
+    """
+    outside = tmp_path.parent / "linked-away"
+    outside.mkdir(exist_ok=True)
+    (outside / "compiled.md").write_text("x" * 200)
+    write(tmp_path, "docs/guide.md", "g" * 20)
+    (tmp_path / "docs" / "linked").symlink_to(outside)
+
+    found = measure(tmp_path, ["docs/**/*.md"], ceiling=1000)
+    beyond = [item.path for item in found.files if item.external]
+    assert beyond == ["docs/linked/compiled.md"]
+
+
+def test_the_outside_report_does_not_claim_which_key_declared_it(tmp_path):
+    """It said "declared in [context] external" and was wrong the first time a
+    symlink was pointed at it: that file arrived through `include`. A run cannot
+    see which declaration reached a resolved path, so it does not say."""
+    outside = tmp_path.parent / "linked-honest"
+    outside.mkdir(exist_ok=True)
+    (outside / "compiled.md").write_text("x" * 200)
+    (tmp_path / "linked").symlink_to(outside)
+
+    found = measure(tmp_path, ["linked/*.md"], ceiling=1000)
+    assert "outside the project tree" in found.text()
+    assert "declared in" not in found.text()
