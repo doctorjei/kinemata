@@ -733,10 +733,12 @@ down, and the two shapes at the end are the findings that matter most.
   question — whether matching behavior is a property of the adapter class or something a project
   declares — and the answer is that the adapter supplies the default and the project overrides
   it. Both are refused rather than defaulted when they cannot mean anything.
-- **Registry scoping is inverted, with no exception.** Entries fire everywhere except `home`;
-  there is no "fires only inside this one file", which is what an import-discipline check needs.
-- **A `yaml-mapping` registry contributes nothing to `check`.** Its entries carry no
-  antipatterns, so a green `check` over a mapping registry is not coverage of the mapping.
+- **accepted** · **Registry scoping is inverted, with no exception.** Entries fire everywhere
+  except `home`; there is no "fires only inside this one file", which is what an import-discipline
+  check needs. Nothing about the model prevents the inverse scope; nobody has needed it enough.
+- **boundary** · **A `yaml-mapping` registry contributes nothing to `check`.** Its entries carry
+  no antipatterns, so a green `check` over a mapping registry is not coverage of the mapping.
+  **Declared data has no shape to re-derive** — that is a property of the kind, not a gap.
 - **~~`PythonConstants` reads `ast.Assign` only.~~** True until 2026-09-09: a module-level
   `NAME: Final[str] = "..."` is an `ast.AnnAssign` and was invisible, which in that project hid 32
   annotated constants against 195 readable ones — concentrated in the module they most wanted to
@@ -754,11 +756,13 @@ down, and the two shapes at the end are the findings that matter most.
   correctly was the site `unused` could not see. Fixed by changing that adapter's default, which
   moved nothing in this repository's own `check`, `review`, `unused` or `undeclared` output.
   `unused` still carries its own weakness underneath, which none of this touches.
-- **`[[gate]]` cannot express ordering** — only that a command's text is present and uncommented.
+- **boundary** · **`[[gate]]` cannot express ordering** — only that a command's text is present
+  and uncommented. The same root as the `[[gate]]` entry above: reading what a workflow *does*
+  needs a model of the runner, which would be a second model of CI.
 
 **Where `claims` is narrower than its knobs suggest:**
 
-- **The extractors are markdown-syntax-bound, and `suffixes` does not say so.** A format that
+- **accepted** · **The extractors are markdown-syntax-bound, and `suffixes` does not say so.** A format that
   does not share it — YAML, plain text — is read and contributes **zero claims**; a declared
   suffix that settles nothing is now named on stderr rather than passing in silence.
   **~~A format that shares it worked by coincidence.~~** True until 2026-09-10: reStructuredText
@@ -806,7 +810,7 @@ down, and the two shapes at the end are the findings that matter most.
   residue to zero, so the suffix is armed here with **no exemptions at all**. An accepted set of
   zero is the stronger position, because every exemption is a thing a later reader has to
   re-derive the reason for.
-- **`suffixes` reaches `[[count]]` as well**, which was the sharper reason not to arm it *before
+- **accepted** · **`suffixes` reaches `[[count]]` as well**, which was the sharper reason not to arm it *before
   the illustration role existed*. ⚑ **Corrected 2026-09-12 with the entry above: the suffix is
   armed, so this reads as a live objection when it is a settled one.** The case was: the
   docstring explaining the test-count oracle recounts the numbers this project's notes once
@@ -829,9 +833,11 @@ down, and the two shapes at the end are the findings that matter most.
   resolving. Left deliberately — the "ignored and present" signal cannot separate a stale build
   copy from a deliberately-uncommitted corpus, and guessing wrong in either direction is worse
   than the rot.
-- **`~`-prefixed paths are skipped entirely.** For a documentation tree that writes cross-tree
-  pointers as `~/...` — which canon-style trees do — most pointers are invisible, so a clean run
-  is a floor rather than a measure.
+- **accepted** · **`~`-prefixed paths are skipped entirely.** For a documentation tree that writes
+  cross-tree pointers as `~/...` — which canon-style trees do — most pointers are invisible, so a
+  clean run is a floor rather than a measure. Expanding them is buildable; what stops it is that a
+  `~` path resolves differently for every reader, so a claim about one is not a claim about the
+  tree.
 - **~~`FILE_SUFFIXES` is a closed set of 14 with no config knob.~~** True until 2026-09-09: a
   repository whose content files were `Containerfile.x` and `tmux.conf` was structurally
   unseeable, and the scan came back nearly green because it could not look. `[claims]
@@ -842,8 +848,10 @@ down, and the two shapes at the end are the findings that matter most.
   as a dead commit. Both true until 2026-09-09; the words are in the vocabulary and an all-digit
   run is skipped, because git does not mint all-decimal short hashes often enough to be worth the
   class of finding it produced.
-- **`historical` is a path axis, but a changelog's currency varies by section.** A live
-  `[Unreleased]` entry and an honest historical record in one file cannot be separated by config.
+- **accepted** · **`historical` is a path axis, but a changelog's currency varies by section.** A
+  live `[Unreleased]` entry and an honest historical record in one file cannot be separated by
+  config. A finer axis is buildable and nobody has needed it; this project's own changelog is one
+  line per release, which does not reach the problem.
 - **~~`[context] include` accepts absolute paths, absolute globs and `../` escapes~~** — but by
   accident of two library behaviors rather than by contract, and nothing validates containment.
   **Decided and contracted 2026-09-13**, in the direction of keeping the capability rather than
