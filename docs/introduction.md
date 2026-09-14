@@ -883,14 +883,43 @@ limit is closed, in the same commit that closes it.**
   place, and one is the limit.** Closed 2026-09-13 with the per-entry value form:
   `[parity.translate]` takes a `map`, or a `pattern`/`replacement`, applied to the **declared** side
   of whatever the comparison is — the identifiers when no `field` is named, the values when one is.
-  Measured across three worked rows from an adopting project, the accurate characterization of what
-  they need is **exact after at most one declared, single-purpose translation** — not fuzzy
-  matching, and never more than one. The capability was never missing; an oracle can always print
-  whatever the declaration spells. What was missing is that there it is invisible, and a reader of
-  the config cannot see that a comparison is not literal.
-  ⚑ **What is still open is the mark's:** a row whose two sides differ in *both* their identifiers
-  and their values needs two translations and cannot say so. No real row has needed it, and a knob
-  added ahead of one is a pipeline nobody can read off the config.
+  The capability was never missing; an oracle can always print whatever the declaration spells.
+  What was missing is that there it is invisible, and a reader of the config cannot see that a
+  comparison is not literal.
+  ⚑ **“Exact after at most one declared, single-purpose translation” is withdrawn as a
+  characterization of real rows** (2026-09-14). It was that adopting project's own phrase, reached
+  over **three rows they had chosen as worked examples**, and this entry generalized it to what
+  projects need. They then diffed a whole declaration of theirs — **89 identifiers composed from
+  the code against 100 rows in the manifest: 74 agree, 15 code-only, 26 manifest-only** — and
+  withdrew it themselves. **The 41 is the symmetric difference, 15 + 26**, and the two denominators
+  are 89 and 100; it is not a share of anything, and in particular not of the 125 functions
+  measured elsewhere, which counts test functions rather than identifiers. Their reproduction
+  command is published with the measurement.
+  ⚑ **There is no declarable form for 41**, and hiding them inside the oracle command is precisely
+  what the paragraph above says a reader cannot see. So the limit is not *one translation instead
+  of two* but **one translation instead of a spelling convention**: their divergences are a scope
+  prefix the manifest writes and the code does not, a discriminated leaf the manifest spells out,
+  and families the code recognizes by regex rather than enumerating.
+  ⚑ **A fourth cause is not a spelling divergence at all** and is worth separating, because no
+  translation form whatever would reach it: a **parametric row with no code-side member**. That one
+  is the registry's addressing, not the comparison's notation.
+  ⚑ **And the sharpest consequence is structural rather than a matter of degree.** The translation
+  has one target, chosen by whether `field` is declared — so a comparison that names a `field`
+  translates the **values** and compares the **identifiers raw**. Membership runs either way and is
+  not made optional by a value declaration, which is deliberate; but it means a declaration whose
+  identifiers need a spelling map and whose values need comparing has **no form for the first
+  one at all**.
+  ⚑ **“No real row has needed two” was already false when it was published**, by a measurement in
+  this project's own records rather than by the one above: of an adopting project's five translated
+  rows, one needs two — a reference hop *and* a segment substitution — and the characterization
+  held for four of the five. Two measurements, different units, falsifying one sentence from two
+  directions.
+  **What it would take:** a form in which a declaration can carry more than one translation without
+  becoming a pipeline nobody can read, or a project-supplied normalization named the way
+  `[[shape]]` and `[[interpose]]` already let a project name a predicate — visible in the config as
+  a target, which is the property the oracle-command workaround gives up. What it would **not**
+  take is fuzzy matching, which remains refused: the failure that matters here is the permissive
+  comparison, and every loosening is a step toward one.
 - **accepted** · **Parity records which side is authoritative and cannot enforce it.**
   ⚑ **Half-closed 2026-09-13.** A `[[parity]]` comparing values must declare `authority`, and a
   divergence says what it means — *the declaration is the expected value and the code is on trial*,
@@ -1038,10 +1067,12 @@ down, and the two shapes at the end are the findings that matter most.
   surface on `Entry`.
   ⚑ **The other half — a declared entry's *field* against what the code prints for it — landed the
   same day**, with the translation and the authority marker the same project's worked rows asked
-  for. **The entry stays open and `accepted`**, and the reason has changed: what is left is not a
-  missing declaration form but a row whose fact is *the outcome of an execution*, reachable only by
-  constructing inputs through that suite's own fixtures. There is no product-only command that
-  prints it, so it belongs to the run-time entry below rather than to this one.
+  for. **The entry stays open and `accepted`**, and what is left is of two different kinds. One is
+  a row whose fact is *the outcome of an execution*, reachable only by constructing inputs through
+  that suite's own fixtures; there is no product-only command that prints it, so it belongs to the
+  run-time entry below rather than to this one. ⚑ **The other is a missing declaration form after
+  all** — this clause said it was not, on the strength of the same three worked rows, and the
+  translation entry above carries the measurement that corrected it.
   `docs/structure.md` § The second axis is where the mechanism is classified.
   ⚑ **How much of the 125 that is, is measured as of 2026-09-14: seven functions, 5.6%** — every
   one of them classified, not sampled. This entry said the figure had not been measured, which was

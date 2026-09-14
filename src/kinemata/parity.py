@@ -102,10 +102,8 @@ def is_parity_scope(name: str) -> bool:
 class Translation:
     """The one translation a declaration may apply to its own side.
 
-    Real rows need at most one, and the accurate characterization an adopting
-    project reached for their own suite is **exact after at most one declared,
-    single-purpose translation**: a manifest writing a directory prefix with a
-    trailing separator where the code carries none, or a spec's outcome
+    The two rows it was built for are a manifest writing a directory prefix with
+    a trailing separator where the code carries none, and a spec's outcome
     vocabulary mapped onto the code's own constants. Both are notation rather
     than drift.
 
@@ -113,6 +111,11 @@ class Translation:
     was never missing -- an oracle can always print whatever the declaration
     spells -- but there it is invisible, and a reader of the config cannot see
     that a comparison is not literal.
+
+    ⚑ **One is not enough for real declarations, and this docstring used to say
+    it was.** The sentence generalized a three-row sample; see
+    ``docs/introduction.md`` [0TN4W2N-Pa0004] § Known limits, which carries the
+    measurement that withdrew it and what a wider form would take.
 
     Two forms, never both, and each is deliberately dull:
 
@@ -183,8 +186,13 @@ class Oracle:
     authority: str = ""
     #: Applied to the **declared** side of whatever comparison this makes: the
     #: identifiers when :attr:`field` is empty, the values when it is not. One
-    #: target, so "at most one declared translation" stays a sentence a reader
-    #: can check against the config.
+    #: target, so what a translation touches is a thing a reader can settle from
+    #: the config rather than infer.
+    #:
+    #: ⚑ **The cost of that is a declaration comparing values cannot translate
+    #: its identifiers at all**, and membership runs regardless -- see
+    #: ``docs/introduction.md`` [0TN4W2P-Pa0004] § Known limits, where the reach
+    #: of one translation is measured and dispositioned.
     translate: Translation | None = None
 
 
