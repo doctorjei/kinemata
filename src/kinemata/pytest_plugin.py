@@ -23,7 +23,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .config import CONFIG_NAMES, ConfigError, find_config, load
-from .interpose import Census, Crossing, Identifier, Session, Watch, resolve
+from .interpose import Census, Crossing, Identifier, Session, Watch
+from .targets import resolve
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     import pytest
@@ -59,7 +60,7 @@ def _install(config_path: Path) -> None:
             )
             continue
         try:
-            identify = resolve(funnel.identify)[2]
+            identify = resolve(funnel.identify).value
         except Exception as exc:
             _errors.append(f"{funnel.target}: identify {funnel.identify!r}: {exc}")
             continue

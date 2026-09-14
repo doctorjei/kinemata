@@ -24,9 +24,7 @@ from kinemata.config import ConfigError, load
 from kinemata.interpose import (
     Census,
     Funnel,
-    InterposeError,
     Session,
-    resolve,
 )
 
 pytest_plugins = ["pytester"]
@@ -121,19 +119,12 @@ def test_a_target_that_cannot_be_patched_blocks_rather_than_raising(module):
     watcher = Census(funnel, Keys(), module.key_of)
     watcher.install()
     assert not watcher.installed
-    assert "not there to patch" in watcher.blocked
+    assert "is not there" in watcher.blocked
     assert watcher.watch().failed
-
-
-def test_an_unimportable_module_is_a_refusal_by_name():
-    with pytest.raises(InterposeError, match="cannot import"):
-        resolve("no_such_module_anywhere:thing")
-
-
-def test_a_target_naming_something_uncallable_is_refused(module):
-    module.NUMBER = 3
-    with pytest.raises(InterposeError, match="not a callable"):
-        resolve("projectmod:NUMBER")
+    # The lookup itself, and every way it can refuse, is `test_targets.py`. What
+    # belongs here is only that a refusal BLOCKS rather than raising: a census
+    # that raised into `pytest_configure` would take the project's whole run
+    # down over a misspelled config line.
 
 
 # -- what is recorded ---------------------------------------------------------

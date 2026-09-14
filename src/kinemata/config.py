@@ -77,7 +77,6 @@ from .contract import (
     usable_boundary,
 )
 from .gates import Gate
-from .interpose import TARGET_FORM as FUNNEL_FORM
 from .interpose import Funnel
 from .parity import AUTHORITIES, Oracle, Translation
 from .provenance import DEFAULT_STALE_AFTER, PROVENANCE_REGISTRY
@@ -87,6 +86,7 @@ from .resources import (
     ResourceError,
 )
 from .resources import declared as declared_resources
+from .targets import TARGET_FORM as FUNNEL_FORM
 
 CONFIG_NAMES = ("kinemata.toml", ".kinemata.toml")
 
@@ -1440,7 +1440,7 @@ def _build_funnels(
     inside the project's own test session rather than inside every ``kinemata
     check`` -- and a module that imports there and not here would otherwise
     make a config unloadable for a reason having nothing to do with the file.
-    :func:`kinemata.interpose.resolve` does the rest, and its failure is the
+    :func:`kinemata.targets.resolve` does the rest, and its failure is the
     session's.
     """
     built: list[Funnel] = []

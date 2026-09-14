@@ -37,28 +37,18 @@ why an observation is keyed on the identifier alone and never on the site.
 
 from __future__ import annotations
 
-import importlib
 import sys
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
 from .contract import Registry
-
-#: How a funnel and an extractor are spelled. One module, one attribute in it,
-#: both named outright -- the same rule ``[[registry]]``'s ``target`` follows,
-#: and for the same reason: the code a config causes to run should be readable
-#: in the diff that adds it.
-TARGET_FORM = 'target = "package.module:ClassName.method"'
+from .targets import TargetError, resolve
 
 #: Collector faults kept before the rest are dropped. Enough to see a pattern,
 #: bounded because a fault in a hot funnel would otherwise fill memory with one
 #: repeated line.
 MAX_ERRORS = 20
-
-
-class InterposeError(Exception):
-    """A funnel that cannot be installed as declared."""
 
 
 @dataclass(frozen=True)
@@ -157,41 +147,6 @@ class Watch:
         return bool(self.blocked or self.findings or self.errors)
 
 
-def resolve(target: str) -> tuple[Any, str, Any]:
-    """The owner, attribute name and current value ``target`` names.
-
-    Resolved here rather than when the config loads, and the distinction is not
-    cosmetic: importing the project's own modules is a thing to do inside the
-    project's own test session, not inside every ``kinemata check``. The config
-    checks the *shape* of a target; this resolves it, and a failure is the
-    session's rather than the file's.
-    """
-    module_name, _, attribute = target.partition(":")
-    if not module_name.strip() or not attribute.strip():
-        raise InterposeError(f"{target!r} is not a target. Write {TARGET_FORM}.")
-    try:
-        owner: Any = importlib.import_module(module_name.strip())
-    # Importing runs the project's module, so anything can come back out of it.
-    except Exception as exc:
-        raise InterposeError(
-            f"cannot import {module_name!r} for target {target!r}: "
-            f"{type(exc).__name__}: {exc}"
-        ) from exc
-
-    parts = attribute.strip().split(".")
-    for step in parts[:-1]:
-        if not hasattr(owner, step):
-            raise InterposeError(f"{target!r}: {step!r} is not there to patch")
-        owner = getattr(owner, step)
-    name = parts[-1]
-    if not hasattr(owner, name):
-        raise InterposeError(f"{target!r}: {name!r} is not there to patch")
-    original = getattr(owner, name)
-    if not callable(original):
-        raise InterposeError(f"{target!r} names a {type(original).__name__}, not a callable")
-    return owner, name, original
-
-
 _HERE = __file__
 
 
@@ -252,10 +207,11 @@ class Census:
         if self._original is not None:
             return
         try:
-            owner, name, original = resolve(self.funnel.target)
-        except InterposeError as exc:
+            found = resolve(self.funnel.target)
+        except TargetError as exc:
             self.blocked = str(exc)
             return
+        owner, name, original = found.owner, found.name, found.value
         self._owner, self._name, self._original = owner, name, original
 
         def watched(*args: Any, **kwargs: Any) -> Any:
