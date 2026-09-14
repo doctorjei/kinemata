@@ -1,8 +1,8 @@
 """Reaching a declared registry from the project's own code, while it runs.
 
 No other mechanism here observes a **running program** --
-``docs/structure.md`` [0TN2REE-Pa0001] draws it as the second axis, and
-``docs/introduction.md`` [0TN2RQ2-Pa0004] § Known limits says whether that
+``docs/structure.md`` [0TN49Y3-Pa0001] draws it as the second axis, and
+``docs/introduction.md`` [0TN49Y3-Pa0004] § Known limits says whether that
 absence is permanent. It is not this module's place to answer that.
 
 The first project to adopt this layer inventoried its 326-check

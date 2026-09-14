@@ -243,7 +243,7 @@ class Divergence:
     reader cannot act on is the inert signal this package exists to prevent.
 
     ⚠ What that buys is a **reminder** in the sense
-    ``docs/structure.md`` [0TN2REE-Pa0001] uses: the authority is recorded, and
+    ``docs/structure.md`` [0TN49Y3-Pa0001] uses: the authority is recorded, and
     nothing here can stop the authoritative side being edited to silence the
     finding. The baseline has the same shape and the same answer -- it is a
     visible change to a committed file.
