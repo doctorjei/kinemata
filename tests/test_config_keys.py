@@ -142,6 +142,109 @@ def test_each_table_refuses_an_unknown_key(tmp_path, body, where):
     assert where in str(caught.value)
 
 
+# -- the two tables that were still absorbing ---------------------------------
+
+
+def test_a_misspelled_gate_array_is_refused_at_the_document_root(tmp_path):
+    """The spelling that disarms a check rather than decorating one.
+
+    `[[gates]]` loaded without complaint and declared zero gates, so the
+    inventory saying *these checks must still run* was never declared at all --
+    and the only guard, "this config declares no check whatsoever", is satisfied
+    by the registry sitting next to it.
+    """
+    with pytest.raises(ConfigError) as caught:
+        load_with(tmp_path, '[[gates]]\ncommand = "kinemata check"\n')
+    message = str(caught.value)
+    assert "gates" in message and "document root" in message
+    assert "gate" in message  # what it could have been
+
+
+def test_the_root_is_refused_before_anything_is_read_out_of_it(tmp_path):
+    """A config whose only check is the misspelled one must not read as empty."""
+    with pytest.raises(ConfigError) as caught:
+        load(write(tmp_path, '[[gates]]\ncommand = "kinemata check"\n'))
+    assert "document root" in str(caught.value)
+    assert "declares no check at all" not in str(caught.value)
+
+
+def test_a_registry_refuses_a_key_no_kind_declares(tmp_path):
+    with pytest.raises(ConfigError) as caught:
+        load(
+            write(
+                tmp_path,
+                """
+                [[registry]]
+                name = "values"
+                kind = "python-constants"
+                modules = ["values.py"]
+                mach1nery = ["build/"]
+                """,
+            )
+        )
+    assert "mach1nery" in str(caught.value)
+
+
+def test_a_registry_refuses_a_key_that_belongs_to_another_kind(tmp_path):
+    """Differenced per kind, never unioned.
+
+    `section` is real, and means nothing at all on a registry of Python
+    constants. A union of every kind's vocabulary would take it and read it to
+    nobody, which is the same silence this whole file is about.
+    """
+    with pytest.raises(ConfigError) as caught:
+        load(
+            write(
+                tmp_path,
+                """
+                [[registry]]
+                name = "values"
+                kind = "python-constants"
+                modules = ["values.py"]
+                section = "keys"
+                """,
+            )
+        )
+    message = str(caught.value)
+    assert "section" in message and "python-constants" in message
+
+
+def test_a_registry_says_the_key_was_absorbed_from_an_enclosing_table(tmp_path):
+    """`[[registry]]` is an array-of-tables, so it steals like `[[gate]]` does."""
+    (tmp_path / "values.py").write_text("NAME = 'x'\n")
+    with pytest.raises(ConfigError) as caught:
+        load(
+            write(
+                tmp_path,
+                """
+                [project]
+                root = "."
+
+                [[registry]]
+                name = "values"
+                kind = "python-constants"
+                modules = ["values.py"]
+                exclude = ["build/"]
+                """,
+            )
+        )
+    message = str(caught.value)
+    assert "exclude" in message and "array-of-tables" in message
+
+
+def test_an_import_registry_still_takes_keys_this_file_does_not_know(tmp_path):
+    """The one kind deliberately left out, and why.
+
+    Everything `IMPORT_KEYS` does not name is handed to the project's own class
+    as a keyword argument. Refusing an unrecognized key there would refuse the
+    parameterization that naming a class exists to allow -- so that kind checks
+    its own vocabulary, through its constructor.
+    """
+    from kinemata.config import KIND_KEYS
+
+    assert "import" not in KIND_KEYS
+
+
 def test_a_shape_rule_refuses_an_unknown_key(tmp_path):
     """`[[shape.rule]]` absorbs from `[[shape]]` exactly as `[[gate]]` does."""
     with pytest.raises(ConfigError) as caught:

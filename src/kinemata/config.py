@@ -469,6 +469,50 @@ PARITY_KEYS = frozenset(
 SHAPE_KEYS = frozenset({"registry", "rule"})
 INTERPOSE_KEYS = frozenset({"registry", "target", "identify"})
 
+#: Every table a ``kinemata.toml`` may declare. ⚑ **The root was the last table
+#: that absorbed silently, and the worst one to.** A top-level ``[[gates]]`` --
+#: the plural typo -- loaded without complaint and declared no gates at all, so
+#: the inventory that says *these checks must still run* was never declared
+#: rather than declared wrong. `declared_checks` below catches only the
+#: degenerate case where a config declares nothing whatsoever, which a config
+#: with one registry and a misspelled gate array is not.
+ROOT_KEYS = frozenset(
+    {
+        "project", "registry", "count", "parity", "shape", "interpose", "gate",
+        "claims", "context", "citations", "promise", "command",
+    }
+)
+
+#: What any ``[[registry]]`` may declare whatever its kind: its own name, the
+#: kind itself, and the contract attributes :func:`load` sets on the instance
+#: after the builder has run.
+REGISTRY_KEYS = frozenset(
+    {
+        "name", "kind", "closed", "allow_empty", "suffixes", "machinery",
+        "match_mode", "boundary",
+    }
+)
+
+#: What each kind adds to those. **Differenced per kind rather than unioned**,
+#: because ``section`` on a ``python-constants`` registry means exactly as
+#: little as a key no kind has ever declared, and a flat union would accept it
+#: while reporting nothing.
+#:
+#: ``import`` is deliberately absent: everything :data:`IMPORT_KEYS` does not
+#: name is handed to the project's own class as a keyword argument, so refusing
+#: an unrecognized key here would refuse the parameterization that naming a
+#: class exists to allow. That kind checks its own vocabulary, through the
+#: constructor.
+KIND_KEYS = {
+    "python-constants": frozenset({"modules", "include_private", "min_length"}),
+    "yaml-mapping": frozenset(
+        {"source", "section", "clause_field", "syntax", "budget", "line_budget"}
+    ),
+    "code-patterns": frozenset({"entry"}),
+    "substitutions": frozenset({"source", "words", "case_sensitive"}),
+    "bibliography": frozenset({"source", "interpreted", "standardized"}),
+}
+
 #: A rule's own keys: its name, its optional guard, and whichever claim it
 #: spells plus that claim's companion. The claim spellings are read from
 #: :data:`SHAPE_CLAIMS` rather than restated, so a new operator cannot be
@@ -722,6 +766,12 @@ def load(path: str | Path) -> Settings:
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise ConfigError(f"cannot read {path}: {exc}") from exc
 
+    # Before anything is read out of it, because every question below is asked
+    # of a table this pass may find nothing declares. A misspelled array of
+    # tables does not fail a check -- it removes one, and `declared_checks`
+    # notices only when the config has nothing left at all.
+    _reject_unknown(raw, ROOT_KEYS, f"{path}: document root")
+
     project = raw.get("project", {})
     _reject_unknown(project, PROJECT_KEYS, f"{path}: [project]")
     root = (path.parent / project.get("root", ".")).resolve()
@@ -796,6 +846,16 @@ def load(path: str | Path) -> Settings:
             raise ConfigError(
                 f"registry {spec.get('name', '?')!r}: unknown kind {kind!r} "
                 f"(known: {', '.join(sorted(BUILDERS))})"
+            )
+        # After the kind is known, so the answer is the vocabulary of the kind
+        # the project actually named, and before the builder runs, so a
+        # misspelled `sourc` is reported as a misspelling rather than as a
+        # bibliography that needs a `source` the reader can see they wrote.
+        if kind in KIND_KEYS:
+            _reject_unknown(
+                spec, REGISTRY_KEYS | KIND_KEYS[kind],
+                f"{path}: [[registry]] {spec.get('name', '?')!r} of kind {kind!r}",
+                absorbs=True,
             )
         registry = builder(spec, root, path)
         # Applied here rather than in each builder: every kind of registry can

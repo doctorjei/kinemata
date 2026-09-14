@@ -477,6 +477,17 @@ outside, so the following are `ConfigError`, not silent skips:
   to bootstrap deliberately
 - a missing module, or an unknown `kind` — raised at load, because those are typos rather than a
   statement that the adapter does not fit
+- **any table declaring a key it cannot mean**, the document root and `[[registry]]` included. Each
+  table differences its own key set and the refusal names what the key could have been. TOML hands
+  a bare key to the most recently opened table, so a `[[gate]]` written inside `[claims]` takes the
+  `historical` after it and the suppression stops applying; where the swallowing table is an array
+  of tables the refusal says so outright, because naming the key alone leaves its author reading an
+  error under a heading they never associated with it. At the **root** the spelling that bites is a
+  misspelled array — `[[gates]]` declares no gates at all, which disarms the inventory rather than
+  decorating it, and a config with one registry beside it still declares a check. A `[[registry]]`
+  is differenced against **its own kind's** vocabulary rather than the union of all of them, since
+  `section` on a `python-constants` registry means exactly as little as a key no kind has ever had.
+  `kind = "import"` is the one exception and checks its own vocabulary through its class, below
 - `[context]` missing `include` or `budget` — there is **no default ceiling**
 - `[context] strip` naming an unknown transform
 - `[[gate]]` with no `command`
