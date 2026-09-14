@@ -301,7 +301,7 @@ strip = ["html-comments"]
 | `kind` | Entries come from | Antipatterns |
 |---|---|---|
 | `python-constants` | module-level constants in named `modules` | derived from the values |
-| `yaml-mapping` | a YAML mapping file (`source`) | derived from the values |
+| `yaml-mapping` | a YAML mapping file (`source`), optionally a `section` inside it — one key, or a list of keys to descend through | derived from the values |
 | `code-patterns` | hand-declared `[[registry.entry]]` tables | declared |
 | `substitutions` | `[registry.words]` or an external `source` TOML | the forbidden spelling |
 | `bibliography` | `[[entry]]` tables in an external `source` TOML | none — a citation *accompanies* its target by default, so a target spelled beside its key is the readable half of a declared citation rather than a re-derivation of it |
@@ -551,6 +551,10 @@ outside, so the following are `ConfigError`, not silent skips:
 - `[context]` missing `include` or `budget` — there is **no default ceiling**
 - `[context] strip` naming an unknown transform
 - `[[gate]]` with no `command`
+- a `yaml-mapping` `section` naming a key the document does not hold, landing on something that is
+  not a mapping, given as an empty list, or given as neither a string nor a list. A missing segment
+  names itself, what it was looked for under, and what that level actually held — "section not
+  found" against a five-deep path is a refusal somebody has to go and locate by hand
 - a registry that cannot recognize its own identifiers cannot be `closed`
 - a config declaring **no check at all** — every command it configures would pass by doing nothing
 - a `[[promise]]` with no `until`, an unparseable date, or a `note` with no `by`
@@ -1216,11 +1220,17 @@ down, and the two shapes at the end are the findings that matter most.
   judges anything false looks exactly like a declaration in good order. `test_shape.py` asserts
   that limit rather than papering over it.
   ⚑ **What the rule language does not reach is the *addressing*, not the rules.** A rule can only
-  speak about entries a registry produces, and the `yaml-mapping` adapter takes one top-level
-  section: of the 31, **9 are addressable today, a dotted section path would reach 18, and a
-  two-level flatten 28.** The last 3 are not shape rules at all — they ask whether a section
-  exists, which declaring the registry already answers, because a missing section is refused at
-  load. **That is an adapter limit and it is measured**, not a guess about what adopters will want.
+  speak about entries a registry produces: of the 31, **9 were addressable when the adapter took
+  one top-level section, a section path reaches 18, and a two-level flatten 28.** The last 3 are
+  not shape rules at all — they ask whether a section exists, which declaring the registry already
+  answers, because a missing section is refused at load. **That is an adapter limit and it is
+  measured**, not a guess about what adopters will want.
+  ⚑ **Half of it is closed as of 2026-09-14: `section` takes a path.** A list of keys, not a dotted
+  string — a dotted string cannot express a key containing a dot, and the loader would be guessing
+  which of two splits the project meant over a file it did not write. **What is still open is the
+  flatten**: a two-level table like a `kind -> relation -> outcome` matrix has no identifier per
+  cell, and minting one changes what an `Entry.id` is for every consumer, the baseline's
+  fingerprints included.
 - **~~A project cannot supply its own registry adapter from `kinemata.toml`.~~** True until
   2026-09-09, and the first thing the first outside audit found: `config.BUILDERS` was a fixed
   table of kinds with no plugin path, so the `declared()` override the contract invites was

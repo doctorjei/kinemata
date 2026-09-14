@@ -47,6 +47,7 @@ import importlib
 import inspect
 import re
 import tomllib
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path, PurePosixPath
@@ -308,6 +309,83 @@ def _build_constants(spec: dict[str, Any], root: Path, path: Path) -> BaseRegist
     return registry
 
 
+#: How many sibling keys a "not in the document" refusal lists back. Enough to
+#: recognize the level you are standing on -- and to see a near-miss spelling
+#: right beside the one you typed -- without pasting somebody's whole manifest
+#: into an error.
+SECTION_SIBLINGS = 8
+
+
+def _spell(segments: Sequence[str]) -> str:
+    """A path as the config would have written it, for an error to point at."""
+    return " -> ".join(repr(segment) for segment in segments)
+
+
+def _descend(document: Any, section: Any, name: str, source: str) -> Any:
+    """The mapping a registry addresses, down a declared path of keys.
+
+    ``section`` is one key, as it has always been, or a list of them. **A list
+    rather than a dotted string**, and that is the whole decision here: a dotted
+    string reads better and cannot express a key containing a dot, at which
+    point the loader is guessing which of two splits the project meant, over a
+    file it did not write. This package refuses rather than guessing everywhere
+    else. Dotted sugar can be layered on a list later; a list cannot be added
+    *underneath* a dotted string without changing what an existing config means.
+
+    A bare string is one segment, so no existing declaration changes meaning.
+
+    **Every refusal names the segment that failed and what the level actually
+    held.** "section not found" against a five-deep path is a refusal somebody
+    has to go and locate by hand, which is the failure mode this package spends
+    its error messages avoiding.
+    """
+    if section is None or section == "":
+        return document
+    if isinstance(section, str):
+        segments = [section]
+    elif isinstance(section, (list, tuple)):
+        segments = [str(segment) for segment in section]
+    else:
+        raise ConfigError(
+            f"registry {name!r}: 'section' is {type(section).__name__}; it "
+            "takes one key, or a list of keys to descend through."
+        )
+    if not segments:
+        raise ConfigError(
+            f"registry {name!r}: 'section' is an empty list, which addresses "
+            "nothing. Name the keys to descend through, or drop the key."
+        )
+
+    walked: list[str] = []
+    for segment in segments:
+        where = f" under {_spell(walked)}" if walked else ""
+        if not isinstance(document, dict):
+            raise ConfigError(
+                f"registry {name!r}: {_spell(walked)} in {source} is "
+                f"{type(document).__name__}, not a mapping, so {segment!r} "
+                "cannot be looked up inside it."
+            )
+        if segment not in document:
+            held = list(document)
+            shown = ", ".join(repr(key) for key in held[:SECTION_SIBLINGS])
+            if len(held) > SECTION_SIBLINGS:
+                shown += f", and {len(held) - SECTION_SIBLINGS} more"
+            raise ConfigError(
+                f"registry {name!r}: section segment {segment!r} is not in "
+                f"{source}{where}. That level holds: {shown or 'nothing'}"
+            )
+        document = document[segment]
+        walked.append(segment)
+
+    if not isinstance(document, dict):
+        raise ConfigError(
+            f"registry {name!r}: section {_spell(walked)} in {source} is "
+            f"{type(document).__name__}, not a mapping. A mapping registry "
+            "addresses a table of entries."
+        )
+    return document
+
+
 def _build_yaml_mapping(spec: dict[str, Any], root: Path, path: Path) -> BaseRegistry:
     try:
         import yaml
@@ -324,13 +402,7 @@ def _build_yaml_mapping(spec: dict[str, Any], root: Path, path: Path) -> BaseReg
         raise ConfigError(f"registry {spec.get('name', '?')!r}: no such file: {path}")
 
     document = yaml.safe_load(path.read_text()) or {}
-    section = spec.get("section")
-    if section:
-        if section not in document:
-            raise ConfigError(
-                f"registry {spec.get('name', '?')!r}: section {section!r} not in {source}"
-            )
-        document = document[section]
+    document = _descend(document, spec.get("section"), spec.get("name", "?"), source)
 
     return MappingRegistry(
         document,
