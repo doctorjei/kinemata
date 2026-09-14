@@ -161,7 +161,16 @@ warned about.
 ⚑ **A `target` is code your config causes to run.** So is a `[[count]]` oracle,
 which is a shell command `claims` runs; the config has not been inert data since
 those were built. kinemata still reads the code it *checks* with `ast` and never
-executes it. Those two are the exceptions, and both are explicit in the file.
+executes it.
+
+**The rule, rather than a list of the exceptions: wherever the config names a
+command or a `module:attribute`, kinemata runs what it names — and nowhere
+else.** Every such place is visible in the config file, which is where a
+reviewer reads them. ⚑ **This said "those two are the exceptions" and was
+already wrong before it was noticed**: `[[interpose]]`'s `identify` had been a
+third since 2026-09-14 and `[[shape]]`'s predicates are a fourth. A sentence
+enumerating a list that grows is the failure this tool reports in other
+people's documents.
 
 Then:
 
@@ -180,6 +189,11 @@ kinemata parity      # the gate, for what a registry declares against the set an
                      # oracle says the code produces: membership either way, and
                      # with a `field`, each entry's value too. Exits 1 on a
                      # disagreement; refuses without a [[parity]].
+kinemata shape       # the gate, for a declaration against its own shape: a
+                     # field set, a vocabulary, a flag another field requires.
+                     # Exits 1 on a rule an entry fails — or on a rule whose
+                     # guard selected nothing, which checks nothing. Refuses
+                     # without a [[shape]].
 kinemata baseline    # what the gates already accept. --record to change it;
                      # runs every scan that feeds it, being the one that writes.
 kinemata context     # the gate, for what a session loads. Exits 1 over the ceiling.
@@ -459,7 +473,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **814 tests**, and
+The companion guard is a number with an oracle. This suite is **864 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 

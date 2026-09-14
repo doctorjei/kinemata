@@ -137,7 +137,7 @@ mistakes an agent makes; both are statements about one mechanism.
 | | Reads source text at rest | Runs a declared oracle | The project's own run |
 |---|---|---|---|
 | **Negative** — *this must not appear* | the duplication scan, the closed-world catch, `clusters`, `unused` | — | — |
-| **Positive** — *this must hold* | `path`, `link` and `[[gate]]` claims; the context ceiling; the citation policy and the resource list | `commit` (git), `url` (the network), `[[count]]` (any declared command), parity (`[[parity]]`) in both its membership and its per-entry value form, `confirm` re-verifying what it dates | — |
+| **Positive** — *this must hold* | `path`, `link` and `[[gate]]` claims; the context ceiling; the citation policy and the resource list; the shape check's declarative rules (`[[shape]]`) | `commit` (git), `url` (the network), `[[count]]` (any declared command), parity (`[[parity]]`) in both its membership and its per-entry value form, `confirm` re-verifying what it dates, a shape rule whose guard or claim is a **predicate the project names** | — |
 | **Behavioral** — *what the program did* | out of reach | out of reach | the run-time surface, asserted by the project's own tests; `kinemata interpose`, judging what crosses a declared funnel during the project's own run |
 
 ⚑ **The citation layer was missing from this table until it was audited**, two days after it began
@@ -156,6 +156,17 @@ asks what a mechanism reads, so two mechanisms can share a cell and still answer
 questions, and a reader taking the cell as the description would miss it. Said here rather than
 patched with a column the axes do not support; `docs/introduction.md` § Commands is where parity's
 behavior and its refusals live.
+
+⚑ **The shape check occupies two cells at once, and its subject is new.** `[[shape]]` is positive
+— *a declaration must be the shape it says it is* — and a rule written in the config reads text at
+rest, while a rule whose guard or claim is a **project-supplied predicate** is a declared oracle in
+the same sense `[[parity]]`'s command is: the project's own code, invoked to answer a question this
+tool poses. What is genuinely new is neither axis but the **subject**, which is *the declaration
+itself* rather than the code it describes. Every other positive mechanism compares a declaration
+to something else — the code, a command's output, the network — and this one asks whether the
+declaration is internally what it claims. **Read that as a third thing the table does not show,
+the way parity's subject already is**, rather than as a fourth column: the axes answer *who can
+disable this* and *what can it see*, and neither asks what a mechanism is looking at.
 
 ⚑ **Per-entry value parity moved neither axis either, and this is worth saying because it looks
 like it should have.** *This declared field must equal what the code prints* is the same polarity
@@ -496,7 +507,7 @@ What this project ships, read back against its own rules:
 
 | Principle | How the registry layer answers it |
 |---|---|
-| §1 reminder or catch | `ids`, `review`, `clusters` and `unused` are reminders; `check`, `claims` and `undeclared` are catches only in CI, and only as far as branch protection reaches — which is the job existing, not the job checking anything; `baseline` is a catch with an escape hatch, below |
+| §1 reminder or catch | the advisory commands — `ids`, `review`, `clusters`, `unused`, `stale` — are reminders; **the gates** are catches only in CI, and only as far as branch protection reaches, which is the job existing rather than the job checking anything; `baseline` is a catch with an escape hatch, below. ⚑ **Which commands gate is `docs/introduction.md` § Commands, not this cell** — it named three, stayed at three when `parity` made it four, and would have said three with `shape` making it five |
 | §1 one source | `review` and `check` run identical analysis; only the exit code differs |
 | §1 carrier | the baseline is stored in the tree the agent writes, so the ratchet cannot be a catch however it is wired — recorded below rather than papered over |
 | §2 spend test | duplication scores yes/no/no — cheap to commit, invisible in a diff, silent on landing |
@@ -505,7 +516,7 @@ What this project ships, read back against its own rules:
 | §3 threshold | the context ceiling has no default — a project declares a number it measured, or the command refuses to run |
 | §3 break it on purpose | the self-check's five entries were each verified by injecting the bypass and watching the gate fail |
 | §6 validation | labeled history from real repositories, with the components that failed labeled as failing |
-| §4 classify first | `clusters` reports; `check`, `claims` and `undeclared` gate. A missing file is a fact; text repeating with no declared home is a judgment |
+| §4 classify first | `clusters` reports; the gates gate. A missing file is a fact; text repeating with no declared home is a judgment |
 
 One of those rows was added late, and the reason generalizes past this project. Every
 mechanism above was built and validated on the question *does it find the thing?* — and all

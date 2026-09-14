@@ -53,6 +53,7 @@ from pathlib import Path
 
 from .bypass import Bypass, is_strays_scope
 from .parity import VALUE_DIRECTION, is_parity_scope
+from .shape import is_shape_scope
 
 #: Where a project's accepted findings live when it does not say otherwise.
 #: Dotted and in the project root: it belongs to the repository, not to a
@@ -147,6 +148,13 @@ class Accepted:
                 "produced by nothing"
             )
             return f"{self.path}: {self.entry_id} {missing}{times}"
+        # A shape record names the rule it broke, and the rule's own name is the
+        # only thing that says what was accepted. Split with a maxsplit so that
+        # a rule called `set: never iff meta.` survives being read back -- a
+        # colon is ordinary in a name that quotes a declaration's own field.
+        if is_shape_scope(self.registry):
+            rule = self.registry.split(":", 2)[-1]
+            return f"{self.path}: {self.entry_id} breaks {rule!r}{times}"
         return (
             f"{self.path}: {self.antipattern!r} bypasses {self.entry_id}{times} "
             f"-- {self.text[:60]}"

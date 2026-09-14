@@ -312,6 +312,14 @@ note = "the session-load ceiling; refuses here, and the step pins the refusal"
 command = "kinemata parity"
 note = "declaration against what the code produces; refuses here, and the step pins it"
 
+# The third of the same shape. This repository's own declarations are a
+# bibliography and two negative registries, and a rule about the shape of a
+# citation entry would be a rule with one carrier and no reader -- so nothing
+# declares `[[shape]]` and the command refuses.
+[[gate]]
+command = "kinemata shape"
+note = "a declaration against its own shape; refuses here, and the step pins it"
+
 # Two findings from `kinemata unused`, reviewed 2026-09-09 and set aside. This
 # is the second kind of promise -- not a file the project will produce, but a
 # question somebody answered and dated so the answer expires rather than

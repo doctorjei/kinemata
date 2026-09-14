@@ -198,6 +198,47 @@ authority = "declared"      # or "produced"; the code is on trial either way
 pattern = '/$'              # the manifest writes a directory prefix with a
 replacement = ''            # trailing separator; the code carries none
 
+# Rules a declaration must satisfy about ITSELF -- the one check whose subject
+# is the declared document rather than the code. A rule is a `name`, a guard
+# (`when`, optional) and exactly one claim; one registry, one block.
+[[shape]]
+registry = "keyspace"
+
+  # No guard: every entry. `present`/`absent` take the field's name; the value
+  # operators (`equals`, `choices`, `matches`, `each_matches`, `contains`) take
+  # `field` as well, and `id_matches` claims something about the identifier.
+  [[shape.rule]]
+  name    = "every row declares a type"
+  present = "type"
+
+  [[shape.rule]]
+  name    = "a type is one of the declared vocabulary"
+  field   = "type"
+  choices = ["str", "int", "bool", "path"]
+
+  # A declarative guard: the rule judges only the entries it selects, and the
+  # run prints how many that was. A guard selecting NONE fails -- a rule that
+  # checked nothing must not read like a rule that was satisfied.
+  [[shape.rule]]
+  name    = "an internal row carries a value instead of a default"
+  when    = { field = "user_key", equals = false }
+  present = "value"
+
+  # Over the set rather than per entry: `exists` names ids that must be
+  # declared, `keys_of`/`are` compares one field's keys to another's values
+  # both ways, and `exhausts` fails a vocabulary member nothing uses.
+  [[shape.rule]]
+  name     = "no dead outcome token"
+  field    = "outcome"
+  exhausts = "outcomes"
+
+  # The escape: a rule that is the project's own model of its own declaration.
+  # Either half may be a `module:attribute`, and what it receives is one entry.
+  [[shape.rule]]
+  name  = "set: never iff the key is under meta."
+  when  = "mypkg.rules:is_never_settable"
+  holds = "mypkg.rules:is_meta_key"
+
 # Watch a write funnel while the project's own suite runs, and fail the run on
 # an identifier nothing declares. Inert until the project loads the plugin:
 # `pytest_plugins = ["kinemata.pytest_plugin"]` in its conftest. `identify` is
@@ -256,8 +297,14 @@ TOML. Subclass `kinemata.contract.BaseRegistry` and everything but `entries()` i
 
 ⚑ **This makes the config name code that gets executed.** That line was already crossed by
 `[[count]]`, whose oracles are shell commands run through `subprocess`. kinemata still reads the
-code it *checks* with `ast` and never executes it; a declared oracle — `[[count]]`'s or
-`[[parity]]`'s — and a named adapter are the exceptions, all explicit in the config file.
+code it *checks* with `ast` and never executes it.
+
+**The rule, and it is stated as one because the list keeps growing: wherever this config names a
+command or a `module:attribute`, kinemata runs what it names — and nowhere else.** A declared
+oracle (`[[count]]`, `[[parity]]`), a named adapter (`kind = "import"`), an interposition's funnel
+and `identify`, a shape rule's guard or claim: every one of them is a line in this file, which is
+where a reviewer reads them. ⚑ **Three documents enumerated the exceptions and all three were
+already stale**, having missed the interposition a day before the shape check added another.
 
 A config needs **at least one check** — a registry, a count, a parity, a gate, `[claims]`,
 `[context]` or `[citations] provenance` — and is refused if it declares none. It does **not** need
@@ -343,6 +390,7 @@ does not want this.
 | `kinemata check` | the gate | a strong finding not covered by the baseline, or a baseline past its `until` |
 | `kinemata claims` | documentation gate, ratcheted; also verifies `[[gate]]` declarations | a dead claim the baseline does not already accept, a baseline past its `until` that exempts claims here, or a declared gate that does not run |
 | `kinemata parity` | membership gate, ratcheted — what a registry declares, against the set an oracle says the code produces. Both directions: produced and declared by nothing, declared and produced by nothing. With `field`, **also** each entry's declared value against what the oracle prints for it | a disagreement in any of the three directions that the baseline does not already accept, an oracle that could not answer, or a declared value no oracle could be expected to print. Refuses outright (exit 2) if no `[[parity]]` is declared |
+| `kinemata shape` | declaration gate, ratcheted — the one check whose subject is a declaration rather than the code, so it reads no tree and takes no path. A rule is a **guard** and a **claim**, and either may be a predicate the project names | a rule an entry does not satisfy that the baseline does not already accept, a rule that could not be evaluated, or **a rule whose guard selected no entry at all**. Refuses outright (exit 2) if no `[[shape]]` is declared |
 | `kinemata context` | session-load gate | measured bytes exceed `budget` |
 | `kinemata baseline` | shows accepted findings; `--record --until`, `--prune` | — |
 | `kinemata stamp` | mints a citation stamp, or decodes one; reads no config | the text given is not a stamp |
@@ -551,14 +599,20 @@ multiplicity counted. Line numbers are excluded; path is included.
 
 **One list, every gate that ratchets.** `check` puts the code findings through it, `claims` puts
 the documentation findings through it, `undeclared` puts a closed registry's strays through it,
-and `parity` puts the disagreements between a declaration and its oracle through it — each
-reading the part it scans. A second exemption list was the alternative and is the failure
+`parity` puts the disagreements between a declaration and its oracle through it, and `shape` puts
+the rules a declaration does not satisfy through it — each reading the part it scans, and each
+record carrying the scope that produced it. A second exemption list was the alternative and is the failure
 mode: two lists eventually disagree about what a project accepted, and the one nobody is reading
 is the one still exempting something real. Records are tagged with the check that produced them,
 so no gate reports another's as fixed — it names them instead, because silence about part of an
 exemption list reads exactly like having accounted for all of it. `kinemata baseline` runs every
 one of those scans, being the only command that writes the file; a `--prune` covering some of
 them would delete the rest's records on the strength of never having looked.
+
+⚑ **A shape rule brings a second way not to have answered, and it stalls a rewrite too.** A rule
+whose guard selected no entry *ran*, and judged nothing — so pruning its records would drop them
+on the authority of a run that examined none of them. Blocked and vacuous rules both appear in the
+refusal below.
 
 ⚑ **Running a scan is not the same as the scan answering, and `--record` and `--prune` refuse
 (exit 2) while any declared oracle is blocked.** An oracle that is not installed on this machine
@@ -942,9 +996,13 @@ down, and the two shapes at the end are the findings that matter most.
   for. **The entry stays open and `accepted`**, and the reason has changed: what is left is not a
   missing declaration form but a row whose fact is *the outcome of an execution*, reachable only by
   constructing inputs through that suite's own fixtures. There is no product-only command that
-  prints it, so it belongs to the run-time entry below rather than to this one — and how much of
-  the 125 that is has not been measured. `docs/structure.md` § The second axis is where the
-  mechanism is classified.
+  prints it, so it belongs to the run-time entry below rather than to this one.
+  `docs/structure.md` § The second axis is where the mechanism is classified.
+  ⚑ **How much of the 125 that is, is measured as of 2026-09-14: seven functions, 5.6%** — every
+  one of them classified, not sampled. This entry said the figure had not been measured, which was
+  true for a day. **It is the smallest of the three classes that measurement found and the most
+  expensive to reach**, and the largest — rules a declaration states about *itself* — was not on
+  this list at all until the same measurement put it there, two entries below.
 - **accepted** · **~~Nothing here observes a running program.~~ One thing does, and it sees one
   declared funnel.** Closed 2026-09-14 by `[[interpose]]`: a callable the project names is patched
   for the length of its own test session, every identifier crossing it is judged against a declared
@@ -981,6 +1039,30 @@ down, and the two shapes at the end are the findings that matter most.
 
 **Where a declaration cannot say what a project means:**
 
+- **accepted** · **~~Nothing checks a declaration against its own shape.~~ `[[shape]]` does, as of
+  2026-09-14 — and this limit was never on this list until the measurement that closed it.** An
+  adopting project's registry is a hand-maintained YAML whose rows agents edit, and **31 of their
+  125 manifest-parity functions — the largest class of the lot — assert things about that document
+  rather than about the code**: an entry's field set, a value against a declared vocabulary, an
+  axis that must stay a cross product, a flag required only when another field says so. None of it
+  was expressible here. `kinemata shape` states each as a rule with a **guard** and a **claim**,
+  either of which may be a predicate the project names.
+  ⚑ **It is a reminder, not a catch**, in the sense `docs/structure.md` §1 uses, and for the same
+  reason `[[gate]]` is one: the rule and the row it governs are both editable by the agent being
+  constrained, in one commit. What it buys is **reach** over a mistake nothing else here can see,
+  not enforcement against someone determined to remove it.
+  ⚑ **A predicate that answers True for everything is undetectable, and saying so is the honest
+  half.** What *is* detected is a rule whose guard selected **no entry**, which fails rather than
+  passing — the group is this tool's to count, so vacuity there is caught here instead of being
+  self-reported by the code under examination. The verdict is the project's, and a rule that never
+  judges anything false looks exactly like a declaration in good order. `test_shape.py` asserts
+  that limit rather than papering over it.
+  ⚑ **What the rule language does not reach is the *addressing*, not the rules.** A rule can only
+  speak about entries a registry produces, and the `yaml-mapping` adapter takes one top-level
+  section: of the 31, **9 are addressable today, a dotted section path would reach 18, and a
+  two-level flatten 28.** The last 3 are not shape rules at all — they ask whether a section
+  exists, which declaring the registry already answers, because a missing section is refused at
+  load. **That is an adapter limit and it is measured**, not a guess about what adopters will want.
 - **~~A project cannot supply its own registry adapter from `kinemata.toml`.~~** True until
   2026-09-09, and the first thing the first outside audit found: `config.BUILDERS` was a fixed
   table of kinds with no plugin path, so the `declared()` override the contract invites was

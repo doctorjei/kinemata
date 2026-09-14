@@ -197,3 +197,21 @@ jobs:
             echo "should now run it and expect 0." >&2
             exit 1
           fi
+
+      # And the third refusal of the same shape. The declarations here are a
+      # bibliography and two negative registries; a rule about the shape of a
+      # citation entry would have one carrier and no reader, so nothing
+      # declares `[[shape]]`.
+      - name: shape refuses, this repository declaring no rule
+        run: |
+          set +e
+          kinemata shape
+          status=$?
+          set -e
+          if [ "$status" -ne 2 ]; then
+            echo "kinemata shape exited $status; expected 2." >&2
+            echo "This repository declares no [[shape]], so a refusal is the" >&2
+            echo "claim being pinned. If one was just declared, this step" >&2
+            echo "should now run it and expect 0." >&2
+            exit 1
+          fi

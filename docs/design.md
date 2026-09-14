@@ -144,9 +144,14 @@ one declared `closed` must still be able to recognize its own identifiers.
 The `[[count]]` oracles name shell commands that `claims.py` runs through `subprocess` — which is
 how this repository settles the test count its own documentation states. The config has not been
 inert data since count oracles were built. What remains true, and is the distinction worth
-holding: **kinemata reads the code it *checks* with `ast` and never executes it.** The count
-oracle and a named adapter are the two declared exceptions, and both are explicit in the config
-file, where a reviewer reads them.
+holding: **kinemata reads the code it *checks* with `ast` and never executes it.**
+
+**Stated as a rule rather than as a list: wherever the config names a command or a
+`module:attribute`, kinemata runs what it names — and nowhere else.** Every such place is explicit
+in the config file, where a reviewer reads them. ⚑ **This enumerated "the two declared exceptions"
+and had been wrong for a day before anybody looked**: `[[interpose]]`'s funnel and `identify` were
+a third and fourth, and `[[shape]]`'s predicates are a fifth. The rule does not go stale when
+another one is added; a count does.
 
 ### 4.3 Declared properties
 

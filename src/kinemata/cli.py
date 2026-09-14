@@ -69,6 +69,8 @@ from .provenance import (
 )
 from .report import DEFAULT_MAX_SITES, Report, review
 from .resources import coverage
+from .shape import Shaped, Violation
+from .shape import survey as shape_survey
 from .stamps import StampError
 
 
@@ -762,6 +764,120 @@ def cmd_parity(args: argparse.Namespace) -> int:
         print(
             f"\nFAIL: {failed} disagreement(s) between a declaration and what "
             "the code produces.",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+def _shape(args: argparse.Namespace, settings: Settings) -> list[Shaped]:
+    """The shape run, shared by ``shape`` and ``baseline``.
+
+    Shared for the reason ``_parity`` and ``_strays`` are: the command that
+    writes the exemption list has to run every check that feeds it, or
+    ``--prune`` deletes records for a source it never looked at.
+    """
+    declared = [
+        item for item in settings.shapes
+        if not args.registry or item.registry == args.registry
+    ]
+    return shape_survey(settings.registries, declared)
+
+
+def cmd_shape(args: argparse.Namespace) -> int:
+    """A declaration against the rules it states about itself.
+
+    The one check here whose subject is the declaration rather than the code, so
+    it reads no tree and takes no path. What it catches is a row edited into the
+    wrong shape -- a missing flag, a value outside the declared vocabulary, an
+    axis that stopped being a cross product -- which nothing else here can see,
+    because every other mechanism compares the declaration to something and this
+    asks whether the declaration is what it claims to be.
+
+    **Refuses when nothing declares a rule** (exit 2), the way ``parity`` and
+    ``context`` refuse. A clean sheet about a question nobody asked is the inert
+    signal this package exists to prevent.
+
+    ⚑ **A rule that selected no entries FAILS, and is reported as vacuous rather
+    than as a violation** -- nothing was wrong with an entry, the rule found no
+    entries to be wrong. It is not a finding the baseline can accept either: a
+    run that judged nothing has not earned the right to have its records pruned.
+    """
+    settings = _settings(args)
+    if not settings.shapes:
+        print(
+            "error: no [[shape]] declared: nothing says what shape this "
+            "project's own declarations must be in. Declare a registry and at "
+            "least one [[shape.rule]], or do not run this.",
+            file=sys.stderr,
+        )
+        return 2
+
+    results = _shape(args, settings)
+    # One pass, keeping the violation beside the record built from it, for the
+    # reason `cmd_parity` states: `finding()` returns a fresh object every call,
+    # so asking a second time would match nothing against the exemptions just
+    # resolved.
+    paired: list[tuple[str, Bypass, Violation]] = [
+        (item.scope, item.finding(), item)
+        for result in results
+        for item in result.violations
+    ]
+
+    baseline = Baseline.load(settings.baseline)
+    split = baseline.split(
+        [(scope, hit) for scope, hit, _ in paired],
+        scope=[name for result in results for name in result.scopes()],
+    )
+    exempt = {id(hit) for _, hit in split.accepted}
+    live: dict[str, list[Violation]] = {}
+    for _, hit, item in paired:
+        if id(hit) not in exempt:
+            live.setdefault(item.registry, []).append(item)
+
+    failed = 0
+    for result in results:
+        shown = live.get(result.registry, [])
+        entries = max((item.examined for item in result.judged), default=0)
+        if not shown and not result.blocked and not result.vacuous:
+            if not args.quiet:
+                # What ran, not only that it passed: a rule whose guard narrowed
+                # to two entries is not a failure and is the thing a reader most
+                # wants to see before trusting a clean line.
+                print(
+                    f"# {result.registry}: {len(result.judged)} rule(s) over "
+                    f"{entries} entry(s), all satisfied."
+                )
+                for item in result.judged:
+                    print(f"  {item.rule.name}: {item.examined} examined")
+            continue
+        print(f"# {result.registry}")
+        for item in result.blocked:
+            print(f"  BLOCKED {item.rule.name!r}: {item.blocked}", file=sys.stderr)
+            failed += 1
+        for item in result.vacuous:
+            print(
+                f"  VACUOUS {item.rule.name!r}: selected no entry, so it "
+                "checked nothing",
+                file=sys.stderr,
+            )
+            failed += 1
+        for item in shown:
+            print(f"  {item}")
+        failed += len(shown)
+
+    if split.accepted and not args.quiet:
+        until = f", until {baseline.until}" if baseline.until else ""
+        print(f"\nbaseline: {len(split.accepted)} violation(s) accepted as "
+              f"pre-existing in {settings.baseline.name}{until}")
+    if split.stale and not args.quiet:
+        gone = sum(item.count for item in split.stale)
+        print(f"{gone} accepted record(s) no longer present "
+              "-- `kinemata baseline --prune` drops them.")
+
+    if failed:
+        print(
+            f"\nFAIL: {failed} rule(s) a declaration does not satisfy.",
             file=sys.stderr,
         )
         return 1
@@ -1730,6 +1846,14 @@ def cmd_baseline(args: argparse.Namespace) -> int:
         if result.blocked:
             stalled.append(f"{result.registry}: {result.blocked}")
 
+    # Shape, for the fourth time and the same reason -- and it brings a second
+    # way for a check not to have answered: a rule whose guard selected no entry
+    # ran without judging anything, so its records are exactly as unearned as a
+    # blocked oracle's. Both stall the rewrite.
+    for shaped in _shape(args, settings):
+        findings += shaped.findings()
+        stalled += [f"{shaped.registry}: {why}" for why in shaped.unjudged()]
+
     # **A scan that could not run must not author the list.** Running every
     # check is only half the guarantee: an oracle that is not installed here
     # produces no findings, which is indistinguishable from a tree where it
@@ -1918,6 +2042,13 @@ def build_parser() -> argparse.ArgumentParser:
                               "produces, set against each other")
     par.add_argument("path", nargs="?", help="limit the scan to this path")
     par.set_defaults(func=cmd_parity)
+
+    # No `path`: this one reads the declaration, not the tree, so a path would
+    # be an argument it could only ignore.
+    shp = sub.add_parser("shape", parents=[common],
+                         help="gate: a declaration against the rules it states "
+                              "about its own shape")
+    shp.set_defaults(func=cmd_shape)
 
     unu = sub.add_parser("unused", parents=[common],
                          help="advisory: declared entries nothing mentions "

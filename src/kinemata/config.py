@@ -86,6 +86,7 @@ from .resources import (
     ResourceError,
 )
 from .resources import declared as declared_resources
+from .shape import SET_OPERATORS, Condition, Predicate, Rule, Shape
 from .targets import TARGET_FORM as FUNNEL_FORM
 
 CONFIG_NAMES = ("kinemata.toml", ".kinemata.toml")
@@ -178,6 +179,11 @@ class Settings:
     #: :mod:`kinemata.interpose`. Empty unless declared, and inert until the
     #: project loads the plugin: nothing here patches anything on its own.
     funnels: tuple[Funnel, ...] = ()
+    #: Rules a declaration must satisfy about itself. See :mod:`kinemata.shape`.
+    #: Empty unless declared -- the one mechanism here whose subject is the
+    #: declaration rather than the code, so a project with none is not missing
+    #: a check on its source.
+    shapes: tuple[Shape, ...] = ()
     #: Where accepted findings are recorded. Always a path, even when no file is
     #: there yet -- ``baseline --record`` has to know where to write the first
     #: one, and a project that has never recorded is the normal starting state.
@@ -643,6 +649,7 @@ def load(path: str | Path) -> Settings:
         "[[registry]]": bool(declarations),
         "[[count]]": bool(raw.get("count")),
         "[[parity]]": bool(raw.get("parity")),
+        "[[shape]]": bool(raw.get("shape")),
         "[[interpose]]": bool(raw.get("interpose")),
         "[[gate]]": bool(raw.get("gate")),
         "[claims]": raw.get("claims") is not None,
@@ -789,6 +796,8 @@ def load(path: str | Path) -> Settings:
                                  [built.name for built in registries]),
         funnels=_build_funnels(raw.get("interpose", []), path,
                                [built.name for built in registries]),
+        shapes=_build_shapes(raw.get("shape", []), path,
+                             [built.name for built in registries]),
         baseline=root / project.get("baseline", BASELINE_NAME),
         gates=_build_gates(raw.get("gate", []), path),
         unfitted=tuple(unfitted),
@@ -1484,6 +1493,210 @@ def _build_funnels(
             Funnel(registry=name, target=target, identify=str(spec["identify"]))
         )
     return tuple(built)
+
+
+@dataclass(frozen=True)
+class _Claim:
+    """What a config must carry beside one ``[[shape.rule]]`` operator."""
+
+    #: Another key the operator is meaningless without.
+    companion: str = ""
+    #: Whether the claim has to name the field it reads. Required wherever the
+    #: alternative would be a silent default: ``matches`` with no field would
+    #: read as "some obvious field" to everybody and as "the entry's id" to this
+    #: code, so the id gets its own spelling instead.
+    needs_field: bool = False
+    #: The :mod:`kinemata.shape` operator this spelling builds, when the two
+    #: differ. ``id_matches`` is the one case, and it exists so that no operator
+    #: has two spellings in a config.
+    operator: str = ""
+
+
+#: Every operator a ``[[shape.rule]]`` may claim with. A table rather than a
+#: chain of ``if``s, the way :data:`kinemata.claims.CLAIM_KINDS` is: a reader
+#: auditing what a config can say should find one list, and a new operator
+#: cannot be added without deciding what it requires.
+#:
+#: ⚑ **This table and shape's two operator tables are asserted equal, both ways,
+#: by a case that exists for nothing else.** A spelling this layer accepts and
+#: that layer cannot evaluate would be a config refused at the wrong end -- or
+#: worse, accepted and then blocked at every run.
+SHAPE_CLAIMS: dict[str, _Claim] = {
+    "present": _Claim(),
+    "absent": _Claim(),
+    "equals": _Claim(needs_field=True),
+    "choices": _Claim(needs_field=True),
+    "matches": _Claim(needs_field=True),
+    "each_matches": _Claim(needs_field=True),
+    "contains": _Claim(needs_field=True),
+    "id_matches": _Claim(operator="matches"),
+    "exists": _Claim(),
+    "keys_of": _Claim(companion="are"),
+    "exhausts": _Claim(companion="field"),
+    "holds": _Claim(),
+}
+
+#: Which spellings compile a pattern at load. An unusable one would otherwise
+#: make every entry in a group violate a rule that is itself broken -- the
+#: reasoning :func:`_build_translation` states for the same decision.
+SHAPE_PATTERNS = ("matches", "each_matches", "id_matches")
+
+
+def _shape_condition(
+    spec: dict[str, Any], where: str, *, allow_set: bool
+) -> Condition | Predicate:
+    """One guard or claim, or a refusal naming what is wrong with it.
+
+    ``in spec`` rather than truthiness throughout: ``equals = false`` and
+    ``equals = 0`` are claims a declaration really makes, and reading them as
+    "no operator given" would silently drop the rule.
+    """
+    spelled = [name for name in SHAPE_CLAIMS if name in spec]
+    if not spelled:
+        raise ConfigError(
+            f"{where} claims nothing. Give it one of "
+            f"{', '.join(sorted(SHAPE_CLAIMS))}."
+        )
+    if len(spelled) > 1:
+        raise ConfigError(
+            f"{where} claims {len(spelled)} things at once "
+            f"({', '.join(sorted(spelled))}). One claim per rule: a finding "
+            "that could mean either of two mistakes is one nobody can act on, "
+            "and the baseline would record it under a single fingerprint."
+        )
+    spelling = spelled[0]
+    claim = SHAPE_CLAIMS[spelling]
+    if spelling == "holds":
+        target = str(spec["holds"])
+        module, _, attribute = target.partition(":")
+        if not module.strip() or not attribute.strip():
+            raise ConfigError(
+                f"{where} names {target!r} as its predicate, which is not a "
+                f"target. Write {FUNNEL_FORM}."
+            )
+        return Predicate(target=target)
+
+    operator = claim.operator or spelling
+    if operator in SET_OPERATORS and not allow_set:
+        raise ConfigError(
+            f"{where} guards with {spelling!r}, which asks about the whole set "
+            "rather than about one entry, so it could not select a group."
+        )
+    if claim.companion and claim.companion not in spec:
+        raise ConfigError(f"{where} claims {spelling!r} without {claim.companion!r}")
+    if claim.needs_field and not str(spec.get("field", "")):
+        raise ConfigError(
+            f"{where} claims {spelling!r} without naming a field. Add "
+            f"field = \"...\", or use id_matches to claim something about the "
+            "entry's own identifier."
+        )
+
+    field_name = str(spec.get("field", ""))
+    argument: Any = spec[spelling]
+    if spelling == "keys_of":
+        # The two entry ids ride in the same two slots every other operator
+        # uses, so `shape` needs no third field: `keys_of` names the entry whose
+        # keys are read and `are` names the one whose values they must be.
+        field_name, argument = str(spec["keys_of"]), spec["are"]
+    elif spelling == "exhausts":
+        field_name, argument = str(spec["field"]), spec["exhausts"]
+
+    if spelling in SHAPE_PATTERNS:
+        try:
+            re.compile(str(argument))
+        except re.error as error:
+            raise ConfigError(
+                f"{where} claims {spelling} {argument!r}, which is not a usable "
+                f"pattern ({error})"
+            ) from error
+
+    return Condition(operator=operator, argument=argument, field=field_name)
+
+
+def _build_shapes(
+    declarations: list[dict[str, Any]], path: Path, registries: list[str]
+) -> tuple[Shape, ...]:
+    """``[[shape]]`` tables, refused rather than skipped when incomplete.
+
+    A shape declaration naming a registry that does not exist is refused here
+    for the reason :func:`_build_parities` gives: a run reporting nothing
+    because a name was misspelled looks exactly like a declaration in good
+    shape.
+    """
+    built: list[Shape] = []
+    claimed: dict[str, int] = {}
+    for index, spec in enumerate(declarations):
+        name = str(spec.get("registry", ""))
+        if not name:
+            raise ConfigError(f"{path}: [[shape]] {index} is missing registry")
+        if name not in registries:
+            raise ConfigError(
+                f"{path}: [[shape]] {index} names registry {name!r}, which no "
+                f"[[registry]] declares "
+                f"(known: {', '.join(sorted(registries)) or 'none'})"
+            )
+        # One registry, one block. Two would let the same rule name be declared
+        # twice under one scope, and the baseline could not tell their records
+        # apart -- the argument `[[parity]]` makes about a second oracle.
+        if name in claimed:
+            raise ConfigError(
+                f"{path}: [[shape]] {index} names registry {name!r}, which "
+                f"[[shape]] {claimed[name]} already does. One registry, one "
+                "block: add the rule to that block."
+            )
+        claimed[name] = index
+
+        declared_rules = spec.get("rule", [])
+        if not declared_rules:
+            raise ConfigError(
+                f"{path}: [[shape]] {index} declares no [[shape.rule]], so it "
+                "would check nothing about "
+                f"{name!r} while looking like it does."
+            )
+        rules: list[Rule] = []
+        seen: dict[str, int] = {}
+        for position, raw_rule in enumerate(declared_rules):
+            where = f"{path}: [[shape.rule]] {position} of [[shape]] {index}"
+            rule_name = str(raw_rule.get("name", "")).strip()
+            if not rule_name:
+                raise ConfigError(
+                    f"{where} is missing name. Every rule carries one: a reader "
+                    "of this config cannot see a predicate's body, and the name "
+                    "is what tells them what the rule claims."
+                )
+            if rule_name in seen:
+                raise ConfigError(
+                    f"{where} is named {rule_name!r}, which rule {seen[rule_name]} "
+                    "already uses. The baseline scope is built from the name, so "
+                    "two rules sharing one is an exemption list nobody can audit."
+                )
+            seen[rule_name] = position
+            guard = raw_rule.get("when")
+            rules.append(
+                Rule(
+                    name=rule_name,
+                    claim=_shape_condition(raw_rule, where, allow_set=True),
+                    guard=(
+                        None
+                        if guard is None
+                        else _shape_guard(guard, f"{where}'s when")
+                    ),
+                )
+            )
+        built.append(Shape(registry=name, rules=tuple(rules)))
+    return tuple(built)
+
+
+def _shape_guard(declared: object, where: str) -> Condition | Predicate:
+    """A guard: a table of operators, or a target naming a predicate."""
+    if isinstance(declared, str):
+        return _shape_condition({"holds": declared}, where, allow_set=False)
+    if isinstance(declared, dict):
+        return _shape_condition(dict(declared), where, allow_set=False)
+    raise ConfigError(
+        f"{where} is a {type(declared).__name__}. A guard is either a table of "
+        f"operators or a {FUNNEL_FORM.split(' = ')[1]} naming a predicate."
+    )
 
 
 def _build_translation(
