@@ -882,12 +882,23 @@ The third was an adopter who ran this across three of their own repositories and
 their **326-check conformance suite** against what these mechanisms can express. **291 were not
 expressible (89%)**, and the reasons were structural rather than gaps:
 
-🛑 **That figure is dated 2026-09-09 and has not been re-measured.** Several of the structural
-reasons below have since been closed — each is marked where it was — so **89% is the number that
-audit produced, not a current statement of what this tool cannot express.** It is left here
-because the audit is the evidence and its findings are what drove the work; it is flagged because
-a stale coverage figure understates a tool to exactly the reader who is deciding whether to adopt
-it. Nothing mechanical catches this: a share in prose has no oracle.
+🛑 **That figure is dated 2026-09-09.** Several of the structural reasons below have since been
+closed — each is marked where it was — so **89% is the number that audit produced, not a current
+statement of what this tool cannot express.** It is left here because the audit is the evidence and
+its findings are what drove the work; it is flagged because a stale coverage figure understates a
+tool to exactly the reader who is deciding whether to adopt it. Nothing mechanical catches this: a
+share in prose has no oracle.
+
+⚑ **The same adopter published a newer inventory on 2026-09-14** — 378 test functions in 213
+check-families, against a later build — and **their own instruction is not to compare the two**:
+the denominator changed, the corpus boundary was drawn fresh, and the buckets differ. So the 89% has
+a successor but not a replacement, and neither number should be read as the other's before-and-after.
+
+⚑ **What has been re-measured is the largest single reason below**, the 125 manifest-parity test
+functions: **94 of them (75%) are expressible as things stand**, against 53 (42%) earlier the same
+day. The movement is the shape check, a widened adapter and the probe corpus. That is a measurement
+over a population this project holds — it says what *could* be expressed, never what anyone has
+declared.
 
 - **The registry mechanism is purely negative.** It says *a declared value must not be re-spelled
   elsewhere*. Most conformance says the twin — *this row must equal what the code produces* — and

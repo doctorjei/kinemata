@@ -1238,10 +1238,18 @@ down, and the two shapes at the end are the findings that matter most.
   produces silence. Of 326 conformance checks in that project's suite, **291 were not expressible
   (89%)**, and this shape was the single largest reason — 125 test functions across four
   manifest-parity files.
-  🛑 **That share is dated 2026-09-09 and has not been re-measured.** It predates `parity`,
-  `[[interpose]]`, `shape` and the adapter widening, several of which closed reasons listed in this
-  very section. **Read it as what that audit found, not as what this tool cannot express today** —
-  the entries below carry the current state, each marked where it moved.
+  🛑 **That share is dated 2026-09-09.** It predates `parity`, `[[interpose]]`, `shape`, the adapter
+  widening and `[[probe]]`, several of which closed reasons listed in this very section. **Read it
+  as what that audit found, not as what this tool cannot express today** — the entries below carry
+  the current state, each marked where it moved.
+  ⚑ **A newer inventory by the same adopter exists, dated 2026-09-14** — 378 test functions in 213
+  check-families against a later build — and **they ask that the two not be compared**: the
+  denominator changed, the corpus boundary was drawn fresh, and the buckets differ. A successor, not
+  a replacement, and not a before-and-after in either direction.
+  ⚑ **The 125 named in the sentence above have been re-measured, and they are the one population
+  this project holds: 94 of 125 (75%) are expressible as things stand**, against 53 (42%) earlier on
+  2026-09-14, the movement being `shape`, the widened adapter and `[[probe]]`. **Reach, not
+  adoption** — it says what could be expressed, never what anyone has declared.
   ⚑ **The twin is expressible for a value a document states, and was already** when this entry
   said it was not: a `[[count]]` declares the pattern, an oracle command and an exact comparison.
   ⚑ **Partly closed 2026-09-13. This entry said the twin aimed at declared data had no expression
