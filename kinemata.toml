@@ -16,10 +16,17 @@
 # a real check that currently protects nothing. Not declared for that reason
 # alone, and the sentence above is corrected rather than left to be trusted.
 # `exclude` names two different things, and the second one is not a build tree.
-# `tests/`, `corpus/`, `.venv/` and `deliverables/` are trees this project builds
-# or vendors. `LICENSE.md` and `AIPOLICY.md` are text it **carries without
-# authoring**, kept as received, and every check here judges a tree against what
-# its author meant -- which for those two is somebody else.
+# `tests/`, `corpus/` and `.venv/` are trees this project builds or vendors.
+# `LICENSE.md` and `AIPOLICY.md` are text it **carries without authoring**, kept
+# as received, and every check here judges a tree against what its author meant
+# -- which for those two is somebody else.
+#
+# `deliverables/` was listed here too, under the same sentence vouching for it,
+# and no such directory has ever existed in this repository. Removed 2026-09-14
+# when `kinemata check` learned to say what an exclude removed and reported it
+# removing nothing. A config asserting something confidently while doing nothing
+# is this project's own failure shape, and it shipped one for the whole time it
+# had no instrument pointed at its own config.
 #
 # Measured 2026-09-11 rather than assumed. They yield no claims and no spelling
 # findings, so nothing is lost. What they did yield was seven undated citations
@@ -30,7 +37,7 @@
 [project]
 root = "."
 exclude = [
-    "tests/", "corpus/", ".venv/", "deliverables/",
+    "tests/", "corpus/", ".venv/",
     "LICENSE.md", "AIPOLICY.md",
 ]
 
