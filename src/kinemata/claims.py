@@ -813,6 +813,21 @@ def _resolve_url(text: str, tree: Tree, document: Path) -> bool:
     return tree.reachable.get(text) is not False
 
 
+#: Every match in every document is a claim about now. The default, and right
+#: for a value restated in several places -- the projection budget, which three
+#: documents spell and all three must agree on.
+EVERY = "every"
+
+#: Only the first match in each document is a claim; anything below it is that
+#: document's own history. **Positional, not semantic** -- see
+#: :attr:`Counted.occurrence` for why it cannot be otherwise.
+FIRST = "first"
+
+#: The vocabulary, declared once so the loader validates against the same list
+#: this module reads.
+OCCURRENCES = (EVERY, FIRST)
+
+
 @dataclass(frozen=True)
 class Counted:
     """A value the documentation states, and the command that settles it.
@@ -879,6 +894,25 @@ class Counted:
     #: describe are not always in one tree: process notes may live beside a
     #: repository rather than inside it, and the oracle belongs with the code.
     directory: str = "."
+    #: Which occurrence in a document is the claim -- :data:`EVERY` or
+    #: :data:`FIRST`.
+    #:
+    #: A document may legitimately carry its own history, and then only one of
+    #: its spellings is a claim about now. A changelog is the case: the newest
+    #: heading names the version being shipped, and every heading below it is a
+    #: permanent record of a release that already happened.
+    #:
+    #: **Positional, not semantic.** This reads the first match in each
+    #: document, because *newest* is a convention of the document rather than
+    #: anything visible from here. A changelog ordered oldest-first would have
+    #: its oldest heading read as the claim -- which **fails** rather than
+    #: passing, that heading naming a version which is not the one shipping.
+    #:
+    #: Found at this project's own second release, which is the first moment it
+    #: could be: the declaration had always meant *the newest heading*, was
+    #: written when there was only one heading, and turned the first release's
+    #: entry into a false claim the instant the version moved.
+    occurrence: str = EVERY
 
 
 def counted_claims(text: str, spec: Counted) -> Iterator[tuple[str, str]]:
@@ -1541,12 +1575,13 @@ def _counted_sites(
     archives: Sequence[str],
     spec: Counted,
 ) -> Iterator[tuple[str, int, str, str, str]]:
-    """Every site a count claims.
+    """Every site a count claims, honoring :attr:`Counted.occurrence`.
 
-    Split out of :func:`_verify_counts` so that *which sites are claims* and
-    *what happens to a claim* stay separate questions. The vacuity check below
-    reads whether this yielded anything, which it could not have done while the
-    walk and the comparison were one loop.
+    Split out of :func:`_verify_counts` when the scoping arrived, so that
+    *which sites are claims* and *what happens to a claim* stay separate
+    questions. The vacuity check below reads whether this yielded anything,
+    which it could not have done while the walk and the comparison were one
+    loop.
     """
     for path in _walk(root, suffixes):
         rel = path.relative_to(root).as_posix()
@@ -1562,8 +1597,17 @@ def _counted_sites(
         # value be shown in one sentence and asserted in the next.
         source, _ = _as_documentation(source, path.suffix)
         for number, line in enumerate(source.splitlines(), start=1):
-            for claimed, text in counted_claims(line, spec):
+            here = list(counted_claims(line, spec))
+            if spec.occurrence == FIRST:
+                # Per document, not per run. A walk's order is an accident of
+                # the filesystem, so "the first in the tree" would name a
+                # different site as the claim depending on where it is checked
+                # out; "the first in this document" is a fact about the file.
+                here = here[:1]
+            for claimed, text in here:
                 yield rel, number, line, claimed, text
+            if here and spec.occurrence == FIRST:
+                break
 
 
 def _verify_counts(

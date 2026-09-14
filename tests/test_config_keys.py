@@ -142,6 +142,47 @@ def test_each_table_refuses_an_unknown_key(tmp_path, body, where):
     assert where in str(caught.value)
 
 
+# -- a key whose value is a vocabulary ----------------------------------------
+
+
+def test_an_unknown_occurrence_is_refused_rather_than_defaulted(tmp_path):
+    """A misspelling that fell back to "every" would re-read the history.
+
+    The same rule an unknown `strip` transform follows, and the stakes are the
+    reason: `occurrence` exists to stop a document's own records being read as
+    claims about now, so a value silently ignored restores exactly the failure
+    it was declared against.
+    """
+    with pytest.raises(ConfigError) as caught:
+        load_with(
+            tmp_path,
+            '[[count]]\ncommand = ["echo", "1"]\npattern = "p"\n'
+            'extract = "e"\noccurrence = "newest"\n',
+        )
+    message = str(caught.value)
+    assert "newest" in message and "[[count]] 0" in message
+    assert "every" in message and "first" in message  # what it could have been
+
+
+def test_a_declared_occurrence_loads(tmp_path):
+    """The spelling this repository's own changelog declaration uses."""
+    loaded = load_with(
+        tmp_path,
+        '[[count]]\ncommand = ["echo", "1"]\npattern = "p"\n'
+        'extract = "e"\noccurrence = "first"\n',
+    )
+    assert [spec.occurrence for spec in loaded.counts] == ["first"]
+
+
+def test_a_count_reads_every_occurrence_unless_it_says_otherwise(tmp_path):
+    """The default is the behavior every existing config already has."""
+    loaded = load_with(
+        tmp_path,
+        '[[count]]\ncommand = ["echo", "1"]\npattern = "p"\nextract = "e"\n',
+    )
+    assert [spec.occurrence for spec in loaded.counts] == ["every"]
+
+
 # -- the two tables that were still absorbing ---------------------------------
 
 

@@ -62,7 +62,9 @@ from .bypass import MODE_FILTERS, git_ignored
 from .citations import DEFAULT_ACCOMPANY_MAX
 from .claims import (
     CLAIMS_REGISTRY,
+    EVERY,
     EXTERNAL_TIMEOUT,
+    OCCURRENCES,
     ORACLE_TIMEOUT,
     Counted,
     Promise,
@@ -458,7 +460,10 @@ CLAIMS_KEYS = frozenset(
 CONTEXT_KEYS = frozenset({"include", "external", "budget", "strip"})
 GATE_KEYS = frozenset({"command", "where", "note"})
 COUNT_KEYS = frozenset(
-    {"command", "run", "args", "directory", "pattern", "extract", "label"}
+    {
+        "command", "run", "args", "directory", "pattern", "extract", "label",
+        "occurrence",
+    }
 )
 PARITY_KEYS = frozenset(
     {
@@ -1512,6 +1517,15 @@ def _build_counts(
                 f"{path}: [[count]] {index} is missing {', '.join(missing)}"
             )
         argv += tuple(str(part) for part in spec.get("args", ()))
+        occurrence = str(spec.get("occurrence", EVERY))
+        if occurrence not in OCCURRENCES:
+            # Named rather than defaulted, on the rule the unknown `strip`
+            # transform follows: a misspelling that fell back to "every" would
+            # quietly re-check the history this key exists to stop reading.
+            raise ConfigError(
+                f"{path}: [[count]] {index} declares occurrence "
+                f"{occurrence!r}; known: {', '.join(sorted(OCCURRENCES))}"
+            )
         built.append(
             Counted(
                 pattern=str(spec["pattern"]),
@@ -1519,6 +1533,7 @@ def _build_counts(
                 extract=str(spec["extract"]),
                 label=str(spec.get("label", "count")),
                 directory=str(spec.get("directory", ".")),
+                occurrence=occurrence,
             )
         )
     return tuple(built)

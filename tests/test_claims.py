@@ -286,6 +286,91 @@ def test_a_count_that_claims_nothing_is_a_failure(tmp_path):
     assert "matched no line" in result.blocked[0]
 
 
+def test_every_occurrence_is_a_claim_by_default(tmp_path):
+    """A value restated in several places is a claim in each of them.
+
+    The default, and the reason it is the default: the projection budget is
+    spelled in three documents here and all three have to agree.
+    """
+    from kinemata.claims import Counted
+
+    write(tmp_path, "doc.md", "Budget is **7 B**.\nElsewhere: **4 B**.\n")
+    spec = Counted(
+        pattern=r"\*\*(\d+) B\*\*",
+        command=("{python}", "-c", "print('budget=7')"),
+        extract=r"budget=(\d+)",
+        label="budget",
+    )
+    result = verify(tmp_path, counts=[spec])
+    assert result.checked == 2
+    assert [claim.text for claim in result.broken] == ["**4 B** (actually 7)"]
+
+
+def test_first_reads_the_newest_entry_and_not_the_history(tmp_path):
+    """A changelog's older headings are records, not claims about now.
+
+    The shape that found the need. With one entry the declaration was
+    accidentally right; the first release's own entry became a false claim the
+    instant the version moved, and nothing about that entry had changed.
+    """
+    from kinemata.claims import FIRST, Counted
+
+    write(tmp_path, "CHANGELOG.md", "## 2.0.0\n\nnew\n\n## 1.0.0\n\nold\n")
+    spec = Counted(
+        pattern=r"## (\d+\.\d+\.\d+)",
+        command=("{python}", "-c", "print('version=2.0.0')"),
+        extract=r"version=(\S+)",
+        label="changelog version",
+        occurrence=FIRST,
+    )
+    result = verify(tmp_path, counts=[spec])
+    assert result.checked == 1
+    assert result.broken == []
+
+
+def test_first_still_catches_a_heading_nobody_moved(tmp_path):
+    """The drift the declaration exists for, with the history in the file.
+
+    Scoping to one occurrence must not cost the catch: bumping the version and
+    forgetting the heading is the failure it was declared against.
+    """
+    from kinemata.claims import FIRST, Counted
+
+    write(tmp_path, "CHANGELOG.md", "## 1.0.0\n\nold\n")
+    spec = Counted(
+        pattern=r"## (\d+\.\d+\.\d+)",
+        command=("{python}", "-c", "print('version=2.0.0')"),
+        extract=r"version=(\S+)",
+        label="changelog version",
+        occurrence=FIRST,
+    )
+    result = verify(tmp_path, counts=[spec])
+    assert [claim.text for claim in result.broken] == ["## 1.0.0 (actually 2.0.0)"]
+
+
+def test_first_is_per_document_not_per_run(tmp_path):
+    """Because a walk's order is an accident of the filesystem.
+
+    "The first in the tree" would name a different site as the claim depending
+    on where the tree is checked out, which is not a property a declaration can
+    rest on. "The first in this document" is a fact about the file.
+    """
+    from kinemata.claims import FIRST, Counted
+
+    write(tmp_path, "a.md", "## 2.0.0\n## 1.0.0\n")
+    write(tmp_path, "b.md", "## 1.5.0\n## 1.0.0\n")
+    spec = Counted(
+        pattern=r"## (\d+\.\d+\.\d+)",
+        command=("{python}", "-c", "print('version=2.0.0')"),
+        extract=r"version=(\S+)",
+        label="changelog version",
+        occurrence=FIRST,
+    )
+    result = verify(tmp_path, counts=[spec])
+    assert result.checked == 2
+    assert [claim.text for claim in result.broken] == ["## 1.5.0 (actually 2.0.0)"]
+
+
 def test_a_collector_that_reports_its_total_and_fails_still_settles(tmp_path):
     """Why the exit status is deliberately not fatal for this one mechanism.
 

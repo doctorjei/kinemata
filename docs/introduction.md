@@ -177,6 +177,19 @@ run = "lines"
 args = ["docs/brief.md"]
 extract = '(\d+)'
 
+# A document that carries its own history claims only in one place. `every`
+# is the default and is right for a value restated across documents; `first`
+# reads the first match in each document and treats what is below it as
+# record rather than claim. Positional, not semantic -- a changelog written
+# oldest-first would have its oldest heading read as the claim, which fails
+# rather than passes.
+[[count]]
+label = "changelog version"
+occurrence = "first"
+pattern = '## (\d+\.\d+\.\d+[a-zA-Z0-9.]*)'
+command = ["{python}", "-c", "print(version())"]
+extract = 'version=(\S+)'
+
 # What a registry declares, against the set the project's code actually
 # produces. Same oracle form as `[[count]]`: `command` names it inline, `run`
 # names a `[command]` one, never both. Group 1 of every `extract` match is one
@@ -542,6 +555,8 @@ outside, so the following are `ConfigError`, not silent skips:
 - a config declaring **no check at all** — every command it configures would pass by doing nothing
 - a `[[promise]]` with no `until`, an unparseable date, or a `note` with no `by`
 - a `[[count]]` naming a `run` no `[command]` declares, or giving both `command` and `run`
+- a `[[count]]` whose `occurrence` is neither `every` nor `first` — a misspelling that fell back to
+  the default would re-read the history the key exists to stop reading
 - a `[[parity]]` naming a `registry` no `[[registry]]` declares — refused at load rather than at
   the command, because a misspelled name and a project whose declaration and code agree produce
   the same silence, and only one of them is a mistake
@@ -732,6 +747,13 @@ converted, coerced or rounded, so a document
 saying "16 KB" is not settled by an oracle that emits the byte count; a project wanting both
 spellings checked declares two entries, each with its own `pattern` and `extract`. That limit
 is deliberate: a wrong normalization does not fail, it passes.
+
+**Every match is a claim, unless the document carries its own history.** `occurrence = "first"`
+reads the first match in each document and treats everything below it as record rather than
+assertion — a changelog, where the newest heading names the version being shipped and the entries
+under it are permanent records of releases that already happened. It is **positional, not
+semantic**: a changelog written oldest-first has its oldest heading read as the claim, which fails
+rather than passes, since that heading names a version that is not the one shipping.
 
 **A count that matches nothing fails.** The oracle answered and nothing asked it, which is the
 same failure as an oracle that could not run — the check is not running — and the quieter of the
