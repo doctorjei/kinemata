@@ -127,6 +127,34 @@ def test_a_target_that_cannot_be_patched_blocks_rather_than_raising(module):
     # down over a misspelled config line.
 
 
+def test_a_target_that_resolves_but_refuses_assignment_blocks_too(module):
+    """Resolving is not patching, and the docstring promises about both.
+
+    `resolve` answers by shape: `dict.__setitem__` is a perfectly good target
+    until the assignment discovers that the type will not take one. The
+    `TypeError` escaped to `pytest_configure` -- a raise at the caller by a
+    method whose docstring says it never raises at the caller.
+    """
+    funnel = Funnel(registry="keyspace", target="builtins:dict.__setitem__",
+                    identify="projectmod:key_of")
+    watcher = Census(funnel, Keys(), module.key_of)
+    watcher.install()
+    assert not watcher.installed
+    assert "cannot be patched" in watcher.blocked
+    assert "TypeError" in watcher.blocked
+    assert watcher.watch().failed
+
+
+def test_a_funnel_that_could_not_be_patched_is_not_restored_over(module):
+    """`uninstall` must not write an attribute this census never replaced."""
+    funnel = Funnel(registry="keyspace", target="builtins:dict.__setitem__",
+                    identify="projectmod:key_of")
+    watcher = Census(funnel, Keys(), module.key_of)
+    watcher.install()
+    watcher.uninstall()  # would raise the same TypeError if it tried
+    assert dict.__setitem__ is not None
+
+
 # -- what is recorded ---------------------------------------------------------
 
 

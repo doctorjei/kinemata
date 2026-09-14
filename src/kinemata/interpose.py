@@ -212,7 +212,6 @@ class Census:
             self.blocked = str(exc)
             return
         owner, name, original = found.owner, found.name, found.value
-        self._owner, self._name, self._original = owner, name, original
 
         def watched(*args: Any, **kwargs: Any) -> Any:
             # The original **first**, and only what it accepted is recorded: a
@@ -230,7 +229,27 @@ class Census:
         watched.__name__ = getattr(original, "__name__", name)
         watched.__doc__ = getattr(original, "__doc__", None)
         watched.__kinemata_watched__ = True  # type: ignore[attr-defined]
-        setattr(owner, name, watched)
+        # **Resolving is not patching, and the promise above covers both.**
+        # `resolve` answers by shape: `builtins:dict.__setitem__` resolves to
+        # the slot wrapper and looks like any other funnel, and only the
+        # assignment discovers that the type will not take one. That `TypeError`
+        # used to escape this method to `pytest_configure`, which is a raise at
+        # the caller by a function whose docstring says it never does.
+        #
+        # The `blocked` path already exists for exactly this outcome -- a
+        # declared funnel that could not be watched -- and it fails the run
+        # rather than passing quietly, so nothing is lost by taking it.
+        try:
+            setattr(owner, name, watched)
+        except (AttributeError, TypeError) as exc:
+            self.blocked = (
+                f"{self.funnel.target} resolves but cannot be patched "
+                f"({type(exc).__name__}: {exc}). The attribute belongs to "
+                "something that does not accept assignment -- a built-in or "
+                "extension type, usually. Watch a callable the project owns."
+            )
+            return
+        self._owner, self._name, self._original = owner, name, original
 
     def uninstall(self) -> None:
         """Put the original back. Safe to call more than once, and must be."""
