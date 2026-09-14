@@ -47,7 +47,7 @@ import importlib
 import inspect
 import re
 import tomllib
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path, PurePosixPath
@@ -386,6 +386,62 @@ def _descend(document: Any, section: Any, name: str, source: str) -> Any:
     return document
 
 
+def _levels(
+    document: Any, depth: int, prefix: tuple[str, ...], name: str, source: str
+) -> Iterator[tuple[tuple[str, ...], Any]]:
+    """Every leaf at exactly ``depth`` keys down, with the keys that reached it."""
+    if depth == 0:
+        yield prefix, document
+        return
+    if not isinstance(document, dict):
+        where = _spell(prefix) if prefix else "the addressed section"
+        raise ConfigError(
+            f"registry {name!r}: {where} in {source} is "
+            f"{type(document).__name__}, not a mapping, so it has no level to "
+            "flatten. A matrix with one scalar row is a malformed matrix; "
+            "skipping it would make the registry quietly smaller."
+        )
+    for key, value in document.items():
+        yield from _levels(value, depth - 1, (*prefix, str(key)), name, source)
+
+
+def _flatten(
+    document: Any, depth: int, separator: str, name: str, source: str
+) -> dict[str, Any]:
+    """A nested table as one mapping of composite identifier to leaf.
+
+    The adopter's `cells:` is a matrix -- an arriving kind, an occupant
+    relation, an outcome token -- and a *cell* had no identifier, so no rule
+    could speak about one. Composing the key path gives it one.
+
+    **The leaf is handed on untouched**, so
+    :meth:`~kinemata.adapters.mapping.MappingRegistry.entries` applies the rule
+    it already has: a mapping leaf becomes ``extra``, a scalar becomes
+    ``{"value": leaf}``. No new convention -- and the matrix case is the scalar
+    one, so the outcome token lands where a ``[[shape]]`` rule reads it.
+    """
+    flat: dict[str, Any] = {}
+    origins: dict[str, tuple[str, ...]] = {}
+    for keys, leaf in _levels(document, depth, (), name, source):
+        identifier = separator.join(keys)
+        if identifier in origins:
+            # Silent shadowing: one entry overwrites another and the registry
+            # reports a smaller set that reads as correct, which is this
+            # package's own subject. Both pairs are named because the fix is to
+            # pick a separator absent from the keys, and you cannot pick one
+            # without seeing which keys collided.
+            raise ConfigError(
+                f"registry {name!r}: flattening {source} with separator "
+                f"{separator!r} gives {identifier!r} for both "
+                f"{_spell(origins[identifier])} and {_spell(keys)}. One would "
+                "silently shadow the other. Choose a separator that does not "
+                "occur in the keys."
+            )
+        origins[identifier] = keys
+        flat[identifier] = leaf
+    return flat
+
+
 def _build_yaml_mapping(spec: dict[str, Any], root: Path, path: Path) -> BaseRegistry:
     try:
         import yaml
@@ -401,8 +457,36 @@ def _build_yaml_mapping(spec: dict[str, Any], root: Path, path: Path) -> BaseReg
     if not path.is_file():
         raise ConfigError(f"registry {spec.get('name', '?')!r}: no such file: {path}")
 
+    name = spec.get("name", "?")
     document = yaml.safe_load(path.read_text()) or {}
-    document = _descend(document, spec.get("section"), spec.get("name", "?"), source)
+    document = _descend(document, spec.get("section"), name, source)
+
+    depth = spec.get("flatten", 1)
+    if isinstance(depth, bool) or not isinstance(depth, int) or depth < 1:
+        raise ConfigError(
+            f"registry {name!r}: 'flatten' is {depth!r}; it takes a positive "
+            "whole number of key levels to compose into each identifier. 1 is "
+            "the default and means one level, exactly as before."
+        )
+    separator = spec.get("separator")
+    if depth > 1 and not separator:
+        # No default, deliberately. Defaulting would mint identifiers whose
+        # spelling the project never chose -- and the identifier is the thing
+        # the baseline fingerprints, the oracle prints and the scan looks for.
+        # A project that has to type it has read what it becomes.
+        raise ConfigError(
+            f"registry {name!r}: 'flatten' is {depth} but no 'separator' is "
+            "declared, and there is no default. The separator spells every "
+            "identifier this registry produces, so the project chooses it."
+        )
+    if separator is not None and depth == 1:
+        raise ConfigError(
+            f"registry {name!r}: 'separator' is declared but 'flatten' is 1, "
+            "so nothing is composed and the separator does nothing. Declare "
+            "'flatten' as well, or drop it."
+        )
+    if depth > 1:
+        document = _flatten(document, depth, str(separator), name, source)
 
     return MappingRegistry(
         document,
@@ -583,7 +667,10 @@ REGISTRY_KEYS = frozenset(
 KIND_KEYS = {
     "python-constants": frozenset({"modules", "include_private", "min_length"}),
     "yaml-mapping": frozenset(
-        {"source", "section", "clause_field", "syntax", "budget", "line_budget"}
+        {
+            "source", "section", "clause_field", "syntax", "budget",
+            "line_budget", "flatten", "separator",
+        }
     ),
     "code-patterns": frozenset({"entry"}),
     "substitutions": frozenset({"source", "words", "case_sensitive"}),

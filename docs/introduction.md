@@ -307,6 +307,44 @@ strip = ["html-comments"]
 | `bibliography` | `[[entry]]` tables in an external `source` TOML | none — a citation *accompanies* its target by default, so a target spelled beside its key is the readable half of a declared citation rather than a re-derivation of it |
 | `import` | a registry class the project wrote, named as `target = "module:Class"` | whatever that class declares |
 
+**A `yaml-mapping` can compose identifiers out of two key levels.** A matrix — an arriving kind,
+an occupant relation, an outcome token — has no identifier per *cell*, so nothing could state a
+rule about one. `flatten = 2` with a declared `separator` makes each cell an entry:
+
+```toml
+[[registry]]
+name = "cells"
+kind = "yaml-mapping"
+source = "manifest.yaml"
+section = ["policy", "cells"]
+flatten = 2          # default 1, which is exactly the behavior without it
+separator = "."      # required when flatten > 1; there is no default
+```
+
+`separator` has no default deliberately: it spells every identifier the registry produces, and the
+identifier is what the baseline fingerprints, the oracle prints and the scan looks for. A project
+that has to type it has read what it becomes. Two levels is what was measured; deeper is accepted
+rather than capped, because an arbitrary ceiling is a rule with no reason behind it, and nothing
+here claims more than what was measured.
+
+⚑ **A composite identifier is a different kind of thing from a declared name, and two consumers
+feel it.** A composite does not occur in the code — `create.parent_missing` is not a string anybody
+writes — so a flattened registry pointed at `check` yields entries nothing can re-derive, and a
+whole registry landing in the `silent:` line reads uncomfortably like a clean tree. Worse, `syntax`
+written for *leaf* names against a composite-id registry makes `undeclared` report every leaf
+mention in the code, and that gate is a closed registry going red for a reason having nothing to do
+with the tree. **The answer is the idiom this project already has: declare a second `[[registry]]`
+view of one data model** — a flat view feeding `check` and `undeclared`, a flattened view feeding
+`shape` and `parity`. It is the same thing a `[[parity]]` refusal already tells a project to do
+when it wants to check a second fact about one source.
+
+⚑ **Turning `flatten` on for an existing registry changes every identifier under it**, so every
+accepted finding keyed on one becomes unmatched: `--prune` deletes them as fixed and `--record`
+re-records them under new ids. Do it in a commit of its own and re-record the baseline there, with
+a note saying why the ids moved. **There is deliberately no migration** — rewriting fingerprints
+would be the tool guessing that an old id and a new id are the same finding, which is the
+permissive direction.
+
 **`import` is the extension point**, and the list above is not the boundary of what a registry can
 be. A project whose data model no built-in adapter fits writes the adapter itself — most usefully
 the `declared()` override, for a keyspace that is closed but not flat and whose membership only
@@ -555,6 +593,14 @@ outside, so the following are `ConfigError`, not silent skips:
   not a mapping, given as an empty list, or given as neither a string nor a list. A missing segment
   names itself, what it was looked for under, and what that level actually held — "section not
   found" against a five-deep path is a refusal somebody has to go and locate by hand
+- a `yaml-mapping` `flatten` that is not a positive whole number; `flatten > 1` with no
+  `separator`, which has no default; a `separator` declared with no `flatten`, which composes
+  nothing and so says something while doing nothing
+- a `flatten` separator collision — two distinct key paths composing to one identifier. Refused at
+  load naming both paths and the identifier, because one entry would silently shadow the other and
+  the registry would report a smaller set that reads as correct
+- a `flatten` level whose value is not a mapping — a matrix with one scalar row is a malformed
+  matrix, and skipping it would make the registry quietly smaller
 - a registry that cannot recognize its own identifiers cannot be `closed`
 - a config declaring **no check at all** — every command it configures would pass by doing nothing
 - a `[[promise]]` with no `until`, an unparseable date, or a `note` with no `by`
@@ -1225,12 +1271,17 @@ down, and the two shapes at the end are the findings that matter most.
   not shape rules at all — they ask whether a section exists, which declaring the registry already
   answers, because a missing section is refused at load. **That is an adapter limit and it is
   measured**, not a guess about what adopters will want.
-  ⚑ **Half of it is closed as of 2026-09-14: `section` takes a path.** A list of keys, not a dotted
-  string — a dotted string cannot express a key containing a dot, and the loader would be guessing
-  which of two splits the project meant over a file it did not write. **What is still open is the
-  flatten**: a two-level table like a `kind -> relation -> outcome` matrix has no identifier per
-  cell, and minting one changes what an `Entry.id` is for every consumer, the baseline's
-  fingerprints included.
+  ⚑ **Closed as of 2026-09-14, both halves.** `section` takes a path — a list of keys, not a dotted
+  string, since a dotted string cannot express a key containing a dot and the loader would be
+  guessing which of two splits the project meant over a file it did not write. And `flatten` with a
+  declared `separator` composes an identifier out of two key levels, so a cell of a matrix is an
+  entry a rule can speak about. **What that costs every consumer of a registry is documented where
+  the key is introduced**, and it is not nothing: a composite identifier does not occur in the code.
+  ⚑ **One residual, and it is the rule language rather than the adapter.** A flattened id makes each
+  cell an entry, which answers a claim about **the whole set** of cells. A claim about *each
+  first-level key's group* — "every row's columns are exactly the relations axis" — is a different
+  question, and there is no per-group set operator. Recorded as a rule-language limit rather than
+  quietly reclassified, because the adapter now reaches what the measurement said it would.
 - **~~A project cannot supply its own registry adapter from `kinemata.toml`.~~** True until
   2026-09-09, and the first thing the first outside audit found: `config.BUILDERS` was a fixed
   table of kinds with no plugin path, so the `declared()` override the contract invites was
