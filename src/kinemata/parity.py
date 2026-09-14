@@ -399,13 +399,23 @@ def produced(
 ) -> tuple[Printed | None, str]:
     """What the oracle printed, or ``None`` and why not.
 
-    An oracle that runs and matches nothing returns the empty set rather than
-    ``None``, and that is a real answer: a project whose code produces no
+    An oracle that *succeeds* and matches nothing returns the empty set rather
+    than ``None``, and that is a real answer: a project whose code produces no
     identifiers has a declaration that is entirely unproduced, which is a
     finding and not a broken check. Collapsing the two would let a silent oracle
     read as an empty world.
+
+    An oracle that **fails** is the other way round, which is why the exit
+    status is fatal here and not in :func:`kinemata.claims.actual_count`. A set
+    extraction cannot tell a wreck from an empty world -- both are text with no
+    matches in it -- so a command dying on ``ImportError`` used to put the whole
+    declaration into ``unproduced`` without blocking anything, and
+    ``baseline --record`` accepted every identifier as an exemption. An oracle
+    that legitimately exits non-zero has to say so in its own command.
     """
-    output, why = run_oracle(spec.command, root, spec.directory, timeout)
+    output, why = run_oracle(
+        spec.command, root, spec.directory, timeout, answers_on_failure=False
+    )
     if output is None:
         return None, why
     try:

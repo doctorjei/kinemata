@@ -897,11 +897,34 @@ def counted_claims(text: str, spec: Counted) -> Iterator[tuple[str, str]]:
 INTERPRETER = "{python}"
 
 
+#: How much of a failed oracle's last output line is quoted back with the
+#: reason. Enough to carry the line that explains it -- ``ImportError: No
+#: module named 'x'`` -- without pasting a traceback into a gate's one-line
+#: report.
+FAILURE_TAIL = 120
+
+
+def _failure(status: int, output: str) -> str:
+    """Why a run ended, phrased to follow the command in a caller's sentence."""
+    what = f"was killed by signal {-status}" if status < 0 else f"exited {status}"
+    last = next(
+        (line.strip() for line in reversed(output.splitlines()) if line.strip()),
+        "",
+    )
+    if not last:
+        return what
+    if len(last) > FAILURE_TAIL:
+        last = last[:FAILURE_TAIL] + "..."
+    return f"{what}, last saying {last!r}"
+
+
 def run_oracle(
     command: Sequence[str],
     root: Path,
     directory: str = ".",
     timeout: float = ORACLE_TIMEOUT,
+    *,
+    answers_on_failure: bool,
 ) -> tuple[str | None, str]:
     """What an oracle printed, or ``None`` and why not -- never a pass.
 
@@ -910,9 +933,24 @@ def run_oracle(
     differently: a command that is not installed, and one that had to be
     killed, read identically in a gate that only says the check did not settle.
 
-    ``stdout`` and ``stderr`` are joined and the exit status is ignored, so the
-    oracle is the text rather than the return code -- a collector that reports
-    its total on a non-zero exit is the motivating case and is not an error.
+    ``stdout`` and ``stderr`` are joined, so the oracle is the text rather than
+    the stream it came out on.
+
+    **Whether a non-zero exit is still an answer belongs to the mechanism, and
+    the argument is required so that a new one has to decide.** The
+    discriminator is whether the *extraction* can already tell an answer from a
+    wreck. :func:`actual_count` pulls a single value out of the text and reports
+    "produced no value" when it cannot, so it can afford ``True`` -- and needs
+    it, because a collector reporting its total on a non-zero exit is the
+    motivating case and is not an error. :func:`kinemata.parity.produced`
+    extracts a *set*, where matching nothing is a well-formed answer meaning
+    *the code produces nothing*; there a failed run and an empty world are the
+    same text, so it passes ``False``.
+
+    That second case was a live defect rather than a hazard reasoned about: an
+    oracle dying on ``ImportError`` put every declared identifier into
+    ``unproduced``, and because nothing was *blocked*, ``baseline --record``
+    accepted the lot as exemptions.
 
     Kept here, and used by every declared oracle in this package, so that a
     second caller does not grow a second copy of the ``{python}`` substitution
@@ -928,7 +966,10 @@ def run_oracle(
         return None, f"did not finish within {timeout:g}s and was killed"
     except (OSError, ValueError) as error:
         return None, f"could not be run ({type(error).__name__})"
-    return result.stdout + result.stderr, ""
+    output = result.stdout + result.stderr
+    if result.returncode != 0 and not answers_on_failure:
+        return None, _failure(result.returncode, output)
+    return output, ""
 
 
 def actual_count(
@@ -938,8 +979,16 @@ def actual_count(
 
     The value comes back as the text the oracle printed, stripped at the edges
     only; see :class:`Counted` for why nothing further is done to it.
+
+    A non-zero exit is still an answer here, because ``extract`` is the guard: a
+    command that died prints no value and is reported unavailable either way,
+    while a collector that reports its total *and* a failure -- a test runner
+    with a red suite -- has answered the question asked of it. See
+    :func:`run_oracle` for the mechanism this argument differs by.
     """
-    output, why = run_oracle(spec.command, root, spec.directory, timeout)
+    output, why = run_oracle(
+        spec.command, root, spec.directory, timeout, answers_on_failure=True
+    )
     if output is None:
         return None, why
     found = re.search(spec.extract, output)

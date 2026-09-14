@@ -211,6 +211,34 @@ def test_an_oracle_that_never_returns_is_killed_and_blocks(tmp_path):
     assert result.failed and "did not finish within 0.5s" in result.blocked
 
 
+def test_a_crashed_oracle_blocks_rather_than_reporting_an_empty_world(tmp_path):
+    """The case the two tests above do not reach: a command that ran and died.
+
+    A failed command prints no identifiers, and neither does a project whose
+    code produces none. Read as an answer, the first one makes the entire
+    declaration `unproduced` -- and because nothing is *blocked*, the refusal
+    guarding `baseline --record` never fires and every declared identifier is
+    accepted as an exemption. Found in the shipped tool, not reasoned about.
+    """
+    result = compare(
+        Registry("app.name"),
+        oracle(command=("{python}", "-c", "import no_such_module_here")),
+        tmp_path,
+    )
+    assert result.failed and "exited 1" in result.blocked
+    assert result.unproduced == () and result.undeclared == ()
+
+
+def test_the_block_says_what_the_oracle_last_printed(tmp_path):
+    """Named, never dropped -- and the reason is what makes it actionable."""
+    result = compare(
+        Registry("app.name"),
+        oracle(command=("{python}", "-c", "import no_such_module_here")),
+        tmp_path,
+    )
+    assert "ModuleNotFoundError" in result.blocked
+
+
 def test_an_extract_with_no_capture_group_blocks(tmp_path):
     """Refused, not treated as an empty world."""
     result = compare(Registry("app.name"), oracle(extract=r"app\.[a-z_]+"),
@@ -695,6 +723,35 @@ def test_a_blocked_oracle_refuses_to_record_too(tmp_path, capsys):
     assert main(
         ["baseline", "-c", cfg(tmp_path), "--record", "--until", "2099-01-01"]
     ) == 2
+
+
+def test_a_crashed_oracle_refuses_to_rewrite_the_baseline(tmp_path, capsys):
+    """The same refusal, reached by the failure that used to walk past it.
+
+    An oracle that cannot be *spawned* was already blocked. One that spawns,
+    raises and exits non-zero was an answer, so the whole declaration read as
+    unproduced and `--prune` deleted the records of findings nobody had looked
+    at -- while `--record` wrote the rest of the declaration in as exempt.
+    """
+    from kinemata.baseline import Baseline
+
+    declare(tmp_path, declared=("app.name", "app.legacy"))
+    main(["baseline", "-c", cfg(tmp_path), "--record", "--until", "2099-01-01"])
+    capsys.readouterr()
+
+    body = (tmp_path / "kinemata.toml").read_text().replace(
+        "print('app.name')", "import no_such_module_here"
+    )
+    (tmp_path / "kinemata.toml").write_text(body)
+
+    assert main(["baseline", "-c", cfg(tmp_path), "--prune"]) == 2
+    assert "BLOCKED" in capsys.readouterr().err
+    assert Baseline.load(tmp_path / ".kinemata-baseline.json").size == 1
+
+    assert main(
+        ["baseline", "-c", cfg(tmp_path), "--record", "--until", "2099-01-01"]
+    ) == 2
+    assert Baseline.load(tmp_path / ".kinemata-baseline.json").size == 1
 
 
 def test_a_blocked_oracle_still_shows_the_baseline(tmp_path, capsys):

@@ -262,6 +262,45 @@ def test_an_oracle_that_prints_nothing_matching_says_so(tmp_path):
     assert result.blocked and "produced no value" in result.blocked[0]
 
 
+def test_a_collector_that_reports_its_total_and_fails_still_settles(tmp_path):
+    """Why the exit status is deliberately not fatal for this one mechanism.
+
+    A test runner with a red suite exits non-zero and still prints how many it
+    collected, which is the question a count claim asked. `extract` is the guard
+    that lets this be safe here: a command that died prints no value and is
+    reported unavailable anyway. `kinemata.parity` has no such guard and so
+    takes the opposite policy -- see `run_oracle`.
+    """
+    from kinemata.claims import Counted
+
+    write(tmp_path, "doc.md", "The suite has **4 tests**.\n")
+    spec = Counted(
+        pattern=r"\*\*(\d+) tests\*\*",
+        command=("{python}", "-c",
+                 "import sys; print('7 tests collected'); sys.exit(1)"),
+        extract=r"(\d+) tests collected",
+        label="test count",
+    )
+    result = verify(tmp_path, counts=[spec])
+    assert result.blocked == []
+    assert [claim.kind for claim in result.broken] == ["test count"]
+
+
+def test_a_count_oracle_that_dies_reports_no_value_rather_than_passing(tmp_path):
+    """The guard that makes the lenient policy above safe, stated as a test."""
+    from kinemata.claims import Counted
+
+    write(tmp_path, "doc.md", "The suite has **4 tests**.\n")
+    spec = Counted(
+        pattern=r"\*\*(\d+) tests\*\*",
+        command=("{python}", "-c", "import no_such_module_here"),
+        extract=r"(\d+) tests collected",
+    )
+    result = verify(tmp_path, counts=[spec])
+    assert result.broken == []
+    assert result.blocked and "produced no value" in result.blocked[0]
+
+
 def test_a_count_pattern_may_use_alternation(tmp_path):
     """The first *matching* group, not group 1.
 

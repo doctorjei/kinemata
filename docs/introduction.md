@@ -677,6 +677,16 @@ stripped from the oracle's output, nothing else normalized. `oracle_timeout` is 
 count's: one that never returns has to fail rather than hang the gate, and expiry is reported the
 way any other unreachable oracle is.
 
+**The exit status is the one thing the two do not share, and the difference is deliberate.** A
+`[[count]]` oracle may fail and still be believed, because `extract` is the guard: it pulls a
+single value out of the output and reports *produced no value* when it cannot, so a command that
+died settles nothing either way — while a test runner with a red suite exits non-zero and still
+prints how many it collected, which is exactly the question asked. A `[[parity]]` oracle has no
+such guard, because it extracts a **set** and matching nothing is a well-formed answer meaning
+*the code produces none of these*. There a failed run and an empty world are the same text, so a
+non-zero exit **blocks**. An oracle that legitimately exits non-zero has to absorb that in its own
+command.
+
 Negation is parsed: a claim inside a negated clause is a mention, not an assertion. Clause
 boundaries are `;:`, `but`, `however`, `whereas`, `while` — commas deliberately excluded.
 
@@ -828,9 +838,10 @@ limit is closed, in the same commit that closes it.**
   command and the command itself both live in the tree the constrained agent writes, so a
   disagreement can be made to go away by editing either one. What makes that survivable is what
   makes the baseline survivable — it is a visible file change. The one thing it will not accept
-  quietly is an oracle that cannot answer: not installed, killed on timeout, or an `extract` with
-  no capture group is a **failure**, never a skip. An oracle that runs and matches nothing is a
-  different thing — an empty set, which is a real answer and usually a finding.
+  quietly is an oracle that cannot answer: not installed, killed on timeout, exited non-zero, or an
+  `extract` with no capture group is a **failure**, never a skip. An oracle that *succeeds* and
+  matches nothing is a different thing — an empty set, which is a real answer and usually a
+  finding.
   ⚑ **A value comparison adds one more refusal and one structural guard.** A declared value that is
   not a scalar or a flat list of them **blocks**: a nested container has an internal order and a
   spelling no two sides agree on by accident, so rendering it would be a normalization that does not
