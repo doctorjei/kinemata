@@ -95,6 +95,34 @@ One required method, three defaulted. That is the whole surface. A project with 
 manifest satisfies it in a few lines; a project with a type system or a database catalog
 satisfies it with a real adapter.
 
+⚑ **The overrides are not interchangeable with the thing they derive from, and this table used to
+read as though they were.** `entries()` is required because some mechanisms ask it directly rather
+than going through the derived surface:
+
+| Asked by | Through |
+|---|---|
+| `parity.survey()` — both membership directions and the value comparison | `entries()` |
+| `undeclared()` in `contract.py` — the closed-world catch | `declared()` |
+| `[[interpose]]`'s run-time judgment of an observed identifier | `declared()` |
+| `access.registry()`'s assertion on a declared key | `declared()` |
+
+So the `declared(id)` row's *override when* — **enumeration is too large to hold, and membership
+must be answered directly** — describes an adapter this contract invites and then half-serves. An
+adapter that answers membership by recognition, and whose `entries()` cannot enumerate the same
+population, is **visible to `undeclared` and to `[[interpose]]`, and invisible to `parity`**: the
+closed-world catch and the run-time judge both work, while a parametric family silently fails to
+exist in the one mechanism that compares a declaration against what the code produces. Nothing
+reports this. Parity has nothing to disagree with, which reads exactly like agreement.
+
+**Overriding `declared()` therefore costs parity unless `entries()` can still enumerate.** A
+registry that genuinely cannot enumerate — membership decided by a pattern, a type system, a
+catalog query — is a registry `parity` cannot serve, and that is a property of the data model
+rather than a defect to work around. Say so when declaring it, rather than discovering it from a
+run that found nothing.
+
+Found by an adopter reading the source before writing an `import` adapter, not by a check here;
+the asymmetry is between two mechanisms and no mechanism's subject is this contract.
+
 ⚑ **They were not equally reachable, and this section claimed they were.** For the project's
 whole life until 2026-09-09, a project-supplied adapter could only be used by importing kinemata
 as a library: `config.BUILDERS` was a fixed table of kinds with no plugin path, so `[[registry]]`
