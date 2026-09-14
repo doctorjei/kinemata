@@ -65,8 +65,20 @@ Returns every declared entry. An `Entry` requires exactly two fields:
 
 | Field | Type | Meaning |
 |---|---|---|
-| `id` | string | the identifier as it appears in source |
+| `id` | string | how the registry names this entry — usually as it appears in source |
 | `clauses` | [ClauseID] | the normative statements governing this entry; may be empty |
+
+⚑ **`id` read *"the identifier as it appears in source"* until 2026-09-14, and a registry can now
+mint one that appears nowhere.** A `yaml-mapping` declaring `flatten` composes an identifier out of
+two key levels — a cell of a matrix, `create.parent_missing` — which is a real entry a rule can
+name and a string nobody writes. **The defaults above are what the distinction costs**: `detect()`
+literal-matches each `id` against the text, so a composite-id registry detects nothing and every
+entry lands in `check`'s `silent:` line; a `syntax` written for the *leaf* names makes `undeclared`
+report every leaf mention in the code. **Neither is a defect in those operations** — they are doing
+exactly what they say against an identifier that is not a source spelling.
+**The idiom that resolves it is a second `[[registry]]` view of one data model**, which is what a
+`[[parity]]` refusal already tells a project to do when it wants to check a second fact about one
+source: a flat view feeds `check` and `undeclared`, a flattened view feeds `shape` and `parity`.
 
 Any further fields are the project's own and are passed through untouched. Kanibako's
 entries carry `scope`, `type`, `default`, `since`, `migration`; a capability registry's
