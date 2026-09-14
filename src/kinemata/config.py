@@ -368,6 +368,77 @@ def _build_substitutions(spec: dict[str, Any], root: Path, path: Path) -> BaseRe
 #: worse than a key nobody wrote.
 BIBLIOGRAPHY_KEYS = frozenset({"entry", "types"})
 
+#: Appended when the table that swallowed the key is an array-of-tables, because
+#: refusing the key is only half an answer: the reader wrote it under a heading
+#: that looks unrelated to the one it belongs to, and TOML's rule is what put it
+#: there.
+ABSORBED = (
+    " An array-of-tables takes every bare key written after it, so a key meant "
+    "for an enclosing table has to be moved above the first one."
+)
+
+
+def _reject_unknown(
+    spec: dict[str, Any], known: frozenset[str], where: str, *, absorbs: bool = False
+) -> None:
+    """Refuse a key this table cannot mean, naming what it could have been.
+
+    **Written because a key nothing reads is indistinguishable from a check that
+    is switched off.** An adopter wrote two ``[[gate]]`` tables between
+    ``suffixes`` and ``historical`` inside ``[claims]``; TOML gave ``historical``
+    to the second gate, the suppression stopped applying, and the only symptom
+    was a claim denominator moving between two runs of the same command. No
+    error, no warning, and a config that read correctly to every human who
+    looked at it.
+
+    One function rather than a refusal per table: the same three lines were
+    spelled five times here, all of them in the citation family, and every table
+    added since had quietly decided that an unknown key means nothing at all.
+    Which is the duplication this package exists to report.
+    """
+    unknown = set(spec) - known
+    if not unknown:
+        return
+    raise ConfigError(
+        f"{where} declares {', '.join(sorted(unknown))}, which means nothing "
+        f"here (known: {', '.join(sorted(known))})."
+        + (ABSORBED if absorbs else "")
+    )
+
+
+#: What each table may declare. ⚑ ``[claims] promised`` is listed as **known**
+#: and then refused by :func:`_promised` with a migration message: a retired key
+#: needs the answer that says where it went, and a generic refusal here would
+#: reach it first and say only that it is unknown.
+PROJECT_KEYS = frozenset(
+    {"root", "exclude", "suffixes", "max_sites", "baseline"}
+)
+CLAIMS_KEYS = frozenset(
+    {
+        "suffixes", "file_suffixes", "historical", "resolve_in", "commits_in",
+        "external", "external_timeout", "oracle_timeout", "promised",
+    }
+)
+CONTEXT_KEYS = frozenset({"include", "external", "budget", "strip"})
+GATE_KEYS = frozenset({"command", "where", "note"})
+COUNT_KEYS = frozenset(
+    {"command", "run", "args", "directory", "pattern", "extract", "label"}
+)
+PARITY_KEYS = frozenset(
+    {
+        "command", "run", "args", "directory", "registry", "extract", "field",
+        "authority", "translate",
+    }
+)
+SHAPE_KEYS = frozenset({"registry", "rule"})
+INTERPOSE_KEYS = frozenset({"registry", "target", "identify"})
+
+#: A rule's own keys: its name, its optional guard, and whichever claim it
+#: spells plus that claim's companion. The claim spellings are read from
+#: :data:`SHAPE_CLAIMS` rather than restated, so a new operator cannot be
+#: accepted by one table and refused by the other.
+RULE_KEYS = frozenset({"name", "when", "field", "are"})
+
 
 def _build_bibliography(spec: dict[str, Any], root: Path, path: Path) -> BaseRegistry:
     """Declared sources, always from their own file.
@@ -394,12 +465,7 @@ def _build_bibliography(spec: dict[str, Any], root: Path, path: Path) -> BaseReg
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise ConfigError(f"registry {name!r}: cannot read {path}: {exc}") from exc
 
-    unknown = set(document) - BIBLIOGRAPHY_KEYS
-    if unknown:
-        raise ConfigError(
-            f"registry {name!r}: {source} declares {', '.join(sorted(unknown))}, "
-            f"which means nothing here (known: {', '.join(sorted(BIBLIOGRAPHY_KEYS))})."
-        )
+    _reject_unknown(document, BIBLIOGRAPHY_KEYS, f"registry {name!r}: {source}")
 
     try:
         return Bibliography(
@@ -621,6 +687,7 @@ def load(path: str | Path) -> Settings:
         raise ConfigError(f"cannot read {path}: {exc}") from exc
 
     project = raw.get("project", {})
+    _reject_unknown(project, PROJECT_KEYS, f"{path}: [project]")
     root = (path.parent / project.get("root", ".")).resolve()
 
     declarations = raw.get("registry", [])
@@ -763,6 +830,7 @@ def load(path: str | Path) -> Settings:
         )
 
     claims = raw.get("claims", {})
+    _reject_unknown(claims, CLAIMS_KEYS, f"{path}: [claims]")
     # What git ignores is not this project's material, and every check here asks
     # that same question. Answered once, in the one place settings come from.
     exclude = tuple(project.get("exclude", ())) + git_ignored(root)
@@ -874,12 +942,7 @@ def _resources(
         raise ConfigError(
             f"{path}: [citations] resources: cannot read {source}: {exc}"
         ) from exc
-    unknown = set(document) - RESOURCE_FILE_KEYS
-    if unknown:
-        raise ConfigError(
-            f"{path}: {declared} declares {', '.join(sorted(unknown))}, which "
-            f"means nothing here (known: {', '.join(sorted(RESOURCE_FILE_KEYS))})."
-        )
+    _reject_unknown(document, RESOURCE_FILE_KEYS, f"{path}: {declared}")
     try:
         listed = declared_resources(
             document.get(RESOURCE_TABLE, ()), root=root, where=str(declared)
@@ -925,12 +988,7 @@ def _citations(spec: dict[str, Any] | None, path: Path) -> dict[str, Any]:
         raise ConfigError(
             f"{path}: [citations] is a table, not {type(spec).__name__}."
         )
-    unknown = set(spec) - CITATION_KEYS
-    if unknown:
-        raise ConfigError(
-            f"{path}: [citations] declares {', '.join(sorted(unknown))}, which "
-            f"means nothing here (known: {', '.join(sorted(CITATION_KEYS))})."
-        )
+    _reject_unknown(spec, CITATION_KEYS, f"{path}: [citations]")
     return spec
 
 
@@ -1106,13 +1164,12 @@ def _promise(entry: Any, path: Path) -> Promise:
         raise ConfigError(
             f"{path}: a promise is a table, not {entry!r}. Write {PROMISE_FORM}."
         )
-    unknown = set(entry) - PROMISE_KEYS
-    if unknown:
-        raise ConfigError(
-            f"{path}: promise {entry.get('path') or entry.get('what') or entry!r} "
-            f"declares {', '.join(sorted(unknown))}, which means nothing here "
-            f"(known: {', '.join(sorted(PROMISE_KEYS))})."
-        )
+    _reject_unknown(
+        entry,
+        PROMISE_KEYS,
+        f"{path}: promise {entry.get('path') or entry.get('what') or entry!r}",
+        absorbs=True,
+    )
     if bool(entry.get("path")) == bool(entry.get("what")):
         raise ConfigError(
             f"{path}: promise {entry!r} needs exactly one of `path` (a file the "
@@ -1180,6 +1237,7 @@ def _build_context(spec: dict[str, Any] | None, path: Path) -> ContextBudget | N
     """
     if spec is None:
         return None
+    _reject_unknown(spec, CONTEXT_KEYS, f"{path}: [context]")
     include = spec.get("include")
     budget = spec.get("budget")
     missing = [key for key, value in (("include", include), ("budget", budget))
@@ -1240,6 +1298,7 @@ def _build_gates(declarations: list[dict[str, Any]], path: Path) -> tuple[Gate, 
     """
     built: list[Gate] = []
     for index, spec in enumerate(declarations):
+        _reject_unknown(spec, GATE_KEYS, f"{path}: [[gate]] {index}", absorbs=True)
         command = spec.get("command")
         if not command:
             raise ConfigError(f"{path}: [[gate]] {index} is missing 'command'")
@@ -1308,6 +1367,7 @@ def _build_counts(
     known = commands or {}
     built: list[Counted] = []
     for index, spec in enumerate(declarations):
+        _reject_unknown(spec, COUNT_KEYS, f"{path}: [[count]] {index}", absorbs=True)
         if spec.get("command") and spec.get("run"):
             raise ConfigError(
                 f"{path}: [[count]] {index} declares both 'command' and 'run'; "
@@ -1362,6 +1422,7 @@ def _build_parities(
     built: list[Oracle] = []
     claimed: dict[str, int] = {}
     for index, spec in enumerate(declarations):
+        _reject_unknown(spec, PARITY_KEYS, f"{path}: [[parity]] {index}", absorbs=True)
         if spec.get("command") and spec.get("run"):
             raise ConfigError(
                 f"{path}: [[parity]] {index} declares both 'command' and 'run'; "
@@ -1455,6 +1516,9 @@ def _build_funnels(
     built: list[Funnel] = []
     watched: dict[str, int] = {}
     for index, spec in enumerate(declarations):
+        _reject_unknown(
+            spec, INTERPOSE_KEYS, f"{path}: [[interpose]] {index}", absorbs=True
+        )
         missing = [
             key for key in ("registry", "target", "identify") if not spec.get(key)
         ]
@@ -1626,6 +1690,7 @@ def _build_shapes(
     built: list[Shape] = []
     claimed: dict[str, int] = {}
     for index, spec in enumerate(declarations):
+        _reject_unknown(spec, SHAPE_KEYS, f"{path}: [[shape]] {index}", absorbs=True)
         name = str(spec.get("registry", ""))
         if not name:
             raise ConfigError(f"{path}: [[shape]] {index} is missing registry")
@@ -1657,6 +1722,9 @@ def _build_shapes(
         seen: dict[str, int] = {}
         for position, raw_rule in enumerate(declared_rules):
             where = f"{path}: [[shape.rule]] {position} of [[shape]] {index}"
+            _reject_unknown(
+                raw_rule, RULE_KEYS | frozenset(SHAPE_CLAIMS), where, absorbs=True
+            )
             rule_name = str(raw_rule.get("name", "")).strip()
             if not rule_name:
                 raise ConfigError(
