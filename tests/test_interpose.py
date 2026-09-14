@@ -565,6 +565,79 @@ def test_a_marker_reaches_one_spelling_of_a_path_and_not_the_other(module):
     assert watcher.exercised == frozenset({"app.name"})
 
 
+# -- how far a set-level judgement already reaches -----------------------------
+
+
+class Containers:
+    """A project's own model: a path is fine if something was written under it.
+
+    Stateful, and deferring its answer -- both of which `identify` already
+    allows. This is a judgement about the *set*, written as a model of what an
+    identifier is rather than as an override of a verdict.
+    """
+
+    def __init__(self):
+        self.written: set[str] = set()
+
+    def identify(self, crossing):
+        key = crossing.args[1]
+        self.written.add(key)
+        return lambda: self._resolve(key)
+
+    def _resolve(self, key):
+        under = any(other.startswith(f"{key}.") for other in self.written)
+        return "app.name" if under else key
+
+
+def test_a_set_level_judgement_within_one_test_is_already_expressible(module):
+    """⚑ The reason a verdict-override hook is not the only way to reach this.
+
+    An adopting project offered `adjudicate(observations)` on the grounds that
+    no project can express a judgement depending on the other identifiers in a
+    run. Within a test it can: `identify` is theirs, may keep state, and may
+    return a **deferred callable** resolved at drain -- a member the union
+    already carries for a different reason.
+    """
+    model = Containers()
+    watcher = census(module, "app.name", identify=model.identify)
+    store = Store()
+    store.set("app.container", 1)
+    store.set("app.container.leaf", 2)
+    watcher.drain()
+    watcher.uninstall()
+
+    rows = {row.identifier: row.declared for row in watcher.watch().observations}
+    # The parent was rescued by what was written under it, in the same test.
+    assert rows == {"app.name": True, "app.container.leaf": False}
+
+
+def test_the_same_two_writes_in_two_tests_are_judged_by_order(module):
+    """🛑 The hazard, and the reason the cross-test version is not offered.
+
+    A drain ends each test, so a deferred answer resolves against the crossings
+    seen *so far*. A project whose accumulator outlives a test therefore gets a
+    verdict that depends on which test ran first -- and, under one pytest
+    process per file, on which file the writes landed in. The same two writes,
+    both orders, different answers.
+    """
+    def verdicts(first, second):
+        model = Containers()
+        watcher = census(module, "app.name", identify=model.identify)
+        store = Store()
+        store.set(first, 1)
+        watcher.drain()          # end of one test
+        store.set(second, 2)
+        watcher.drain()          # end of the next
+        watcher.uninstall()
+        return {row.identifier for row in watcher.watch().findings}
+
+    parent_first = verdicts("app.container", "app.container.leaf")
+    child_first = verdicts("app.container.leaf", "app.container")
+    assert parent_first == {"app.container", "app.container.leaf"}
+    assert child_first == {"app.container.leaf"}
+    assert parent_first != child_first
+
+
 # -- the durable record -------------------------------------------------------
 
 

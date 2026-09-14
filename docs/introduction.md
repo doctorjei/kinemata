@@ -490,6 +490,18 @@ revision of the census this is drawn from excused writes by where they came from
 object; it hid roughly forty real violations. **An identifier is judged by what it is** — which is
 also why an observation is keyed on the identifier alone and never on the site.
 
+⚑ **A judgement that depends on the run's *other* identifiers reaches as far as one test, and
+that is deliberate.** `identify` may keep state across crossings, and it may return a **deferred
+callable** resolved when the test drains — so *"this path is structure because something was
+written under it"* is expressible today, as a model of what an identifier is rather than as an
+override of a verdict. What it cannot do is span tests, because the drain that ends each test
+fixes that test's answers. 🛑 **Nor should it**: a verdict that turns on what a *different* test
+wrote is not reproducible — run that test alone and it flips, and under one pytest process per
+file it turns on which file the writes landed in. A project whose extractor accumulates across
+tests already has this, and the same two writes in the other order give the other answer. **Reset
+the accumulator per test.** Nothing here can detect one that is not reset; `identify` is the
+project's code and this check cannot see inside it.
+
 ⚑ **If a call's *shape* changes what it means, that belongs in the identifier, and `identify` is
 where it goes.** One path written both as a scalar and as an empty container is two facts, and a
 project whose model says so returns two spellings — `identify` receives the whole crossing, the
@@ -1129,6 +1141,18 @@ down, and the two shapes at the end are the findings that matter most.
   the crossing count is always printed, because a run that observed nothing must not read like a run
   that found nothing. **The check's coverage is the suite's coverage**, which is a real limit and
   belongs to whoever reads its output.
+  ⚑ **A set-level judgement reaches one test, and a cross-test one is refused rather than
+  unbuilt** (2026-09-15). An adopting project asked for a hook consulted before findings, handed
+  the whole judged set — their case being a container rescued by what was written under it. Within
+  a test that is already expressible and was not known to be: `identify` may keep state and may
+  defer its answer to the drain, so the judgement is written as a model of what an identifier *is*
+  rather than as an override of a verdict, which is the distinction that decided this. **Across
+  tests it is not expressible, and a verdict that turns on what another test wrote is not a verdict
+  a run can reproduce** — run that test alone and it flips, and under one process per file it turns
+  on which file the writes landed in. ⚑ **The hazard is live without any new surface**: an
+  extractor whose state outlives a test gives the same two writes different answers in different
+  orders, measured both ways. **Nothing can detect it** — `identify` is the project's code — so it
+  is published here and stated beside the key rather than checked.
   ⚑ **Marked `accepted` rather than `boundary` on 2026-09-13**, the day before it closed. An adopting
   project asked directly whether an execution-time mechanism was ever coming, and the answer was that
   one **can certainly be added** (user, 2026-09-13). **The mark this entry carried before that said
