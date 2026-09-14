@@ -20,6 +20,7 @@ import types
 
 import pytest
 
+from kinemata import interpose
 from kinemata.config import ConfigError, load
 from kinemata.interpose import (
     Census,
@@ -72,16 +73,25 @@ def module(monkeypatch):
     return made
 
 
+@pytest.fixture(autouse=True)
+def fixed_site(monkeypatch):
+    """A stable `file:line`, so a case can assert on the site it recorded.
+
+    Patched on the module rather than passed in: `Census` used to take a `site`
+    callable and nothing but this helper could reach it, since the plugin --
+    the only constructor a project's config arrives through -- never passed
+    one. A seam only the tests use is a seam the tests should reach for.
+    """
+    monkeypatch.setattr(interpose, "_caller", lambda: "t.py:1")
+
+
 def census(module, *declared, identify=None, **kwargs):
     funnel = Funnel(
         registry="keyspace",
         target="projectmod:Store.set",
         identify="projectmod:key_of",
     )
-    watcher = Census(
-        funnel, Keys(*declared, **kwargs), identify or module.key_of,
-        site=lambda: "t.py:1",
-    )
+    watcher = Census(funnel, Keys(*declared, **kwargs), identify or module.key_of)
     watcher.install()
     return watcher
 

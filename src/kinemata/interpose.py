@@ -183,12 +183,17 @@ class Census:
         funnel: Funnel,
         registry: Registry,
         identify: Callable[[Crossing], Identifier],
-        site: Callable[[], str] | None = None,
     ) -> None:
+        # **No seam for the site**, though there was one and nothing could
+        # reach it: `pytest_plugin` is the only constructor a project's config
+        # arrives through, and it never passed one. A parameter a declaration
+        # cannot set reads as an offer this mechanism does not make -- and the
+        # answer to the question it looked like it answered is already
+        # `_caller`'s: a project needing a different frame reads it in its own
+        # `identify`, where it knows what its own stack means.
         self.funnel = funnel
         self.registry = registry
         self.identify = identify
-        self._site = site or _caller
         self._owner: Any = None
         self._name = ""
         self._original: Any = None
@@ -277,7 +282,7 @@ class Census:
         # the answer is deferred -- which is what makes a reused box collapse
         # into one pending slot exactly as it does in the census this follows.
         # Bounded by one test's crossings, since `drain` empties it per test.
-        key = (value if isinstance(value, str) else id(value), self._site())
+        key = (value if isinstance(value, str) else id(value), _caller())
         slot = self._pending.get(key)
         if slot is None:
             self._pending[key] = [value, key[1], 1, self._armed]
