@@ -37,10 +37,14 @@ why an observation is keyed on the identifier alone and never on the site.
 
 from __future__ import annotations
 
+import json
+import os
 import sys
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from .contract import Registry
 from .targets import TargetError, resolve
@@ -84,6 +88,11 @@ class Funnel:
     registry: str
     target: str
     identify: str
+    #: Where this funnel's rows are appended, empty when nothing is recorded.
+    #: **Optional, because the terminal summary is the whole point for a project
+    #: with one process**; declared, because the file is the only thing that
+    #: survives one.
+    record: str = ""
 
 
 @dataclass
@@ -359,6 +368,102 @@ class Census:
     def exercised(self) -> frozenset[str]:
         """Declared identifiers whose declaration actually changed a verdict."""
         return frozenset(self._used)
+
+
+#: What a recorded line says it is. **Two shapes rather than one**: an
+#: observation carries a verdict about an identifier, and a funnel line carries
+#: what makes that verdict readable -- how many crossings there were, whether the
+#: funnel was blocked at all, what faulted. A rows-only artifact loses the
+#: denominator, and *three findings out of three crossings* is not the same run
+#: as *three out of three thousand*.
+FUNNEL_ROW = "funnel"
+OBSERVATION_ROW = "observation"
+
+
+def rows(
+    watch: Watch, session: str, argv: Sequence[str]
+) -> list[dict[str, Any]]:
+    """One funnel line and one line per observation, **clean rows included**.
+
+    A findings-only artifact cannot be diffed and cannot answer *did this
+    identifier stop being written*, which is most of what a durable record is
+    for; an accepted path is evidence rather than clutter. That argument came
+    from the adopting project, whose own reason is narrower -- a flagged
+    container is adjudicable only against what was written under it -- and the
+    general one survives the narrowing.
+    """
+    head: dict[str, Any] = {
+        "record": FUNNEL_ROW,
+        "session": session,
+        "argv": list(argv),
+        "registry": watch.registry,
+        "target": watch.target,
+        "crossings": watch.crossings,
+        "blocked": watch.blocked,
+        "errors": list(watch.errors),
+    }
+    return [head] + [
+        {
+            "record": OBSERVATION_ROW,
+            "session": session,
+            "registry": watch.registry,
+            "target": watch.target,
+            "identifier": item.identifier,
+            "site": item.site,
+            "count": item.count,
+            "declared": item.declared,
+            "excused": item.excused,
+        }
+        for item in watch.observations
+    ]
+
+
+def recorded(
+    watches: Iterable[tuple[str, Watch]], session: str, argv: Sequence[str]
+) -> dict[str, str]:
+    """The text each declared path gets, **one payload per path per process**.
+
+    Grouped and returned rather than written, so this module stays testable
+    without a filesystem and so a caller appends once per file. That is not
+    tidiness: a shard runs one process per file, several processes append to one
+    artifact, and a single write under ``O_APPEND`` is what makes their rows land
+    whole rather than interleaved.
+    """
+    payloads: dict[str, list[str]] = {}
+    for path, watch in watches:
+        if not path:
+            continue
+        payloads.setdefault(path, []).extend(
+            json.dumps(line, sort_keys=True) for line in rows(watch, session, argv)
+        )
+    return {path: "".join(f"{line}\n" for line in lines)
+            for path, lines in payloads.items()}
+
+
+def append(path: Path, payload: str) -> None:
+    """Append, **never truncate**, in one write.
+
+    Truncating would leave whichever process happened to finish last, which
+    reads exactly like a suite that shrank -- and the case this file exists for
+    is the one where there are several. Unbuffered, so the payload reaches the
+    kernel as it was assembled.
+
+    ⚑ **The atomicity is ``O_APPEND``'s and it has a ceiling.** A payload large
+    enough for the kernel to split can still interleave with another process's.
+    Nothing here can fix that; a project recording a very large session and
+    sharding it should give each shard its own path.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "ab", buffering=0) as handle:
+        handle.write(payload.encode("utf-8"))
+
+
+#: One run of one process. Minted per import rather than per funnel: the
+#: plugin's state is per-process already, and a second id inside one process
+#: would split a run that was never split. The pid is carried because it is what
+#: a reader correlates against their runner's own logs, and a random half because
+#: pids repeat between runs and the artifact outlives both.
+SESSION = f"{os.getpid()}-{uuid4().hex[:12]}"
 
 
 @dataclass

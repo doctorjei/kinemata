@@ -467,7 +467,7 @@ PARITY_KEYS = frozenset(
     }
 )
 SHAPE_KEYS = frozenset({"registry", "rule"})
-INTERPOSE_KEYS = frozenset({"registry", "target", "identify"})
+INTERPOSE_KEYS = frozenset({"registry", "target", "identify", "record"})
 
 #: Every table a ``kinemata.toml`` may declare. ⚑ **The root was the last table
 #: that absorbed silently, and the worst one to.** A top-level ``[[gates]]`` --
@@ -1674,7 +1674,12 @@ def _build_funnels(
                 f"(known: {', '.join(sorted(registries)) or 'none'})"
             )
         built.append(
-            Funnel(registry=name, target=target, identify=str(spec["identify"]))
+            Funnel(
+                registry=name,
+                target=target,
+                identify=str(spec["identify"]),
+                record=str(spec.get("record", "")),
+            )
         )
     return tuple(built)
 

@@ -19,11 +19,21 @@ out is also what keeps pytest out of this package's runtime dependencies.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .config import CONFIG_NAMES, ConfigError, find_config, load
-from .interpose import Census, Crossing, Identifier, Session, Watch
+from .interpose import (
+    SESSION,
+    Census,
+    Crossing,
+    Identifier,
+    Session,
+    Watch,
+    append,
+    recorded,
+)
 from .targets import resolve
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -45,11 +55,16 @@ _session = Session()
 _declared: set[str] = set()
 _errors: list[str] = []
 _finalized = False
+#: The config's root, for resolving a declared `record` path. Held because the
+#: settings are read once at configure and the write happens at the end.
+_root: Path | None = None
 
 
 def _install(config_path: Path) -> None:
     """Build a census per declared funnel. A refusal is recorded, not raised."""
+    global _root
     settings = load(config_path)
+    _root = settings.root
     by_name = {item.name: item for item in settings.registries}
     for funnel in settings.funnels:
         registry = by_name.get(funnel.registry)
@@ -114,6 +129,34 @@ def pytest_runtest_teardown(item: pytest.Item) -> None:
         census.arm(())
 
 
+def _write(declared: list[tuple[str, Watch]]) -> None:
+    """Append each declared artifact, or record why it did not happen.
+
+    **A declared record that silently did not get written is the inert signal
+    this package exists to report**, so a failure here lands in the session's
+    errors and fails the run, the way a blocked oracle does. The cost is a run
+    that can go red because a directory is unwritable; the alternative is a
+    project believing it has a cross-process record of a suite it does not.
+
+    Relative to the config's root, not the working directory: a shard runs each
+    process from wherever its runner happens to be, and a path resolved against
+    the cwd would scatter one suite's rows across the filesystem.
+    """
+    if not any(path for path, _ in declared):
+        return
+    for path, payload in recorded(declared, SESSION, sys.argv).items():
+        target = Path(path)
+        if not target.is_absolute():
+            target = (_root or Path.cwd()) / target
+        try:
+            append(target, payload)
+        except OSError as exc:
+            _errors.append(
+                f"record {path!r}: {type(exc).__name__}: {exc}. The funnel was "
+                "watched and judged; only the durable copy is missing."
+            )
+
+
 def _finish() -> Session:
     """Drain, unpatch and settle -- once, however many hooks ask for it.
 
@@ -128,11 +171,15 @@ def _finish() -> Session:
     _finalized = True
     watches: list[Watch] = []
     exercised: set[str] = set()
+    declared_records: list[tuple[str, Watch]] = []
     for census in _censuses:
         census.drain()
         census.uninstall()
-        watches.append(census.watch())
+        watch = census.watch()
+        watches.append(watch)
+        declared_records.append((census.funnel.record, watch))
         exercised |= census.exercised
+    _write(declared_records)
     _session = Session(
         watches=tuple(watches),
         declared_by_tests=frozenset(_declared),
@@ -184,7 +231,7 @@ def reset() -> None:
     project driving the plugin from its own harness is not depending on the
     spelling of a private name.
     """
-    global _session, _finalized
+    global _session, _finalized, _root
     for census in _censuses:
         census.uninstall()
     _censuses.clear()
@@ -192,6 +239,7 @@ def reset() -> None:
     _errors.clear()
     _session = Session()
     _finalized = False
+    _root = None
 
 
 __all__ = ["MARKER", "Crossing", "Identifier", "reset"]

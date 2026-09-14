@@ -256,6 +256,14 @@ registry = "keyspace"
 registry = "keyspace"
 target   = "mypkg.store:KeyStore.__setitem__"
 identify = "mypkg.census:key_of"
+record   = "build/census.jsonl"   # optional, and the only thing that survives
+                                  # the process. Appended, never truncated, so a
+                                  # suite sharded across processes is the union
+                                  # of their rows. Every row is written, clean
+                                  # ones included: a findings-only file cannot
+                                  # be diffed and cannot answer "did this
+                                  # identifier stop being written". Relative to
+                                  # `[project] root`
 
 # Checks that must run, and the file that must run them.
 [[gate]]
@@ -447,6 +455,19 @@ patched, or on a fault inside the collector, which means crossings went unrecord
 
 **There is no `pytest11` entry point**, so installing kinemata does not put this in anyone's test
 run. Loading a plugin that monkey-patches the project's own classes is a thing to ask for.
+
+⚑ **The terminal summary is one process's, and `record` is the only thing that outlives it.** The
+plugin's state is per-process, so a suite run as one process per file — a shard, a chunked runner,
+anything that is not a single invocation — produces a summary per process and no union at all. A
+funnel declaring `record` appends its rows there instead: **one funnel line per process** carrying
+the crossing count, whether the funnel was blocked and what faulted, then **one line per
+identifier, the clean ones included.** The rows are what make a run diffable and what answers *did
+this identifier stop being written*; the funnel line is the denominator, and three findings out of
+three crossings is not the same run as three out of three thousand. Each process appends its whole
+payload in one write, which is what keeps concurrent shards from interleaving — up to the size at
+which the kernel splits a write, past which a project should give each shard its own path.
+**A declared record that could not be written fails the run**, like any other declared thing that
+did not happen.
 
 A test that means to write an undeclared identifier says so, and the declaration is not an
 exemption:

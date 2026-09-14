@@ -504,6 +504,124 @@ def test_a_marker_excuses_the_identifier_it_names(pytester):
     assert result.ret == 0
 
 
+# -- the durable record -------------------------------------------------------
+
+
+def test_the_record_carries_the_clean_rows_and_the_denominator(module):
+    """Findings-only cannot be diffed, and cannot say what a run looked at."""
+    import json
+
+    from kinemata.interpose import recorded
+
+    watcher = census(module, "app.name")
+    store = Store()
+    store.set("app.name", 1)
+    store.set("app.fabricated", 2)
+    watcher.drain()
+    watcher.uninstall()
+
+    payloads = recorded([("out.jsonl", watcher.watch())], "s1", ["pytest", "-q"])
+    lines = [json.loads(text) for text in payloads["out.jsonl"].splitlines()]
+
+    funnel = [line for line in lines if line["record"] == "funnel"]
+    seen = {line["identifier"]: line for line in lines
+            if line["record"] == "observation"}
+    assert len(funnel) == 1
+    assert funnel[0]["crossings"] == 2 and funnel[0]["argv"] == ["pytest", "-q"]
+    # The clean row is present, which is the whole argument for the artifact.
+    assert seen["app.name"]["declared"] is True
+    assert seen["app.fabricated"]["declared"] is False
+    assert {line["session"] for line in lines} == {"s1"}
+
+
+def test_one_payload_per_path_however_many_funnels_name_it(module):
+    """A process appends once per file; `O_APPEND` is what makes that land whole."""
+    from kinemata.interpose import recorded
+
+    watcher = census(module)
+    watcher.uninstall()
+    watch = watcher.watch()
+    payloads = recorded(
+        [("a.jsonl", watch), ("a.jsonl", watch), ("b.jsonl", watch)],
+        "s1", [],
+    )
+    assert set(payloads) == {"a.jsonl", "b.jsonl"}
+    assert payloads["a.jsonl"].count('"record": "funnel"') == 2
+
+
+def test_a_funnel_declaring_no_record_writes_nothing(module):
+    from kinemata.interpose import recorded
+
+    watcher = census(module)
+    watcher.uninstall()
+    assert recorded([("", watcher.watch())], "s1", []) == {}
+
+
+def test_the_artifact_is_appended_never_truncated(tmp_path):
+    """A shard is one process per file, so the suite is the union of sessions."""
+    from kinemata.interpose import append
+
+    path = tmp_path / "nested" / "census.jsonl"
+    append(path, '{"session": "one"}\n')
+    append(path, '{"session": "two"}\n')
+    assert path.read_text() == '{"session": "one"}\n{"session": "two"}\n'
+
+
+def test_a_declared_record_lands_beside_a_real_session(pytester):
+    """End to end: the file exists, and it holds the row a clean run produced."""
+    import json
+
+    body = PROJECT["kinemata.toml"] + '        record = "census.jsonl"\n'
+    for name, text in {**PROJECT, "kinemata.toml": body}.items():
+        (pytester.path / name).write_text(textwrap.dedent(text).lstrip())
+    pytester.makepyfile(test_it=textwrap.dedent("""
+        import projectmod
+
+        def test_writes():
+            projectmod.Store().set("app.name", 1)
+    """))
+    pytester.syspathinsert()
+
+    result = pytester.runpytest_subprocess()
+    assert result.ret == 0
+    written = (pytester.path / "census.jsonl").read_text().splitlines()
+    rows = [json.loads(line) for line in written]
+    assert any(
+        row["record"] == "observation" and row["identifier"] == "app.name"
+        and row["declared"] is True
+        for row in rows
+    )
+    assert any(row["record"] == "funnel" and row["crossings"] == 1 for row in rows)
+
+
+def test_a_record_that_cannot_be_written_fails_the_run(pytester):
+    """A declared artifact that silently did not happen is the inert signal."""
+    blocked = pytester.path / "taken"
+    blocked.write_text("not a directory\n")
+    body = PROJECT["kinemata.toml"] + '        record = "taken/census.jsonl"\n'
+    for name, text in {**PROJECT, "kinemata.toml": body}.items():
+        (pytester.path / name).write_text(textwrap.dedent(text).lstrip())
+    pytester.makepyfile(test_it=textwrap.dedent("""
+        import projectmod
+
+        def test_writes():
+            projectmod.Store().set("app.name", 1)
+    """))
+    pytester.syspathinsert()
+
+    result = pytester.runpytest_subprocess()
+    result.stdout.fnmatch_lines(["*ERROR: record 'taken/census.jsonl'*"])
+    assert result.ret == 1
+
+
+def test_a_record_key_is_declarable(tmp_path):
+    funnels = load(write_config(
+        tmp_path, GOOD + 'record = "out/census.jsonl"\n'
+    )).funnels
+    assert funnels[0].record == "out/census.jsonl"
+    assert load(write_config(tmp_path, GOOD)).funnels[0].record == ""
+
+
 def test_a_marker_naming_something_never_written_fails(pytester):
     make_project(pytester, """
         import pytest
