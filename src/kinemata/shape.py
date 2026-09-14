@@ -31,12 +31,18 @@ unification came out of the measurement rather than out of tidiness -- an IFF is
 two guarded rules, and *"this value appears at exactly these positions"* is two
 guarded rules -- and it is what stops the operator table growing a second axis.
 
-⚑ **A rule that selected nothing FAILS.** This is the property that makes the
+⚑ **A rule that examined no entry FAILS.** This is the property that makes the
 predicate escape safe, and it is only available because the seam is two
 predicates rather than one function returning a verdict: the group is *this*
 module's to count, so vacuity is detected here rather than self-reported by the
 project's code. Their own suite says why -- *"an empty parametrize list runs
 ZERO cases and stays green"*.
+
+**The test is the count and not the guard**, which is narrower than it was once
+written: a guard matching nothing is only the commonest way to examine nothing.
+An unguarded rule over a registry that produced no entries and a set operator
+selecting nothing are the same vacuity, and the code has always caught all
+three. The sentence that named the guard let a reader conclude the opposite.
 
 ⚑ **And that is the opposite of what :mod:`kinemata.interpose` does with an
 unexercised funnel, on purpose.** A funnel nothing crossed is reported and does
@@ -340,7 +346,11 @@ class Judged:
 
     @property
     def vacuous(self) -> bool:
-        """Selected nothing. A failure, and see this module's note on why."""
+        """Examined nothing. A failure, and see this module's note on why.
+
+        The count, never the guard: an unguarded rule over an empty registry
+        examines nothing just as surely as a guard that matched nothing.
+        """
         return not self.blocked and self.examined == 0
 
     @property
@@ -396,7 +406,7 @@ class Shaped:
         """Why each rule that could not judge could not, for a writer to refuse on."""
         return [
             f"{item.rule.name}: {item.blocked}" if item.blocked
-            else f"{item.rule.name}: selected no entry"
+            else f"{item.rule.name}: examined no entry"
             for item in self.judged
             if item.blocked or item.vacuous
         ]

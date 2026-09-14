@@ -894,7 +894,7 @@ def cmd_shape(args: argparse.Namespace) -> int:
             failed += 1
         for item in result.vacuous:
             print(
-                f"  VACUOUS {item.rule.name!r}: selected no entry, so it "
+                f"  VACUOUS {item.rule.name!r}: examined no entry, so it "
                 "checked nothing",
                 file=sys.stderr,
             )
@@ -1915,8 +1915,8 @@ def cmd_baseline(args: argparse.Namespace) -> int:
             stalled.append(f"{result.registry}: {result.blocked}")
 
     # Shape, for the fourth time and the same reason -- and it brings a second
-    # way for a check not to have answered: a rule whose guard selected no entry
-    # ran without judging anything, so its records are exactly as unearned as a
+    # way for a check not to have answered: a rule that examined no entry ran
+    # without judging anything, so its records are exactly as unearned as a
     # blocked oracle's. Both stall the rewrite.
     for shaped in _shape(args, settings):
         findings += shaped.findings()

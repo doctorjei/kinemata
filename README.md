@@ -191,8 +191,8 @@ kinemata parity      # the gate, for what a registry declares against the set an
                      # disagreement; refuses without a [[parity]].
 kinemata shape       # the gate, for a declaration against its own shape: a
                      # field set, a vocabulary, a flag another field requires.
-                     # Exits 1 on a rule an entry fails — or on a rule whose
-                     # guard selected nothing, which checks nothing. Refuses
+                     # Exits 1 on a rule an entry fails — or on a rule that
+                     # examined no entry, which checks nothing. Refuses
                      # without a [[shape]].
 kinemata baseline    # what the gates already accept. --record to change it;
                      # runs every scan that feeds it, being the one that writes.
@@ -473,7 +473,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **916 tests**, and
+The companion guard is a number with an oracle. This suite is **917 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 

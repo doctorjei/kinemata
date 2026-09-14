@@ -245,7 +245,21 @@ def test_a_vacuous_rule_does_not_claim_its_scope():
         ],
     )
     assert result.scopes() == (shape_scope("keys", "real"),)
-    assert result.unjudged() == ["vacuous: selected no entry"]
+    assert result.unjudged() == ["vacuous: examined no entry"]
+
+
+def test_a_set_operator_over_nothing_is_vacuous_on_the_other_branch():
+    """The third way to examine nothing, and it takes a different code path.
+
+    A set rule never has a guard, so a sentence saying *the guard selected no
+    entry* reads as though this case were out of scope. The test is the count:
+    `over_set` reports `len(entries)` and zero is zero.
+    """
+    got = examine(
+        Rows(), [Rule(name="ids are unique", claim=Condition("unique", "id"))]
+    ).judged[0]
+    assert got.examined == 0
+    assert got.vacuous and got.failed
 
 
 # -- the predicate escape -----------------------------------------------------
@@ -667,7 +681,7 @@ def test_the_writer_refuses_while_a_rule_judged_nothing(tmp_path, capsys):
                  "--record", "--until", "2099-01-01"]) == 2
     err = capsys.readouterr().err
     assert "refusing to rewrite the baseline" in err
-    assert "selected no entry" in err
+    assert "examined no entry" in err
 
 
 def test_a_recorded_rule_survives_a_prune_driven_by_a_run_that_could_not_judge(

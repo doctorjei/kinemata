@@ -393,7 +393,7 @@ does not want this.
 | `kinemata check` | the gate | a strong finding not covered by the baseline, or a baseline past its `until` |
 | `kinemata claims` | documentation gate, ratcheted; also verifies `[[gate]]` declarations | a dead claim the baseline does not already accept, a baseline past its `until` that exempts claims here, or a declared gate that does not run. Refuses outright (exit 2) if nothing declares anything for it to check — no `[claims]`, `[[gate]]`, `[[count]]`, `[[promise]]` or `[citations] provenance` |
 | `kinemata parity` | membership gate, ratcheted — what a registry declares, against the set an oracle says the code produces. Both directions: produced and declared by nothing, declared and produced by nothing. With `field`, **also** each entry's declared value against what the oracle prints for it | a disagreement in any of the three directions that the baseline does not already accept, an oracle that could not answer, or a declared value no oracle could be expected to print. Refuses outright (exit 2) if no `[[parity]]` is declared |
-| `kinemata shape` | declaration gate, ratcheted — the one check whose subject is a declaration rather than the code, so it reads no tree and takes no path. A rule is a **guard** and a **claim**, and either may be a predicate the project names | a rule an entry does not satisfy that the baseline does not already accept, a rule that could not be evaluated, or **a rule whose guard selected no entry at all**. Refuses outright (exit 2) if no `[[shape]]` is declared |
+| `kinemata shape` | declaration gate, ratcheted — the one check whose subject is a declaration rather than the code, so it reads no tree and takes no path. A rule is a **guard** and a **claim**, and either may be a predicate the project names | a rule an entry does not satisfy that the baseline does not already accept, a rule that could not be evaluated, or **a rule that examined no entry at all**. Refuses outright (exit 2) if no `[[shape]]` is declared |
 | `kinemata context` | session-load gate | measured bytes exceed `budget` |
 | `kinemata baseline` | shows accepted findings; `--record --until`, `--prune` | — |
 | `kinemata stamp` | mints a citation stamp, or decodes one; reads no config | the text given is not a stamp |
@@ -624,9 +624,11 @@ one of those scans, being the only command that writes the file; a `--prune` cov
 them would delete the rest's records on the strength of never having looked.
 
 ⚑ **A shape rule brings a second way not to have answered, and it stalls a rewrite too.** A rule
-whose guard selected no entry *ran*, and judged nothing — so pruning its records would drop them
-on the authority of a run that examined none of them. Blocked and vacuous rules both appear in the
-refusal below.
+that examined no entry *ran*, and judged nothing — so pruning its records would drop them on the
+authority of a run that examined none of them. Blocked and vacuous rules both appear in the
+refusal below. **The test is the count, not the guard**: a rule with no `when` over a registry
+that produced nothing is as vacuous as one whose guard matched nothing, and so is a set operator
+that selected nothing.
 
 ⚑ **Running a scan is not the same as the scan answering, and `--record` and `--prune` refuse
 (exit 2) while any declared oracle is blocked.** An oracle that is not installed on this machine
@@ -1086,7 +1088,7 @@ down, and the two shapes at the end are the findings that matter most.
   constrained, in one commit. What it buys is **reach** over a mistake nothing else here can see,
   not enforcement against someone determined to remove it.
   ⚑ **A predicate that answers True for everything is undetectable, and saying so is the honest
-  half.** What *is* detected is a rule whose guard selected **no entry**, which fails rather than
+  half.** What *is* detected is a rule that examined **no entry**, which fails rather than
   passing — the group is this tool's to count, so vacuity there is caught here instead of being
   self-reported by the code under examination. The verdict is the project's, and a rule that never
   judges anything false looks exactly like a declaration in good order. `test_shape.py` asserts
