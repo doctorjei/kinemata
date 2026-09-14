@@ -562,12 +562,19 @@ def compare(
             continue  # membership above has already said so
         mine, absent, problem = _declared_values(entry, spec, translate)
         if mine is None:
+            # **Membership rides along**, and leaving it out was the defect an
+            # adopter reported: 18 of their 66 rows hold a dict, so one
+            # unrenderable cell threw away a membership answer that was already
+            # computed and is unaffected by it. This package's own rule is that
+            # a value comparison runs *on top of* membership, never instead of
+            # it -- the blocked return was the one place that did not honor it.
             return Parity(
                 registry=spec.registry,
                 blocked=problem,
                 declared=len(declared),
                 produced=len(printed.ids),
                 compared=spec.field,
+                **membership,
             )
         theirs = values[entry.id]
         if mine != theirs:

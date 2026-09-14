@@ -383,6 +383,31 @@ def test_a_declared_value_no_oracle_could_print_blocks(tmp_path):
     assert result.failed and "not a scalar" in result.blocked
 
 
+def test_a_blocking_cell_does_not_take_the_membership_answer_with_it(tmp_path):
+    """🛑 The value half blocks; the membership half was already computed.
+
+    Reported by an adopter for whom 18 of 66 rows hold a dict: one
+    unrenderable cell threw away a membership answer that is complete,
+    correct and unaffected by it. **This package's own rule is that a value
+    comparison runs on top of membership, never instead of it** -- and the
+    blocked return was the single place that did not honor it.
+
+    It still fails, and it still stalls ``baseline --record``, because the
+    value half genuinely did not answer. What it no longer does is report a
+    tree as having no membership disagreements when it has one.
+    """
+    result = compare(
+        Registry("app.name", extra={"app.name": {"default": {"a": 1}}}),
+        value_oracle(
+            command=("{python}", "-c",
+                     "print('app.name=x'); print('rogue.key=y')"),
+        ),
+        tmp_path,
+    )
+    assert "not a scalar" in result.blocked
+    assert result.undeclared == ("rogue.key",)
+
+
 def test_a_number_is_rendered_rather_than_coerced(tmp_path):
     result = compare(
         Registry("app.name", extra={"app.name": {"default": 3}}),

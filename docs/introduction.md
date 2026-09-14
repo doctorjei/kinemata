@@ -1110,6 +1110,42 @@ limit is closed, in the same commit that closes it.**
   finding go away.** That is a *reminder* in the sense `docs/structure.md` §1 uses, with the same
   answer the baseline has — it is a visible change to a committed file, and a form that lets either
   side be quietly fixed to match the other has lost what the check existed for.
+- **accepted** · **A cell holding a container blocks the value comparison for the whole registry,
+  not for its row.** A dict or a nested list has an internal order and a spelling no two sides agree
+  on by accident, so it is refused rather than rendered — and refusing only the row would leave a
+  run reporting divergences for everything else while silently not checking that one, which is the
+  failure this package is about. **Measured cost, from an adopter: 18 of their 66 rows hold a
+  dict**, so a single one of them stands the whole value half down.
+  ⚑ **What it no longer costs is the membership answer.** Until 2026-09-14 the blocked return threw
+  that away too, contradicting this project's own rule that a value comparison runs *on top of*
+  membership and never instead of it. Membership now rides along with the block.
+  **What it would take:** a declared rendering for containers — an order and a separator the
+  declaration states rather than the tool guessing — which is a form question, not a missing
+  capability.
+- **accepted** · **`field` is a single-key lookup, so a nested cell cannot be named.**
+  `field = "default.primary"` is read as one key called `default.primary`, finds none, and reports
+  every identifier as declaring no value — it does **not** refuse at load, and the flat reading is
+  not obvious from the spelling. Nested cells are reachable only through a project-authored
+  flattening view of the registry. **What it would take:** a path form for `field`, with the same
+  question `[[registry]]`'s `section` already answered — a list rather than a dotted string, since a
+  dotted string cannot express a key containing a dot.
+- **accepted** · **An absent field and a field declared null are indistinguishable**, so *"this is
+  an absence on both sides"* cannot be stated. Both read as the entry declaring no value, and an
+  adopter whose manifest uses an explicit `null` to mean *this arm is deliberately nothing* has no
+  way to say it. **What it would take:** reading presence rather than value on the declared side,
+  and a spelling for *the oracle printed nothing here* on the other.
+- **accepted** · **One registry, one `[[parity]]`**, so a project comparing three fields of one
+  declaration needs three registry views of it. Refused rather than allowed because two oracles on
+  one registry share a baseline scope and their records could not be told apart. **Measured cost,
+  from an adopter: one extra view added 101 lines to `ids`.** **What it would take:** a scope that
+  names the field as well as the registry and the direction, which the value direction already
+  half-does.
+- **accepted** · **Membership cannot be filtered.** A registry declaring a superset of what one
+  oracle produces pays an `unproduced` tail for every member outside it, to be baselined or narrowed
+  by a separate view; for a project gating CI on parity that is a standing cost. One adopter's went
+  from 57 to 8 by adding an import view. **What it would take:** a declared predicate scoping which
+  entries an oracle is answerable for — the seam `[[shape]]`'s guard already is, applied to the
+  other mechanism.
 - **boundary** · **A baseline is an allowlist.** An agent can silence a finding by re-recording
   it. What makes that survivable is that it is a committed file change, visible in review.
 - **boundary** · **`[[gate]]` verifies text presence, not execution.** Blind to a step disabled by
