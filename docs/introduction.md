@@ -1142,7 +1142,7 @@ down, and the two shapes at the end are the findings that matter most.
   that found nothing. **The check's coverage is the suite's coverage**, which is a real limit and
   belongs to whoever reads its output.
   ⚑ **A set-level judgement reaches one test, and a cross-test one is refused rather than
-  unbuilt** (2026-09-15). An adopting project asked for a hook consulted before findings, handed
+  unbuilt** (2026-09-14). An adopting project asked for a hook consulted before findings, handed
   the whole judged set — their case being a container rescued by what was written under it. Within
   a test that is already expressible and was not known to be: `identify` may keep state and may
   defer its answer to the drain, so the judgement is written as a model of what an identifier *is*
