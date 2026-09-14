@@ -262,6 +262,30 @@ def test_an_oracle_that_prints_nothing_matching_says_so(tmp_path):
     assert result.blocked and "produced no value" in result.blocked[0]
 
 
+def test_a_count_that_claims_nothing_is_a_failure(tmp_path):
+    """The oracle answered and nothing asked it.
+
+    Declared and vacuous reads greener than declared and unreachable, which is
+    why it needs saying: an oracle that cannot run says so, while a pattern
+    matching nothing contributes no claims to a total nobody audits. `shape`
+    settles the identical question the identical way -- a rule that examined no
+    entry fails.
+    """
+    from kinemata.claims import Counted
+
+    write(tmp_path, "doc.md", "The suite is healthy.\n")
+    spec = Counted(
+        pattern=r"\*\*(\d+) tests\*\*",
+        command=("{python}", "-c", "print('7 tests collected')"),
+        extract=r"(\d+) tests collected",
+        label="test count",
+    )
+    result = verify(tmp_path, counts=[spec])
+    assert result.broken == []
+    assert result.blocked and result.failed
+    assert "matched no line" in result.blocked[0]
+
+
 def test_a_collector_that_reports_its_total_and_fails_still_settles(tmp_path):
     """Why the exit status is deliberately not fatal for this one mechanism.
 

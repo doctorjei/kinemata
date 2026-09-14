@@ -399,10 +399,16 @@ class Verification:
     #: outside a repository. Named rather than dropped, but not a failure: the
     #: project did not ask for them.
     unavailable: list[str] = field(default_factory=list)
-    #: Oracles the project **declared** and that could not be reached. A
-    #: failure, because a declared check that silently does nothing is exactly
-    #: the inert signal this package exists to prevent -- and in CI, "printed a
-    #: note and exited 0" is indistinguishable from "passed".
+    #: Checks the project **declared** that are not running. Two ways in: an
+    #: oracle that could not be reached, and a ``[[count]]`` whose pattern
+    #: matched no line, where the oracle answered and nothing asked it.
+    #:
+    #: A failure either way, because a declared check that silently does
+    #: nothing is exactly the inert signal this package exists to prevent --
+    #: and in CI, "printed a note and exited 0" is indistinguishable from
+    #: "passed". The vacuous one reads greener of the two: an unreachable
+    #: oracle at least says so, while a pattern matching nothing just
+    #: contributes no claims to a total nobody audits.
     blocked: list[str] = field(default_factory=list)
     #: Claims held open by a declared promise: the document describes something
     #: the project intends to produce, and it does not exist yet. Reported on
@@ -471,10 +477,11 @@ class Verification:
         """Failures the ratchet must never absorb, because they have no site.
 
         A broken claim is a thing at a path on a line, which is what a baseline
-        record fingerprints. These four are about the *declarations* -- an
-        oracle that would not run, a promise the tree has kept, a promise
+        record fingerprints. These are about the *declarations* -- a declared
+        check that is not running, a promise the tree has kept, a promise
         nothing cites any more, a promise past its date -- and none of them has
-        a site to key a record on.
+        a site to key a record on. A vacuous count is the sharpest instance:
+        nothing matched, so there is no line to fingerprint even in principle.
 
         That is the mechanical reason. The deciding one is that accepting an
         overdue promise would build the one thing a ratchet must not have: a
@@ -1527,6 +1534,38 @@ def verify(
     return found
 
 
+def _counted_sites(
+    root: Path,
+    suffixes: Sequence[str],
+    exclusions: Sequence[str],
+    archives: Sequence[str],
+    spec: Counted,
+) -> Iterator[tuple[str, int, str, str, str]]:
+    """Every site a count claims.
+
+    Split out of :func:`_verify_counts` so that *which sites are claims* and
+    *what happens to a claim* stay separate questions. The vacuity check below
+    reads whether this yielded anything, which it could not have done while the
+    walk and the comparison were one loop.
+    """
+    for path in _walk(root, suffixes):
+        rel = path.relative_to(root).as_posix()
+        if _excluded(rel, exclusions) or _excluded(rel, archives):
+            continue
+        try:
+            source = path.read_text(errors="ignore")
+        except OSError:
+            continue
+        # Counted claims read the same reduced text every other kind does.
+        # A declared suffix means "these are documents", and honoring that
+        # for paths while reading the same file raw for values would let a
+        # value be shown in one sentence and asserted in the next.
+        source, _ = _as_documentation(source, path.suffix)
+        for number, line in enumerate(source.splitlines(), start=1):
+            for claimed, text in counted_claims(line, spec):
+                yield rel, number, line, claimed, text
+
+
 def _verify_counts(
     root: Path,
     suffixes: Sequence[str],
@@ -1546,24 +1585,30 @@ def _verify_counts(
                 f"{spec.label}: {' '.join(spec.command)} {why}"
             )
             continue
-        for path in _walk(root, suffixes):
-            rel = path.relative_to(root).as_posix()
-            if _excluded(rel, exclusions) or _excluded(rel, archives):
-                continue
-            try:
-                source = path.read_text(errors="ignore")
-            except OSError:
-                continue
-            # Counted claims read the same reduced text every other kind does.
-            # A declared suffix means "these are documents", and honoring that
-            # for paths while reading the same file raw for values would let a
-            # value be shown in one sentence and asserted in the next.
-            source, _ = _as_documentation(source, path.suffix)
-            for number, line in enumerate(source.splitlines(), start=1):
-                for claimed, text in counted_claims(line, spec):
-                    found.checked += 1
-                    if claimed != truth:
-                        found.broken.append(
-                            Claim(spec.label, f"{text} (actually {truth})",
-                                  rel, number, line)
-                        )
+        asked = 0
+        for rel, number, line, claimed, text in _counted_sites(
+            root, suffixes, exclusions, archives, spec
+        ):
+            asked += 1
+            found.checked += 1
+            if claimed != truth:
+                found.broken.append(
+                    Claim(spec.label, f"{text} (actually {truth})",
+                          rel, number, line)
+                )
+        # The oracle answered and nothing asked it. Declared and vacuous is the
+        # same failure as declared and unreachable above -- the check is not
+        # running -- and it reads greener, because an unreachable oracle at
+        # least says so while this one simply contributes no claims to a total
+        # nobody audits. `shape` settles the identical question the identical
+        # way: a rule that examined no entry fails.
+        #
+        # Reachable two ways, both of them quiet: a pattern that never matched
+        # anything, and one whose only sites sit in a document the scan stopped
+        # reading -- a suffix dropped, an `exclude` widened.
+        if not asked:
+            found.blocked.append(
+                f"{spec.label}: pattern {spec.pattern!r} matched no line in any "
+                f"scanned document. The oracle answered {truth!r} and nothing "
+                "claimed it, so this settles nothing."
+            )

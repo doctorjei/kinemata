@@ -733,6 +733,13 @@ saying "16 KB" is not settled by an oracle that emits the byte count; a project 
 spellings checked declares two entries, each with its own `pattern` and `extract`. That limit
 is deliberate: a wrong normalization does not fail, it passes.
 
+**A count that matches nothing fails.** The oracle answered and nothing asked it, which is the
+same failure as an oracle that could not run — the check is not running — and the quieter of the
+two, since an unreachable oracle at least says so while a pattern matching nothing just
+contributes no claims to a total nobody audits. Reachable two ways, both silent before this was
+caught: a pattern that never matched, and one whose only sites sit in a document the scan stopped
+reading after a suffix was dropped or an `exclude` widened.
+
 **One oracle discipline, and `[claims]` is where it is declared for all of it.** `kinemata parity`
 runs declared commands too, and inherits the rule above rather than restating it — edge whitespace
 stripped from the oracle's output, nothing else normalized. `oracle_timeout` is read from
