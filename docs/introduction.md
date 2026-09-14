@@ -490,6 +490,14 @@ revision of the census this is drawn from excused writes by where they came from
 object; it hid roughly forty real violations. **An identifier is judged by what it is** — which is
 also why an observation is keyed on the identifier alone and never on the site.
 
+⚑ **If a call's *shape* changes what it means, that belongs in the identifier, and `identify` is
+where it goes.** One path written both as a scalar and as an empty container is two facts, and a
+project whose model says so returns two spellings — `identify` receives the whole crossing, the
+return value included, so it has everything needed to choose. Two spellings are two rows, **two
+verdicts**, and two markers that expire independently. The alternative shape, a discriminant
+carried beside the identifier, would split the rows and not the verdicts: those come from
+`declared(identifier)`, and a field beside the string does not reach it.
+
 ---
 
 ## Refusal semantics

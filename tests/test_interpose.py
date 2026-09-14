@@ -504,6 +504,67 @@ def test_a_marker_excuses_the_identifier_it_names(pytester):
     assert result.ret == 0
 
 
+# -- a discriminant already has somewhere to go -------------------------------
+
+
+def test_a_project_can_carry_a_shape_discriminant_in_the_identifier(module):
+    """⚑ The property that makes a second identity field unnecessary.
+
+    An adopting project reported a measured incident: one path written both as a
+    scalar and as an empty node, rows keyed on the path alone, the shape folded
+    with `or`, so the row latched to node, the scalar write became invisible and
+    **both markers went unexercised -- a red no arrangement of markers could
+    clear.** They offered us a widened `Identifier` to carry the shape.
+
+    It is already carried. `identify` is the project's own function and receives
+    the whole `Crossing`, result included, so the discriminant goes in the
+    identifier it returns -- which is where this package already says a
+    project's model of its own calls belongs. Two writes, two rows, **two
+    verdicts**, and a marker that reaches one spelling and not the other.
+
+    ⚑ **And a second field would not have given the verdicts.** They come from
+    `registry.declared(identifier)`, a string; a `kind` beside the string does
+    not reach it without changing the `Registry` protocol.
+    """
+    shaped = lambda crossing: (  # noqa: E731 - the point is that it is one line
+        f"{crossing.args[1]}/" if isinstance(crossing.args[2], dict)
+        else crossing.args[1]
+    )
+    watcher = census(module, "app.name/", identify=shaped)
+    store = Store()
+    store.set("app.name", 1)    # a scalar: nothing declares this spelling
+    store.set("app.name", {})   # a node: declared, and structure
+    watcher.drain()
+    watcher.uninstall()
+
+    watch = watcher.watch()
+    verdicts = {row.identifier: row.declared for row in watch.observations}
+    assert verdicts == {"app.name": False, "app.name/": True}
+    assert [row.identifier for row in watch.findings] == ["app.name"]
+
+
+def test_a_marker_reaches_one_spelling_of_a_path_and_not_the_other(module):
+    """The half of their incident that actually bit: marker accounting."""
+    shaped = lambda crossing: (  # noqa: E731
+        f"{crossing.args[1]}/" if isinstance(crossing.args[2], dict)
+        else crossing.args[1]
+    )
+    watcher = census(module, "app.name/", identify=shaped)
+    watcher.arm(["app.name"])
+    Store().set("app.name", 1)
+    watcher.drain()
+    watcher.arm(())
+    Store().set("app.name", {})
+    watcher.drain()
+    watcher.uninstall()
+
+    rows = {row.identifier: row for row in watcher.watch().observations}
+    assert rows["app.name"].excused and not rows["app.name"].finding
+    assert not rows["app.name/"].excused
+    # The declaration changed a verdict for the scalar spelling alone.
+    assert watcher.exercised == frozenset({"app.name"})
+
+
 # -- the durable record -------------------------------------------------------
 
 
