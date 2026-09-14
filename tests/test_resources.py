@@ -358,6 +358,33 @@ def test_an_existing_date_is_replaced_in_place(tmp_path):
     assert 'path = "README.md"\nnote' in body  # the blocked entry gains nothing
 
 
+def test_what_was_written_is_still_a_list(tmp_path):
+    """The oracle this file was missing, and the defect it would have caught.
+
+    Every other assertion here reads the text around an edit, and the edit that
+    broke this was *after* the part they read: the rewrite dropped the line's
+    ending and joined the following ``note`` onto it, producing a file no TOML
+    parser accepts. It went unnoticed from the day the list was built until the
+    first real ``--write`` over the real one, because a written data file was
+    never once parsed back.
+    """
+    import tomllib
+
+    # The argument names the entry whose claims are *broken*, so the other one
+    # is the one dated. Both orders, because only the second exercises the
+    # in-place replacement that broke -- the first inserts a fresh line.
+    for blocked, target in (("README.md", "docs/design.md"),
+                            ("docs/design.md", "README.md")):
+        body = written(tmp_path, blocked)
+        parsed = tomllib.loads(body)
+        assert len(parsed["resource"]) == 2
+        dated = {item["path"]: item.get("confirmed") for item in parsed["resource"]}
+        assert dated[target] == "2026-09-10"
+        # The neighbouring field is still its own key, not swallowed by the one
+        # above it -- which is the exact shape the defect took.
+        assert all("note" in item for item in parsed["resource"])
+
+
 def test_the_comments_and_the_order_survive(tmp_path):
     """The reason this is a line edit rather than a round trip through a writer.
 

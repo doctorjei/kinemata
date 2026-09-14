@@ -745,8 +745,19 @@ def dating(
 
 
 #: The entry's own line, and the two pieces a rewrite keeps around it.
+#:
+#: ⚑ ``DOTALL`` and ``\Z`` rather than ``$``, and this is not a refinement: the
+#: lines handed here keep their endings, ``.`` does not match a newline, and
+#: ``$`` matches *before* a trailing one. So ``after`` captured everything
+#: except the newline and the rewrite silently joined the entry's next line onto
+#: this one -- ``confirmed = "..."note = "..."``, which is not TOML. **It did
+#: that on every resource re-date from the day the list was built until
+#: 2026-09-14**, when the first real ``--write`` over this file corrupted it.
+#: The test that covered this asserted the newline *before* the rewritten line
+#: and never that the result still parsed, which is why nothing said so.
 _CONFIRMED_LINE = re.compile(
-    r'^(?P<before>\s*confirmed\s*=\s*")(?P<date>[^"]*)(?P<after>".*)$'
+    r'^(?P<before>\s*confirmed\s*=\s*")(?P<date>[^"]*)(?P<after>".*)\Z',
+    re.DOTALL,
 )
 _PATH_LINE = re.compile(r'^(?P<indent>\s*)path\s*=\s*"(?P<path>[^"]*)"')
 
