@@ -1271,7 +1271,14 @@ exclude = ["build/", "dist/"]
 [claims]
 suffixes = [".md"]
 # historical = ["archives/"]   # a record of what was true is not a stale claim
-# promised = []                # paths a design will produce; fails once they exist
+
+# A claim deferred until a date, which is what stops a deferral from being an
+# ignore list. `path` defers a file the project will produce; `what` defers
+# anything else. Both need `until`.
+#
+# [[promise]]
+# path  = "docs/report.md"
+# until = "2026-12-01"
 
 # A registry is one declared place per fact, and `check` fails on code that
 # re-derives one. Declare the constants module you already have:
