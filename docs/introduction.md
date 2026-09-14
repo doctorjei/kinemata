@@ -1289,6 +1289,12 @@ down, and the two shapes at the end are the findings that matter most.
   the 10 rules needing a flattened view, exactly one needs grouping** —
   `test_every_row_carries_exactly_the_relation_columns`, which is parametrized per row and asserts
   the row's column set equals a declared axis. One of the 28 reachable rules overall.
+  **All ten were read in source**, not classified from a summary line; the first pass here read two
+  and inferred the rest, which is the sampling error that once turned 62% into 31%.
+  ⚑ **What the full read added: three of the ten are *cross-section*** — a claim about cells
+  checked against a list of refusals elsewhere in the same document. Those are reachable, but
+  through the project-supplied predicate rather than the rule language, which is a weaker thing to
+  be able to say and is said here rather than rounded up.
   ⚑ **The near-miss is worth naming, because it looks like a second case and is not.**
   *"`append` appears on copy rows only, and somewhere"* collects the first-level keys of every cell
   holding one value and asks whether they sit inside a named set. That is a claim about each
