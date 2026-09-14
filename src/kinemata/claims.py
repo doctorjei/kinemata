@@ -64,6 +64,7 @@ from pathlib import Path, PurePosixPath
 
 from . import stamps
 from .bypass import GIT_DIR, Bypass, _tree, _walk, git_ignored
+from .exclusion import excluded
 from .prose import DOCUMENTATION_FILTERS, ILLUSTRATION, ILLUSTRATION_FILTERS
 
 #: The name these findings travel under, so a baseline record says which check
@@ -1089,7 +1090,7 @@ def _normalize(text: str) -> str:
 
 
 def _excluded(rel: str, exclusions: Sequence[str]) -> bool:
-    return any(fragment in rel for fragment in exclusions)
+    return excluded(rel, exclusions)
 
 
 def _index(root: Path, exclusions: Sequence[str]) -> tuple[set[str], set[str]]:

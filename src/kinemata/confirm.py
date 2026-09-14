@@ -80,6 +80,7 @@ from .claims import (
     _reach_all,
 )
 from .contract import Entry
+from .exclusion import excluded
 from .prose import UNFENCED_FILTERS
 from .resources import RESOURCE_TABLE, Resource
 
@@ -336,7 +337,7 @@ class _Wanted:
 
 
 def _excluded(rel: str, fragments: Sequence[str]) -> bool:
-    return any(fragment in rel for fragment in fragments)
+    return excluded(rel, fragments)
 
 
 def _accompanied(line: str, start: int) -> str | None:

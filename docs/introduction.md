@@ -71,6 +71,9 @@ visible in a diff.
 [project]
 root = "."
 exclude = ["tests/", "build/"]     # gitignored paths are added automatically
+# A bare fragment matches anywhere in a path, so "tests/" also drops
+# docs/smoke-tests-design.md. A leading slash anchors at the root:
+# exclude = ["/tests/"]            # this directory, not this substring
 
 # Values: antipatterns derived from the constants themselves.
 [[registry]]
@@ -773,6 +776,15 @@ carefully reading it.
 cannot see them; a mark that goes wrong goes wrong silently. **Re-read this section whenever a
 limit is closed, in the same commit that closes it.**
 
+- **accepted** · **One `exclude` line means two things, depending on which check reads it.** The
+  documentation scan strips a fragment's trailing slash before matching and the registry scans do
+  not, so `exclude = ["tests/"]` removes `docs/smoke-tests-design.md` from `kinemata claims` and
+  leaves it in `kinemata check`. Found by an adopter 2026-09-14, who lost two claims and an
+  external link to it. **Not repaired in place**, because narrowing the old spelling would silently
+  change what every config already written removes — the class of defect being fixed. The anchored
+  form (`/tests/`) is exact in both, and `check` and `review` now report any fragment that removed
+  nothing, or removed a path only as a substring. Unifying the two preparations is the work this
+  entry is waiting on, and it needs a deprecation rather than an edit.
 - **boundary** · **Semantic duplication is out of reach by design.** Rules enforced twice in
   dissimilar code are not detectable syntactically.
 - **boundary** · **Greenfield coverage: 4 of 13 instances** across 37 attributable commits (31%).

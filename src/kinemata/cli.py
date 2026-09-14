@@ -47,13 +47,24 @@ from pathlib import Path
 from . import stamps
 from .adapters.bibliography import EXTERNAL, Bibliography, undeclared_key
 from .baseline import Baseline, BaselineError, Split, record
-from .bypass import Bypass, Stray, crossings, is_strays_scope, strays, strays_scope, unused
+from .bypass import (
+    SKIP_DIRS,
+    Bypass,
+    Stray,
+    _tree,
+    crossings,
+    is_strays_scope,
+    strays,
+    strays_scope,
+    unused,
+)
 from .citations import citations, index
 from .claims import CLAIMS_REGISTRY, ClaimsError, Verification, verify
 from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
 from .confirm import ConfirmError, apply, dating, plan, redate
 from .context import measure
 from .contract import BaseRegistry, Entry
+from .exclusion import audit, relative_paths
 from .gates import WORKFLOW_DIR, enforced
 from .literals import clusters
 from .parity import Disagreement, Divergence, Parity
@@ -483,6 +494,30 @@ def _report_silent(settings: Settings) -> None:
         )
 
 
+def _report_exclusions(settings: Settings) -> None:
+    """What ``[project] exclude`` actually removed, when that is a surprise.
+
+    **An adopter lost two documentation claims to a fragment that read like a
+    directory and matched as a substring**, and spent a day on three more that
+    removed nothing at all -- both invisible, because a config saying something
+    confidently while doing nothing looks exactly like a config that works. This
+    repository shipped the same defect: ``deliverables/`` has never existed here.
+
+    Not suppressed by ``--quiet``, on the rule the silent, exemption, gate and
+    promise counts already follow: a count the reader did not ask for is the
+    only way they learn the scope moved.
+    """
+    if not settings.declared_exclude:
+        return
+    walked = relative_paths(
+        settings.root, (here / name for here, names, _ in _tree(settings.root)
+                        for name in names)
+    )
+    report = audit(walked, settings.declared_exclude, pruned=tuple(SKIP_DIRS))
+    for line in report.lines():
+        print(line)
+
+
 def cmd_review(args: argparse.Namespace) -> int:
     settings, reports, found = _run_review(args)
     _print_reports(settings, reports, verbose=args.verbose)
@@ -492,6 +527,7 @@ def cmd_review(args: argparse.Namespace) -> int:
         if not args.quiet:
             print("Nothing already declared looks re-derived here.")
         _report_silent(settings)
+        _report_exclusions(settings)
         _report_resources(settings, found)
         _report_unassociated(found)
         return 0
@@ -502,6 +538,7 @@ def cmd_review(args: argparse.Namespace) -> int:
             f"Route through them rather than re-deriving."
         )
     _report_silent(settings)
+    _report_exclusions(settings)
     _report_resources(settings, found)
     _report_unassociated(found)
     return 0  # advisory, always
@@ -1719,6 +1756,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     ]
     _print_reports(settings, filtered, verbose=args.verbose)
     _report_silent(settings)
+    _report_exclusions(settings)
     _report_resources(settings, found)
     _report_unassociated(found)
 

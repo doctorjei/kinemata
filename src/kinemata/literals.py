@@ -36,6 +36,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .bypass import _walk
+from .exclusion import excluded
 from .prose import ANNOTATION_STRINGS, LITERAL_EXTRACTORS, MESSAGE_SKELETONS
 
 #: Literals shorter than this are not worth clustering. Short strings are
@@ -157,7 +158,7 @@ def _collect(
     by_value: dict[str, list[Site]] = defaultdict(list)
     for path in _walk(root, suffixes):
         rel = str(path.relative_to(root))
-        if any(fragment in rel for fragment in exclusions):
+        if excluded(rel, exclusions):
             continue
         extractor = LITERAL_EXTRACTORS.get(path.suffix)
         if extractor is None:

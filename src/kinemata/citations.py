@@ -22,6 +22,7 @@ from pathlib import Path
 
 from . import stamps
 from .bypass import _walk
+from .exclusion import excluded
 from .prose import UNFENCED_FILTERS
 
 #: How long a citation target can be and still read comfortably beside its key,
@@ -98,7 +99,7 @@ def citations(
     found: list[Citation] = []
     for path in _walk(root, tuple(suffixes)):
         rel = path.relative_to(root).as_posix()
-        if any(fragment in rel for fragment in exclusions):
+        if excluded(rel, exclusions):
             continue
         try:
             source = path.read_text(errors="ignore")

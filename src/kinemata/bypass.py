@@ -31,6 +31,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from .contract import BaseRegistry, Entry, undeclared
+from .exclusion import excluded
 from .prose import (
     FILTERS,
     LITERAL_EXTRACTORS,
@@ -296,7 +297,7 @@ def scan(
     found: list[Bypass] = []
     for path in _walk(root, suffixes):
         rel = str(path.relative_to(root))
-        if any(fragment in rel for fragment in exclusions):
+        if excluded(rel, exclusions):
             continue
         try:
             source = path.read_text(errors="ignore")
@@ -459,7 +460,7 @@ def strays(
     found: list[Stray] = []
     for path in _walk(root, tuple(suffixes)):
         rel = str(path.relative_to(root))
-        if any(fragment in rel for fragment in exclusions):
+        if excluded(rel, exclusions):
             continue
         try:
             source = path.read_text(errors="ignore")
@@ -577,7 +578,7 @@ def unused(
 
     for path in _walk(Path(root), suffixes):
         rel = str(path.relative_to(root))
-        if any(fragment in rel for fragment in exclusions):
+        if excluded(rel, exclusions):
             continue
         text = path.read_text(errors="ignore")
         filtered = shows.get(path.suffix)

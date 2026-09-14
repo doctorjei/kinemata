@@ -134,6 +134,11 @@ class Settings:
     #: project wrote, and the protocol is what such a class is held to.
     registries: list[Registry] = field(default_factory=list)
     exclude: tuple[str, ...] = ()
+    #: What ``[project] exclude`` said, without what git already ignores. Kept
+    #: apart because only this half is auditable: a project wrote these lines
+    #: and can be told they removed nothing, while reporting the same about a
+    #: `.gitignore` entry would be noise about a file nobody was checking.
+    declared_exclude: tuple[str, ...] = ()
     suffixes: tuple[str, ...] = (".py",)
     max_sites: int | None = None
     claim_suffixes: tuple[str, ...] = DEFAULT_CLAIM_SUFFIXES
@@ -833,7 +838,8 @@ def load(path: str | Path) -> Settings:
     _reject_unknown(claims, CLAIMS_KEYS, f"{path}: [claims]")
     # What git ignores is not this project's material, and every check here asks
     # that same question. Answered once, in the one place settings come from.
-    exclude = tuple(project.get("exclude", ())) + git_ignored(root)
+    declared_exclude = tuple(project.get("exclude", ()))
+    exclude = declared_exclude + git_ignored(root)
     claim_suffixes = tuple(claims.get("suffixes", DEFAULT_CLAIM_SUFFIXES))
     citation_suffixes = _citation_suffixes(
         raw.get("citations"), claim_suffixes, path
@@ -845,6 +851,7 @@ def load(path: str | Path) -> Settings:
         root=root,
         registries=registries,
         exclude=exclude,
+        declared_exclude=declared_exclude,
         suffixes=tuple(project.get("suffixes", (".py",))),
         max_sites=project.get("max_sites"),
         claim_suffixes=claim_suffixes,
