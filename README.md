@@ -96,10 +96,10 @@ kinemata init                   # a starting config; --ci also writes a workflow
                                 # declares it as a gate. Refuses to overwrite either.
 ```
 
-**Pin the version.** What is published is an alpha, the interfaces are not settled, and the
-classifiers say so. It is also currently the *only* release, which means a plain install resolves
-to it — that stops being true the moment a final version exists, so an unpinned dependency will
-change what it means without changing what it says.
+**Pin the version.** Everything published is a pre-release — an alpha, and a dev build ahead of the
+next one. The interfaces are not settled and the classifiers say so. While no final version exists
+a plain install resolves to a pre-release; that stops being true the moment one does, so an
+unpinned dependency will change what it means without changing what it says.
 
 Working on kinemata itself is a different install — `pip install -e ".[dev]"` from a clone, which
 is what every command below assumes.

@@ -183,10 +183,16 @@ extract = 'budget=(\d+)'
 # `version` and forgetting the heading, or writing the heading for a release
 # that was never cut.
 #
-# Matches any release heading, so an older entry edited to a version nobody
-# shipped fails too. `## Unreleased` does not match and is not meant to.
+# `## Unreleased` does not match and is not meant to.
+#
+# `occurrence` is what makes this survive a second release. The entries below
+# the newest one are permanent records of releases that already happened, and
+# reading them as claims about the version now shipping made the first
+# release's own entry false the moment `version` moved -- which is exactly how
+# this was found, at the second release and not before.
 [[count]]
 label = "changelog version"
+occurrence = "first"
 pattern = '## (\d+\.\d+\.\d+[a-zA-Z0-9.]*)'
 command = ["{python}", "-c", "import tomllib, pathlib; print('version=' + tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])"]
 extract = 'version=(\S+)'
