@@ -34,13 +34,19 @@ classes were importable. What is added here is a supported way to say it and a
 promise that the names keep working; the surface is held to what such a fixture
 actually needs, because a published name cannot be withdrawn later.
 
-**This is not a run-time instrument.** Kinemata does not interpose, instrument,
-monitor, trace, or execute any of the project's code. The project's tests do
-the importing and the asserting; this package only hands back the declaration
-they assert against. The value of the pairing is that the run-time assertion
-reads the *same* declared registry the static scan reads, instead of a second
-copy of the facts -- a second copy being the failure this package exists to
-report. Neither half covers the other.
+**This module is not a run-time instrument**, and the qualifier is load-bearing
+as of 2026-09-14: :mod:`kinemata.interpose` is. This one interposes on nothing.
+The project's tests do the importing and the asserting; this package only hands
+back the declaration they assert against. The value of the pairing is that the
+run-time assertion reads the *same* declared registry the static scan reads,
+instead of a second copy of the facts -- a second copy being the failure this
+package exists to report. Neither half covers the other.
+
+⚠ **The sentence above used to be about the whole package**, and it was written
+when that was true. Which of the two a project wants is a question about where
+the assertion can stand: here, when its own code is in a position to ask; the
+funnel watcher when **nothing** is, because the identifier is assembled
+internally and never appears anywhere a reader or a scan could see it.
 """
 
 from __future__ import annotations

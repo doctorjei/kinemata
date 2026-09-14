@@ -459,7 +459,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **771 tests**, and
+The companion guard is a number with an oracle. This suite is **805 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 
@@ -875,6 +875,10 @@ expressible (89%)**, and the reasons were structural rather than gaps:
 - **Nothing here observes a running program.** Checks about what the product *does* at run time —
   their largest single item interposes on a write funnel during a test run — are outside every
   mechanism described above.
+  ⚑ **Closed 2026-09-14.** `[[interpose]]` patches a callable the project names for the length of
+  its own test session, judges every identifier crossing it against a declared registry, and fails
+  the run on one nothing declares. It observes; it does not arrange, so a fact that exists only
+  through a test's own fixtures is still out of reach.
 
 ⚑ **Both bullets said "this model" until 2026-09-13, and both were wrong that way.** The first is
 a property of the *registry* layer; `kinemata claims` has been positive since before that audit —

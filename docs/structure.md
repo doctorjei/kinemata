@@ -138,7 +138,7 @@ mistakes an agent makes; both are statements about one mechanism.
 |---|---|---|---|
 | **Negative** — *this must not appear* | the duplication scan, the closed-world catch, `clusters`, `unused` | — | — |
 | **Positive** — *this must hold* | `path`, `link` and `[[gate]]` claims; the context ceiling; the citation policy and the resource list | `commit` (git), `url` (the network), `[[count]]` (any declared command), parity (`[[parity]]`) in both its membership and its per-entry value form, `confirm` re-verifying what it dates | — |
-| **Behavioral** — *what the program did* | out of reach | out of reach | the run-time surface, asserted by the project's own tests |
+| **Behavioral** — *what the program did* | out of reach | out of reach | the run-time surface, asserted by the project's own tests; `kinemata interpose`, judging what crosses a declared funnel during the project's own run |
 
 ⚑ **The citation layer was missing from this table until it was audited**, two days after it began
 gating in this repository — and every finding the shared baseline accepts here today is one of
@@ -183,15 +183,27 @@ where a check runs against code nobody has reviewed. **Selectable is not the sam
 unreachable**, and the two were conflated here for four days.
 
 What stays genuinely out of reach is the bottom row's first two cells: a rule about what a
-program does while running — which key paths a write funnel actually receives, what a request
-handler emits under load. The first project to adopt this layer inventoried 326 conformance
-checks against it and found their largest single item was exactly that shape: a session-wide
-interposition on a write funnel, judging every path written during a test run. No amount of
-declaring reaches it, which is why the far side is published rather than approximated.
+program does while running is not answerable by reading source at rest, and not answerable by
+asking a command what a project *would* produce. Neither instrument is in the room while the
+program runs.
 
-The honest pairing is that static checking and run-time assertion are complements: declare the
-fact once here, and let the run-time suite assert the behavior, rather than expecting either to
-cover the other.
+⚑ **The bottom-right cell had one occupant and now has two, and the example this paragraph used
+to give is the new one.** It read *"no amount of declaring reaches it"* about a session-wide
+interposition on a write funnel, judging every path written during a test run — the first
+adopting project's largest single conformance item. `kinemata interpose` is that mechanism, as of
+2026-09-14: a declared funnel is patched for the length of a test session, every identifier
+crossing it is judged against a declared registry, and the run fails on one nothing declares.
+**What was true underneath the wrong sentence is that kinemata does not run the project** — the
+project's own runner does, and this rides along inside it. The row is *behavioral* because of what
+is observed, not because of who started the process.
+
+The honest pairing is that static checking and run-time observation are complements: declare the
+fact once here, and let the run assert the behavior, rather than expecting either to cover the
+other. Two ways to take the far side, and they are different jobs. `kinemata.access` hands the
+declaration to a project's own assertion, which is right where the code is in a position to ask.
+`kinemata interpose` watches a funnel, which is right where **nothing** is in a position to ask —
+an identifier assembled internally never appears as a literal and crosses no boundary a static
+check guards.
 
 ### The run-time half, and what makes the pairing possible
 
@@ -214,12 +226,36 @@ The point is not the convenience. It is that the run-time assertion and the stat
 written out inside the test fixture — a second carrier of one fact, which is precisely the
 failure the registry layer exists to report, reintroduced by the check meant to complement it.
 
-**This is not a run-time instrument.** Kinemata does not interpose, instrument, monitor, trace,
-or execute anything belonging to the project. The interposition in the example is the project's
-own, in the project's own suite; the only thing crossing the boundary is a declaration being
-read. That is deliberate, and it is what keeps §1 honest — nothing here becomes a catch by being
-imported at run time. A test the constrained agent can edit is a reminder, whatever it asserts
-against.
+⚑ **This section said kinemata "does not interpose, instrument, monitor, trace, or execute
+anything belonging to the project", and as of 2026-09-14 it does interpose** — on one callable a
+project names, for the length of that project's own test session. What was underneath the wrong
+sentence and is still true: **kinemata never runs the project.** The project's runner does; this
+rides inside it, patches what was declared, and puts the original back before the process ends.
+
+**Neither half becomes a catch by running.** A plugin the constrained agent can unload, and a
+declared funnel it can rename, are reminders in the §1 sense — exactly like `[[gate]]`, and for
+exactly the same reason. What run-time observation buys is not enforcement against a rogue agent;
+it is *reach*, over identifiers that never appear as a literal for a static scan to find.
+
+### Watching a funnel, when nothing is in a position to assert
+
+The pairing above needs somewhere to put the assertion. An identifier the code **assembles
+internally** offers nowhere: it is composed from parts, handed to a store, and never written down
+anywhere a reader or a scan could see it. That is the shape of the adopting project's largest
+conformance item, and their own answer was to patch the one write funnel it must pass through.
+
+```toml
+[[interpose]]
+registry = "keyspace"
+target   = "mypkg.store:KeyStore.__setitem__"
+identify = "mypkg.census:key_of"
+```
+
+**The division of labor is the whole design.** Kinemata patches and unpatches, records what
+crossed with the line that wrote it, judges each identifier against the declared registry, and
+fails the run. The project says *which* callable and *how a call becomes an identifier* — the
+second being a hundred lines of its own model in the real case, and not something any general
+mechanism can infer. Anything finer than *declared or not* stays the project's too.
 
 **It inherits the registry's limits, which are easy to forget on this side.** `declared` answers
 about what the adapter recognized in the source it was pointed at, not about the project's

@@ -77,6 +77,8 @@ from .contract import (
     usable_boundary,
 )
 from .gates import Gate
+from .interpose import TARGET_FORM as FUNNEL_FORM
+from .interpose import Funnel
 from .parity import AUTHORITIES, Oracle, Translation
 from .provenance import DEFAULT_STALE_AFTER, PROVENANCE_REGISTRY
 from .resources import (
@@ -172,6 +174,10 @@ class Settings:
     #: against what a registry declares. See :mod:`kinemata.parity`. Empty
     #: unless declared, for the reason above.
     parities: tuple[Oracle, ...] = ()
+    #: Write funnels to watch while the project's own suite runs. See
+    #: :mod:`kinemata.interpose`. Empty unless declared, and inert until the
+    #: project loads the plugin: nothing here patches anything on its own.
+    funnels: tuple[Funnel, ...] = ()
     #: Where accepted findings are recorded. Always a path, even when no file is
     #: there yet -- ``baseline --record`` has to know where to write the first
     #: one, and a project that has never recorded is the normal starting state.
@@ -637,6 +643,7 @@ def load(path: str | Path) -> Settings:
         "[[registry]]": bool(declarations),
         "[[count]]": bool(raw.get("count")),
         "[[parity]]": bool(raw.get("parity")),
+        "[[interpose]]": bool(raw.get("interpose")),
         "[[gate]]": bool(raw.get("gate")),
         "[claims]": raw.get("claims") is not None,
         "[context]": raw.get("context") is not None,
@@ -780,6 +787,8 @@ def load(path: str | Path) -> Settings:
         parities=_build_parities(raw.get("parity", []), path,
                                  _commands(raw.get("command"), path),
                                  [built.name for built in registries]),
+        funnels=_build_funnels(raw.get("interpose", []), path,
+                               [built.name for built in registries]),
         baseline=root / project.get("baseline", BASELINE_NAME),
         gates=_build_gates(raw.get("gate", []), path),
         unfitted=tuple(unfitted),
@@ -1417,6 +1426,62 @@ def _build_parities(
                 authority=authority,
                 translate=_build_translation(spec.get("translate"), path, index),
             )
+        )
+    return tuple(built)
+
+
+def _build_funnels(
+    declarations: list[dict[str, Any]], path: Path, registries: list[str]
+) -> tuple[Funnel, ...]:
+    """``[[interpose]]`` tables, refused rather than skipped when incomplete.
+
+    **The shape of a target is checked here and the target is not resolved.**
+    Resolving it means importing the project's own modules, which belongs
+    inside the project's own test session rather than inside every ``kinemata
+    check`` -- and a module that imports there and not here would otherwise
+    make a config unloadable for a reason having nothing to do with the file.
+    :func:`kinemata.interpose.resolve` does the rest, and its failure is the
+    session's.
+    """
+    built: list[Funnel] = []
+    watched: dict[str, int] = {}
+    for index, spec in enumerate(declarations):
+        missing = [
+            key for key in ("registry", "target", "identify") if not spec.get(key)
+        ]
+        if missing:
+            raise ConfigError(
+                f"{path}: [[interpose]] {index} is missing {', '.join(missing)}"
+            )
+        target = str(spec["target"])
+        for key in ("target", "identify"):
+            module, _, attribute = str(spec[key]).partition(":")
+            if not module.strip() or not attribute.strip():
+                raise ConfigError(
+                    f"{path}: [[interpose]] {index} names {spec[key]!r} as {key}, "
+                    f"which is not a target. Write {FUNNEL_FORM}."
+                )
+        # One patch per callable. Two declarations would wrap it twice, so a
+        # single call would be counted twice and the second uninstall would
+        # restore the first wrapper rather than the original -- leaving the
+        # project's own class patched after the run, which is the one property
+        # this mechanism puts above the others.
+        if target in watched:
+            raise ConfigError(
+                f"{path}: [[interpose]] {index} watches {target!r}, which "
+                f"[[interpose]] {watched[target]} already watches. One patch "
+                "per callable."
+            )
+        watched[target] = index
+        name = str(spec["registry"])
+        if name not in registries:
+            raise ConfigError(
+                f"{path}: [[interpose]] {index} names registry {name!r}, which "
+                f"no [[registry]] declares "
+                f"(known: {', '.join(sorted(registries)) or 'none'})"
+            )
+        built.append(
+            Funnel(registry=name, target=target, identify=str(spec["identify"]))
         )
     return tuple(built)
 

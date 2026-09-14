@@ -198,6 +198,15 @@ authority = "declared"      # or "produced"; the code is on trial either way
 pattern = '/$'              # the manifest writes a directory prefix with a
 replacement = ''            # trailing separator; the code carries none
 
+# Watch a write funnel while the project's own suite runs, and fail the run on
+# an identifier nothing declares. Inert until the project loads the plugin:
+# `pytest_plugins = ["kinemata.pytest_plugin"]` in its conftest. `identify` is
+# the project's own -- only it knows how one of its calls becomes an identifier.
+[[interpose]]
+registry = "keyspace"
+target   = "mypkg.store:KeyStore.__setitem__"
+identify = "mypkg.census:key_of"
+
 # Checks that must run, and the file that must run them.
 [[gate]]
 command = "pytest -q"
@@ -364,6 +373,45 @@ and all seventeen were `RW_PATH = "rw"` matching an unrelated mount-binding key.
 `review` and `check` print how many declared entries carry **no** antipattern, because an entry
 nothing can be reported about otherwise reads as an entry being watched.
 
+### The one check that is not a command
+
+`[[interpose]]` has no subcommand, because it cannot have one: it has to be inside the project's
+own test session to see anything. A project loads the plugin —
+
+```python
+# conftest.py
+pytest_plugins = ["kinemata.pytest_plugin"]
+```
+
+— and every declared funnel is patched at `pytest_configure` and **restored before the process
+ends, whatever else happened**. Each identifier crossing a funnel is judged against the registry
+the declaration names; the session fails on one nothing declares, on a funnel that could not be
+patched, or on a fault inside the collector, which means crossings went unrecorded.
+
+**There is no `pytest11` entry point**, so installing kinemata does not put this in anyone's test
+run. Loading a plugin that monkey-patches the project's own classes is a thing to ask for.
+
+A test that means to write an undeclared identifier says so, and the declaration is not an
+exemption:
+
+```python
+@pytest.mark.kinemata_undeclared("box.meta", reason="drives the refusal path")
+def test_refuses_an_unknown_key(): ...
+```
+
+Scoped to that one test — the same identifier written by anything else still fails. Exact — any
+*other* undeclared identifier that test writes still fails. And **it must change a verdict**: a
+declaration that excused nothing fails the run, so it cannot outlive its reason. That last property
+is why this check has no baseline. A ratchet would be a scope `kinemata baseline` could never run,
+so `--prune` would delete its records for never having looked — and the marker is the better
+instrument anyway, being a deferral that expires by itself instead of one somebody must remember to
+drive down.
+
+⚑ **The site that made a crossing is recorded for the report and decides nothing.** An earlier
+revision of the census this is drawn from excused writes by where they came from, matched by code
+object; it hid roughly forty real violations. **An identifier is judged by what it is** — which is
+also why an observation is keyed on the identifier alone and never on the site.
+
 ---
 
 ## Refusal semantics
@@ -400,6 +448,16 @@ outside, so the following are `ConfigError`, not silent skips:
   `produced`. Which side is the claim is a property of the row rather than a convention, and a
   value divergence that does not say it is a finding nobody can act on. `authority` **without** a
   `field` is allowed and shapes the message: the membership directions already name their own side
+- an `[[interpose]]` missing `registry`, `target` or `identify`; naming a registry no
+  `[[registry]]` declares; spelling either target as something other than `module:attr`; or
+  watching a callable another `[[interpose]]` already watches — two patches on one callable would
+  count a single call twice, and the second uninstall would restore the *first wrapper* rather than
+  the original, leaving the project's own class patched after the run.
+  ⚑ **The target is checked for shape here and resolved later**, when the plugin installs it.
+  Importing the project's own modules belongs in the project's own test session, not in every
+  `kinemata check` — and a module that imports there but not here would otherwise make a config
+  unloadable for a reason having nothing to do with the file. A target that cannot be resolved
+  fails the **session**
 - a `[parity.translate]` declaring both `map` and `pattern`, declaring neither, giving a `pattern`
   with no `replacement`, an empty `map`, or a pattern that will not compile. The replacement is
   never defaulted from the pattern's presence: an empty one is a legitimate translation, so
@@ -643,6 +701,9 @@ question, once an oracle could answer the question directly. And Catch A's depen
 identifier recognizer stopped being the only route, on the same day. **Not one of the three moved
 because the model changed. Each moved because an instrument appeared** — which is the thing the old
 wording promised would not happen.
+⚑ **The first of the three closed outright the next day**, when `[[interpose]]` was built: an entry
+this list had published as permanent went from *never* to *shipped* in about thirty hours, and the
+only thing that changed in between was that somebody asked.
 ⚑ **So a disposition says what it would take, never whether anyone will.** The failure direction is
 the bad one: an adopter reading *permanent* scopes their own work around a limit that one
 conversation would have removed, and that came within a day of happening to the project this tool
@@ -884,22 +945,33 @@ down, and the two shapes at the end are the findings that matter most.
   prints it, so it belongs to the run-time entry below rather than to this one — and how much of
   the 125 that is has not been measured. `docs/structure.md` § The second axis is where the
   mechanism is classified.
-- **accepted** · **Nothing here observes a running program.** A rule about what a program *does at run time* — a
-  session-wide interposition on a write funnel, for instance — is outside every mechanism, and
-  the complement is published instead: the project's own tests import the same declaration and
-  assert against it.
-  ⚑ **Marked `accepted` rather than `boundary` on 2026-09-13.** An adopting project asked directly
-  whether an execution-time mechanism was ever coming — the interposition this entry describes is
-  theirs — and the answer was that one **can certainly be added** (user, 2026-09-13). Nothing
-  observes a running program today; that is a decision about what has been spent, not a property of
-  the model. **The mark this entry carried said the opposite**, `boundary` having then been defined
-  as permanent — which is the entry that started the definitions above being rewritten.
-  ⚑ **The shape of the eventual instrument is known, and it is smaller than it looks.** The same
-  project reports that *observe a running program* and *compare what it produced against a
-  declaration* are two mechanisms, not one, and that in their own implementation the seam between
-  them is already cut and named: the adjudication half is substitutable and the classification rules
-  live outside it. What is missing here is only the first half — install an interposition on a
-  declared funnel, collect what crosses it, report and gate at the end of a run.
+- **accepted** · **~~Nothing here observes a running program.~~ One thing does, and it sees one
+  declared funnel.** Closed 2026-09-14 by `[[interpose]]`: a callable the project names is patched
+  for the length of its own test session, every identifier crossing it is judged against a declared
+  registry, and an identifier nothing declares fails the run. The mark stays `accepted`, and what it
+  now covers is everything *else* a running program does — what a request handler emits under load,
+  what an ordering constraint holds to, anything not funnelled through a single call a project can
+  name. **This mechanism observes; it does not arrange.** It cannot construct the inputs that make a
+  fact exist, so a conformance row whose fact is the outcome of an execution reachable only through
+  a test's own fixtures is still out of reach — and that is one of the three worked rows an adopting
+  project supplied.
+  ⚑ **It is a reminder, not a catch**, in the sense `docs/structure.md` §1 uses: the plugin is
+  loaded by the adopting project's own test configuration and the funnel is named in its own
+  `kinemata.toml`, both editable by the agent being constrained. What it buys is **reach** — over an identifier assembled
+  internally, which never appears as a literal and crosses no boundary a static check guards — and
+  not enforcement against someone determined to remove it.
+  ⚑ **Two of its ways of looking clean are reported rather than assumed away.** A funnel that could
+  not be patched **fails**, the blocked-oracle rule. A funnel nothing crossed does **not** fail —
+  running one test file is ordinary, and failing it would teach people to unload the plugin — but
+  the crossing count is always printed, because a run that observed nothing must not read like a run
+  that found nothing. **The check's coverage is the suite's coverage**, which is a real limit and
+  belongs to whoever reads its output.
+  ⚑ **Marked `accepted` rather than `boundary` on 2026-09-13**, the day before it closed. An adopting
+  project asked directly whether an execution-time mechanism was ever coming, and the answer was that
+  one **can certainly be added** (user, 2026-09-13). **The mark this entry carried before that said
+  the opposite**, `boundary` having then been defined as permanent — which is the entry that started
+  the definitions above being rewritten, and the clearest case this list has that a disposition is
+  about instruments rather than about the model.
   ⚑ **This entry said *"everything here is static"* until 2026-09-13 and that was never true of
   the whole tool.** `claims` runs `git`, reaches the network, and runs whatever command a
   `[[count]]` declares — since 2026-09-05, four days before the audit that reported the tool as
