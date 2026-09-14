@@ -1177,6 +1177,10 @@ down, and the two shapes at the end are the findings that matter most.
   produces silence. Of 326 conformance checks in that project's suite, **291 were not expressible
   (89%)**, and this shape was the single largest reason — 125 test functions across four
   manifest-parity files.
+  🛑 **That share is dated 2026-09-09 and has not been re-measured.** It predates `parity`,
+  `[[interpose]]`, `shape` and the adapter widening, several of which closed reasons listed in this
+  very section. **Read it as what that audit found, not as what this tool cannot express today** —
+  the entries below carry the current state, each marked where it moved.
   ⚑ **The twin is expressible for a value a document states, and was already** when this entry
   said it was not: a `[[count]]` declares the pattern, an oracle command and an exact comparison.
   ⚑ **Partly closed 2026-09-13. This entry said the twin aimed at declared data had no expression

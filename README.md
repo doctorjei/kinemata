@@ -882,6 +882,13 @@ The third was an adopter who ran this across three of their own repositories and
 their **326-check conformance suite** against what these mechanisms can express. **291 were not
 expressible (89%)**, and the reasons were structural rather than gaps:
 
+🛑 **That figure is dated 2026-09-09 and has not been re-measured.** Several of the structural
+reasons below have since been closed — each is marked where it was — so **89% is the number that
+audit produced, not a current statement of what this tool cannot express.** It is left here
+because the audit is the evidence and its findings are what drove the work; it is flagged because
+a stale coverage figure understates a tool to exactly the reader who is deciding whether to adopt
+it. Nothing mechanical catches this: a share in prose has no oracle.
+
 - **The registry mechanism is purely negative.** It says *a declared value must not be re-spelled
   elsewhere*. Most conformance says the twin — *this row must equal what the code produces* — and
   under negative polarity, agreement is a finding and disagreement is silence. That accounted for
