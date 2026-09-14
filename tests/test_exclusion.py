@@ -21,7 +21,14 @@ from __future__ import annotations
 
 import pytest
 
-from kinemata.exclusion import Removed, anchors, audit, excluded, matches
+from kinemata.exclusion import (
+    Removed,
+    anchored_form,
+    anchors,
+    audit,
+    excluded,
+    matches,
+)
 
 TREE = (
     "tests/test_thing.py",
@@ -90,12 +97,88 @@ def test_a_fragment_that_removed_nothing_is_reported():
 
 
 def test_a_substring_only_removal_is_reported_with_the_fix():
+    """Matched inside a name, where anchoring IS the right advice."""
     report = audit(TREE, ("tests/",))
     assert report.incidental
     line = report.lines()[0]
-    assert "by substring rather than by directory" in line
+    assert "inside a name rather than a directory" in line
     assert "docs/plans/2026-03-07-smoke-tests-design.md" in line
     assert "'/tests/'" in line
+
+
+#: The adopter's tree, reduced to the shape that made the old remedy false: a
+#: fragment naming real directories that are not at the root.
+DEEP = (
+    "tests/test_core.py",
+    "docs/plans/2026-03-07-smoke-tests-design.md",
+    "packages/agent-claude/tests/test_credentials.py",
+    "packages/agent-codex/tests/test_auth.py",
+)
+
+
+def test_a_directory_below_the_root_is_not_told_to_anchor_at_the_root():
+    """🛑 The reported defect: the remedy reached none of the paths beside it.
+
+    An adopter was told to write ``/tests/`` for paths three directories down.
+    Anchoring is root-relative, so taking it would have stopped excluding three
+    plugin test trees while ``check`` went on exiting 0. They reproduced it
+    against this module and did not take the advice.
+    """
+    line = next(
+        line for line in audit(DEEP, ("tests/",)).lines()
+        if "below the root" in line
+    )
+    assert "packages/agent-claude/tests/test_credentials.py" in line
+    assert "ROOT-relative" in line
+    assert "'/packages/agent-claude/tests/'" in line
+    assert "'/packages/agent-codex/tests/'" in line
+
+
+def test_the_suggested_spelling_actually_removes_the_paths_it_is_printed_beside():
+    """The property the old message violated, asserted directly.
+
+    Deriving the advice from the fragment is what produced advice that matched
+    nothing it listed; this is the test that would have caught it.
+    """
+    for item in audit(DEEP, ("tests/",)).incidental:
+        for form in item.anchored_forms:
+            assert any(matches(rel, form) for rel in item.deeper), form
+        for rel in item.deeper:
+            assert any(matches(rel, form) for form in item.anchored_forms), rel
+
+
+def test_the_two_kinds_of_incidental_match_are_told_apart():
+    """One is probably meant and one probably is not; they got one remedy."""
+    item = audit(DEEP, ("tests/",)).incidental[0]
+    assert item.within_a_name == ("docs/plans/2026-03-07-smoke-tests-design.md",)
+    assert item.deeper == (
+        "packages/agent-claude/tests/test_credentials.py",
+        "packages/agent-codex/tests/test_auth.py",
+    )
+
+
+def test_a_fragment_is_matched_segment_wise_when_deriving_a_spelling():
+    """``tests`` names the directory and never ``smoke-tests``."""
+    assert anchored_form("packages/x/tests/a.py", "tests/") == "/packages/x/tests/"
+    assert anchored_form("docs/smoke-tests-design.md", "tests/") == ""
+    assert anchored_form("a/b/c.py", "") == ""
+
+
+def test_a_multi_segment_fragment_derives_its_whole_path():
+    assert anchored_form(
+        "packages/agent-claude/tests/support/x.py", "agent-claude/tests"
+    ) == "/packages/agent-claude/tests/"
+
+
+def test_a_fragment_matching_only_part_of_a_segment_has_no_anchored_form():
+    """And so is told the other thing, correctly.
+
+    ``claude/tests`` removes :shown:`packages/agent-claude/tests/x.py` as a
+    substring of ``agent-claude``, and no anchored spelling reaches it --
+    ``/claude/tests/`` needs a literal ``claude`` segment. Reporting an
+    anchored form here would be the original defect in a new place.
+    """
+    assert anchored_form("packages/agent-claude/tests/x.py", "claude/tests") == ""
 
 
 def test_a_clean_run_says_nothing():

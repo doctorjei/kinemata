@@ -61,6 +61,33 @@ def anchors(rel: str, fragment: str) -> bool:
     return bool(stem) and (rel == stem or rel.startswith(stem + "/"))
 
 
+def anchored_form(rel: str, fragment: str) -> str:
+    """The anchored spelling that removes *rel*, or ``""`` if none does.
+
+    :shown:`tests/` against :shown:`packages/agent-claude/tests/test_credentials.py`
+    gives :shown:`/packages/agent-claude/tests/` -- the fragment names a real
+    directory, just not one at the root. Against
+    :shown:`docs/plans/smoke-tests-design.md` it gives ``""``: the match is
+    inside a file's name, so **no** anchored spelling reaches it.
+
+    ⚑ **Written because the two cases were being told the same thing, and for
+    one of them it was false.** An adopter was advised to write ``/tests/`` for
+    paths three directories down; anchoring is root-relative, so taking the
+    advice would have stopped excluding three plugin test trees while the check
+    went on exiting 0. Reported by them against the published release.
+    """
+    stem = fragment.strip("/")
+    if not stem:
+        return ""
+    want = stem.split("/")
+    parts = rel.split("/")
+    # Segment-wise, so `tests` matches the directory and never `smoke-tests`.
+    for start in range(len(parts) - len(want) + 1):
+        if parts[start : start + len(want)] == want:
+            return "/" + "/".join(parts[: start + len(want)]) + "/"
+    return ""
+
+
 @dataclass(frozen=True)
 class Removed:
     """What one fragment did on one run."""
@@ -74,6 +101,38 @@ class Removed:
     @property
     def anchored(self) -> bool:
         return self.fragment.startswith("/")
+
+    @property
+    def deeper(self) -> tuple[str, ...]:
+        """Incidental paths where the fragment IS a directory, below the root.
+
+        **The half the old remedy was wrong about.** These are removals an
+        author plausibly meant, and root-anchoring silently ends every one.
+        """
+        return tuple(
+            rel for rel in self.incidental if anchored_form(rel, self.fragment)
+        )
+
+    @property
+    def within_a_name(self) -> tuple[str, ...]:
+        """Incidental paths matched inside a name, which nothing anchored reaches.
+
+        The half the old remedy was right about: an author who wrote
+        :shown:`tests/` was not naming :shown:`docs/plans/smoke-tests-design.md`.
+        """
+        return tuple(
+            rel for rel in self.incidental if not anchored_form(rel, self.fragment)
+        )
+
+    @property
+    def anchored_forms(self) -> tuple[str, ...]:
+        """The distinct anchored spellings that keep :attr:`deeper` removed.
+
+        **Derived from the paths that actually matched, never from the
+        fragment** -- deriving it from the fragment is what produced advice that
+        reached none of the paths printed beside it.
+        """
+        return tuple(sorted({anchored_form(rel, self.fragment) for rel in self.deeper}))
 
     @property
     def inert(self) -> bool:
@@ -106,6 +165,13 @@ class Audit:
 
         Silent when every fragment removed the tree it names, because a report
         that speaks on a clean run trains its reader to skip it.
+
+        ⚑ **The two kinds of incidental match get different advice, because one
+        remedy was false for one of them.** A fragment matching a directory
+        below the root and a fragment matching inside a file's name are not the
+        same mistake: anchoring fixes the second and **silently ends** the
+        first. Reported by an adopter who came within one edit of taking the
+        advice and losing three test trees, against the published release.
         """
         said: list[str] = []
         for item in self.inert:
@@ -114,18 +180,32 @@ class Audit:
                 "tree matches it."
             )
         for item in self.incidental:
-            shown = ", ".join(item.incidental[:3])
-            more = (
-                f" and {len(item.incidental) - 3} more"
-                if len(item.incidental) > 3
-                else ""
-            )
-            said.append(
-                f"exclude {item.fragment!r} removed {len(item.incidental)} "
-                f"path(s) by substring rather than by directory: {shown}{more}. "
-                f"Write '/{item.fragment.strip('/')}/' to anchor it."
-            )
+            if item.within_a_name:
+                said.append(
+                    f"exclude {item.fragment!r} removed "
+                    f"{len(item.within_a_name)} path(s) by matching inside a "
+                    f"name rather than a directory: "
+                    f"{_shown(item.within_a_name)}. "
+                    f"Write '/{item.fragment.strip('/')}/' to remove only the "
+                    "tree of that name at the root."
+                )
+            if item.deeper:
+                said.append(
+                    f"exclude {item.fragment!r} removed {len(item.deeper)} "
+                    f"path(s) from directories below the root: "
+                    f"{_shown(item.deeper)}. "
+                    f"Anchoring is ROOT-relative, so "
+                    f"'/{item.fragment.strip('/')}/' would reach none of them "
+                    f"-- to keep them, name each: "
+                    f"{', '.join(repr(form) for form in item.anchored_forms)}."
+                )
         return tuple(said)
+
+
+def _shown(paths: Sequence[str], limit: int = 3) -> str:
+    """The first few, and how many were not printed."""
+    more = f" and {len(paths) - limit} more" if len(paths) > limit else ""
+    return ", ".join(paths[:limit]) + more
 
 
 def audit(
