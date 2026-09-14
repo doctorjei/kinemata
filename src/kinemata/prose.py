@@ -236,8 +236,39 @@ def python_strings_only(source: str) -> str:
     return "\n".join(blanked)
 
 
+def _string_tokens(source: str) -> list[tuple[int, str, str]]:
+    """Every non-docstring ``STRING`` token, as ``(line, token, full_line)``.
+
+    Shared by the two functions that ask different questions of the same tokens
+    -- which literals can be read, and which cannot -- rather than spelling one
+    token loop twice. That is this package's own first subject.
+    """
+    lines = source.splitlines()
+    if not lines:
+        return []
+    try:
+        tree = parsed(source)
+    except SyntaxError:
+        tree = None
+    prose_rows = docstring_rows(tree) if tree is not None else set()
+    try:
+        tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        return []
+
+    return [
+        (
+            token.start[0],
+            token.string,
+            lines[token.start[0] - 1] if 0 < token.start[0] <= len(lines) else "",
+        )
+        for token in tokens
+        if token.type == tokenize.STRING and token.start[0] not in prose_rows
+    ]
+
+
 def python_string_literals(source: str) -> list[tuple[int, str, str]]:
-    """Every non-docstring string literal, as ``(line, content, full_line)``.
+    """Every readable non-docstring string literal, as ``(line, content, full_line)``.
 
     Knowing where a literal *ends* is what separates a bypass from a coincidence.
     ``WORKSPACES_PATH = "workspaces"`` is bypassed by the literal
@@ -245,48 +276,86 @@ def python_string_literals(source: str) -> list[tuple[int, str, str]]:
     contains those characters -- a different namespace, which the corpus flags
     as its own hazard ("the same string for different namespaces ... nothing
     kept them apart but convention").
+
+    ⚑ **An f-string is dropped WHOLE, not merely its interpolated parts**, and
+    this is the carrier for that fact. ``literal_eval`` refuses an f-string
+    token, so ``f"self.{agent}.model"`` contributes nothing at all -- not even
+    the literal ``self.`` an adopter's own ``ast.Constant`` walk does see. **So
+    a ``match_mode = "strings"`` registry is blind to every f-string in a tree
+    and reports clean**, which is why :func:`python_unreadable_literals` exists
+    and why the scanning commands print a count.
+
+    ⚑ **The drop stays; the silence was the defect.** Reported by an adopter on
+    2026-09-14 as *"a check that quietly does less"*, and they were explicit
+    that they were not asking for f-strings to be evaluated -- their parts are
+    not literals in the sense this function means. **The behavior the validated
+    bypass scan was measured against is unchanged.** This limitation used to be
+    documented only in :func:`python_message_skeletons`, a *different*
+    function's docstring, which is how it stayed invisible to anyone reading
+    this one.
     """
-    lines = source.splitlines()
-    if not lines:
-        return []
-
-    try:
-        tree = parsed(source)
-    except SyntaxError:
-        tree = None
-    prose_rows = docstring_rows(tree) if tree is not None else set()
-
     found: list[tuple[int, str, str]] = []
-    try:
-        tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
-    except (tokenize.TokenError, IndentationError, SyntaxError):
-        return []
-
-    for token in tokens:
-        if token.type != tokenize.STRING:
-            continue
-        row = token.start[0]
-        if row in prose_rows:
-            continue
+    for row, token, line_text in _string_tokens(source):
         try:
-            content = evaluated(token.string)
+            content = evaluated(token)
         except (ValueError, SyntaxError):
             continue
         if not isinstance(content, str):
             continue
-        line_text = lines[row - 1] if 0 < row <= len(lines) else ""
         found.append((row, content, line_text))
     return found
+
+
+def python_unreadable_literals(source: str) -> list[int]:
+    """Rows carrying an f-string, which :func:`python_string_literals` drops.
+
+    A ``strings`` registry cannot see these lines, so a clean report over a file
+    full of them is a smaller claim than it looks. **A dropped literal that says
+    it was dropped costs a reader nothing** -- the adopter's phrasing, and the
+    whole of the fix they asked for.
+
+    ⚑ **Read off the AST rather than off the tokens, and that is not a style
+    choice.** The two supported interpreters drop an f-string by *different
+    mechanisms*: at the 3.11 floor it is one ``STRING`` token that
+    ``literal_eval`` refuses, and from 3.12 (PEP 701) it is not a ``STRING``
+    token at all but ``FSTRING_START``/``MIDDLE``/``END``, so it never reaches
+    the refusal. A token-based count is silently empty on half the support
+    matrix -- **a check that quietly does less, which is the exact defect this
+    function was added to end.** Measured, not reasoned about: the first
+    implementation here reported zero against a module with f-strings on every
+    other line.
+
+    Nested f-strings count once. An f-string inside another's interpolation is
+    part of the same unreadable span to anything matching on values.
+    """
+    try:
+        tree = parsed(source)
+    except SyntaxError:
+        return []
+    rows: list[int] = []
+    _joined_rows(tree, rows)
+    return sorted(rows)
+
+
+def _joined_rows(node: ast.AST, rows: list[int]) -> None:
+    """Collect outermost ``JoinedStr`` rows, not descending into one."""
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, ast.JoinedStr):
+            rows.append(child.lineno)
+        else:
+            _joined_rows(child, rows)
 
 
 def python_message_skeletons(source: str) -> list[tuple[int, str, str]]:
     """Every f-string as ``(line, skeleton, full_line)``, interpolations as ``{}``.
 
-    ``python_string_literals`` cannot see f-strings at all: it resolves a token
-    with ``literal_eval``, which refuses them. That is correct for bypass
-    detection, where the question is whether a *value* was respelled -- but it
-    hides almost every user-facing message in modern Python, and duplicated
-    messages are a large share of the undeclared-literal failure.
+    :func:`python_string_literals` drops an f-string whole, and says so itself.
+    That is correct for bypass detection, where the question is whether a
+    *value* was respelled -- but it hides almost every user-facing message in
+    modern Python, and duplicated messages are a large share of the
+    undeclared-literal failure. **This function is the answer for the clustering
+    question; the count printed by the scanning commands is the answer for the
+    registry one.**
 
     Evidence: kento-core ``e84b9504`` [0TMVXHC-Cx0004] harmonized three
     resolver messages that were each

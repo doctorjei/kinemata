@@ -64,7 +64,7 @@ from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
 from .confirm import ConfirmError, apply, dating, plan, redate
 from .context import measure
 from .contract import BaseRegistry, Entry
-from .exclusion import audit, relative_paths
+from .exclusion import audit, excluded, relative_paths
 from .gates import WORKFLOW_DIR, enforced
 from .literals import clusters
 from .parity import Disagreement, Divergence, Parity
@@ -72,7 +72,7 @@ from .parity import survey as parity_survey
 from .probe import Mismatch, Probed
 from .probe import survey as probe_survey
 from .projection import project
-from .prose import ILLUSTRATION_ROLE
+from .prose import ILLUSTRATION_ROLE, python_unreadable_literals
 from .provenance import (
     PROVENANCE_REGISTRY,
     ProvenanceError,
@@ -508,6 +508,51 @@ def _report_silent(settings: Settings) -> None:
         )
 
 
+def _report_unreadable(settings: Settings) -> None:
+    """How many lines a ``strings`` registry could not read, when any.
+
+    **An f-string is dropped whole by the literal extractor**, so a registry
+    matching on values is blind to every one of them and reports clean.
+    ``prose.python_string_literals`` is the carrier for why, and the drop is
+    deliberate; this is the other half the adopter who found it actually asked
+    for -- *"a dropped literal that says it was dropped costs a reader
+    nothing."*
+
+    Not suppressed by ``--quiet``, on the rule the silent, exemption, gate and
+    promise counts already follow: a count the reader did not ask for is the
+    only way they learn the scope is smaller than it looks.
+    """
+    scoped = [
+        registry for registry in settings.registries
+        if getattr(registry, "match_mode", "strings") == "strings"
+    ]
+    if not scoped:
+        return
+    rows = 0
+    files = 0
+    for here, names, _ in _tree(settings.root):
+        for name in names:
+            path = here / name
+            if path.suffix != ".py":
+                continue
+            rel = str(path.relative_to(settings.root))
+            if excluded(rel, settings.declared_exclude):
+                continue
+            try:
+                found = python_unreadable_literals(path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError):
+                continue
+            if found:
+                rows += len(found)
+                files += 1
+    if rows:
+        print(
+            f"unread: {rows} f-string(s) in {files} file(s) are not read as "
+            "literals, so a `strings` registry cannot match inside them. Their "
+            "interpolated parts are not literals; the whole token is skipped."
+        )
+
+
 def _report_exclusions(settings: Settings) -> None:
     """What ``[project] exclude`` actually removed, when that is a surprise.
 
@@ -541,6 +586,7 @@ def cmd_review(args: argparse.Namespace) -> int:
         if not args.quiet:
             print("Nothing already declared looks re-derived here.")
         _report_silent(settings)
+        _report_unreadable(settings)
         _report_exclusions(settings)
         _report_resources(settings, found)
         _report_unassociated(found)
@@ -552,6 +598,7 @@ def cmd_review(args: argparse.Namespace) -> int:
             f"Route through them rather than re-deriving."
         )
     _report_silent(settings)
+    _report_unreadable(settings)
     _report_exclusions(settings)
     _report_resources(settings, found)
     _report_unassociated(found)
@@ -1901,6 +1948,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     ]
     _print_reports(settings, filtered, verbose=args.verbose)
     _report_silent(settings)
+    _report_unreadable(settings)
     _report_exclusions(settings)
     _report_resources(settings, found)
     _report_unassociated(found)

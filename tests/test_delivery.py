@@ -1494,6 +1494,47 @@ def test_declared_entries_nothing_can_report_on_are_counted(project, capsys):
     assert "silent: 1 of 2 declared entry(s) carry no antipattern" in capsys.readouterr().out
 
 
+def test_fstrings_a_strings_registry_cannot_read_are_counted(project, capsys):
+    """The same failure as the silence above, found by an adopter on 2026-09-14.
+
+    A ``strings`` registry is blind to every f-string in the tree, because the
+    literal extractor drops the whole token rather than its interpolated parts.
+    It then reports clean, which reads as coverage. **The drop is deliberate and
+    unchanged; the silence was the defect** -- they were explicit that they were
+    not asking for f-strings to be evaluated.
+    """
+    write(project, "src/app.py", 'p = f"box.{ext}"\nq = f"{a}/{b}"\n')
+    main(["review", "-c", str(project / "kinemata.toml")])
+    out = capsys.readouterr().out
+    assert "unread: 2 f-string(s) in 1 file(s)" in out
+    assert "a `strings` registry cannot match inside them" in out
+
+
+def test_nothing_is_said_about_fstrings_when_no_registry_matches_on_values(
+    project, capsys
+):
+    """A count that bears on no declared registry is noise.
+
+    The rule every other notice here follows: speak when it changes what the
+    reader should conclude, and not otherwise.
+    """
+    write(project, "kinemata.toml", """
+        [project]
+        root = "."
+
+        [[registry]]
+        name = "patterns"
+        kind = "code-patterns"
+
+        [[registry.entry]]
+        id = "direct-open"
+        patterns = ["open("]
+    """)
+    write(project, "src/app.py", 'p = f"box.{ext}"\n')
+    main(["review", "-c", str(project / "kinemata.toml")])
+    assert "unread:" not in capsys.readouterr().out
+
+
 def test_a_registry_that_fits_nothing_does_not_block_the_documentation_check(tmp_path, capsys):
     """`requests` declares its canonical things as code shapes and numbers, so
     `python-constants` bound to nothing -- and refusing at load stopped its

@@ -16,7 +16,12 @@ report.
 
 from __future__ import annotations
 
-from kinemata.prose import outside_code_spans, outside_fenced_blocks
+from kinemata.prose import (
+    outside_code_spans,
+    outside_fenced_blocks,
+    python_string_literals,
+    python_unreadable_literals,
+)
 
 CITATION = "[0TMQDKB-Ru0169]"
 
@@ -167,3 +172,62 @@ def test_two_fences_leave_the_prose_between_them():
     source = f"```\nfirst\n```\n\n{CITATION} in prose\n\n```\nsecond\n```\n"
     assert blanked(source) == ["```", "first", "```", "```", "second", "```"]
     assert survives(source, CITATION)
+
+
+# -- f-strings, which the literal extractor drops whole ----------------------
+#
+# Reported by an adopter on 2026-09-14 as "a check that quietly does less".
+# They were explicit that they were NOT asking for f-strings to be evaluated --
+# the silence was the defect. So the drop is pinned, and so is the report.
+
+
+def test_an_fstring_is_dropped_whole_and_not_merely_its_parts():
+    """Not even the literal `self.` survives, which an ast.Constant walk sees.
+
+    That asymmetry is how the adopter found it: their own pytest check saw the
+    prefix and the registry mirroring it did not.
+    """
+    found = python_string_literals('x = f"self.{agent}.model"\n')
+    assert found == []
+
+
+def test_a_plain_literal_beside_an_fstring_still_reads():
+    """The drop is the f-string's, not the line's."""
+    source = 'a = f"self.{x}"\nb = "plain"\n'
+    assert [content for _, content, _ in python_string_literals(source)] == ["plain"]
+
+
+def test_the_drop_is_counted_so_a_clean_report_is_not_mistaken_for_coverage():
+    assert python_unreadable_literals('x = f"self.{agent}.model"\n') == [1]
+    assert python_unreadable_literals('x = "plain"\n') == []
+
+
+def test_the_count_is_read_off_the_ast_and_not_off_the_tokens():
+    """🛑 The support matrix, which a token-based count fails on half of.
+
+    At the 3.11 floor an f-string is one STRING token that literal_eval
+    refuses; from 3.12 (PEP 701) it is FSTRING_START/MIDDLE/END and is never a
+    STRING token at all. The first implementation counted tokens and reported
+    ZERO on this interpreter against a module with f-strings throughout -- the
+    very defect the function was added to end, reintroduced inside the fix.
+    """
+    import io
+    import tokenize
+
+    source = 'x = f"self.{agent}.model"\n'
+    kinds = {
+        tokenize.tok_name[t.type]
+        for t in tokenize.generate_tokens(io.StringIO(source).readline)
+    }
+    # Whichever way this interpreter tokenizes it, the count is the same.
+    assert kinds & {"STRING", "FSTRING_START"}
+    assert python_unreadable_literals(source) == [1]
+
+
+def test_a_nested_fstring_counts_once():
+    """It is one unreadable span to anything matching on values."""
+    assert python_unreadable_literals('x = f"a{f\'b{c}\'}d"\n') == [1]
+
+
+def test_unparseable_source_reports_nothing_rather_than_raising():
+    assert python_unreadable_literals("def (\n") == []
