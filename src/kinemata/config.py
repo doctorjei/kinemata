@@ -736,6 +736,27 @@ def _match_mode(spec: dict[str, Any], path: Path) -> str:
     return declared
 
 
+def _max_sites(project: dict[str, Any], path: Path) -> int | None:
+    """``[project] max_sites``, refused when it is not a count.
+
+    The threshold is compared with ``count > max_sites``, so anything that is
+    not a whole number either crashes inside the report with a ``TypeError``
+    from three modules away, or -- for ``true``, which Python compares as 1 --
+    quietly becomes a threshold of one and suppresses nearly everything. A
+    suppression dial is the wrong place to guess.
+    """
+    if "max_sites" not in project:
+        return None
+    declared = project["max_sites"]
+    if isinstance(declared, bool) or not isinstance(declared, int):
+        raise ConfigError(
+            f"{path}: [project] max_sites is {declared!r}, which is not a "
+            "number of sites. Give a whole number, or a negative one to turn "
+            "suppression off."
+        )
+    return declared
+
+
 def _boundary(spec: dict[str, Any], path: Path) -> str:
     """``boundary`` on any registry whose builder does not claim the key.
 
@@ -945,7 +966,7 @@ def load(path: str | Path) -> Settings:
         declared_exclude=declared_exclude,
         claims_declared=raw.get("claims") is not None,
         suffixes=tuple(project.get("suffixes", (".py",))),
-        max_sites=project.get("max_sites"),
+        max_sites=_max_sites(project, path),
         claim_suffixes=claim_suffixes,
         citation_suffixes=citation_suffixes,
         claim_file_suffixes=_claim_file_suffixes(claims, path),

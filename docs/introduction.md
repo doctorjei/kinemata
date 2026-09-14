@@ -74,6 +74,12 @@ exclude = ["tests/", "build/"]     # gitignored paths are added automatically
 # A bare fragment matches anywhere in a path, so "tests/" also drops
 # docs/smoke-tests-design.md. A leading slash anchors at the root:
 # exclude = ["/tests/"]            # this directory, not this substring
+max_sites = 20                     # an antipattern matching more sites than
+                                   # this is too generic to mean anything, and
+                                   # is suppressed and listed rather than
+                                   # reported. Negative turns suppression off,
+                                   # exactly as `--max-sites` does; the flag
+                                   # wins over this for one run
 
 # Values: antipatterns derived from the constants themselves.
 [[registry]]
@@ -547,6 +553,9 @@ outside, so the following are `ConfigError`, not silent skips:
 - a `bibliography` entry whose code and `repository` field disagree: an **external** code (`Px`,
   `Cx`) with no repository names a source it cannot point at, and a repository beside a local code
   says one thing to a reader and another to every check
+- `[project] max_sites` that is not a whole number — the threshold is compared against a count, so
+  a string crashes from three modules away and `true` compares as a threshold of 1, which
+  suppresses very nearly everything while reading as a setting somebody chose
 - `[citations] accompany_max` that is not a length in characters
 - `[citations] suffixes` that is not a non-empty list of dotted file extensions, or that is
   declared without `provenance = true` — an empty list would turn the policy off while leaving it

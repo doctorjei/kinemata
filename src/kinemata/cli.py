@@ -173,11 +173,23 @@ def _note_unfitted(settings: Settings) -> None:
 
 
 def _max_sites(args: argparse.Namespace, settings: Settings) -> int | None:
-    if args.max_sites is not None:
-        return None if args.max_sites < 0 else args.max_sites
-    if settings.max_sites is not None:
-        return settings.max_sites
-    return DEFAULT_MAX_SITES
+    """The suppression threshold: the flag, then the config, then the default.
+
+    **Negative means *off* in both spellings, and for one of them it did not.**
+    The flag has said "negative disables suppression" since it existed, and the
+    config value was handed to :func:`kinemata.report.review` untouched -- whose
+    test is ``count > max_sites``, so a negative threshold made every
+    antipattern noisy, suppressed every finding, and exited 0. One dial, two
+    spellings, and the declared one silently switched the check off.
+
+    Normalized once at the end rather than per source, which is what let the two
+    drift: the flag's branch carried the rule and the config's branch was three
+    lines away from it.
+    """
+    declared = args.max_sites if args.max_sites is not None else settings.max_sites
+    if declared is None:
+        return DEFAULT_MAX_SITES
+    return None if declared < 0 else declared
 
 
 def _needs_registries(settings: Settings, doing: str) -> None:

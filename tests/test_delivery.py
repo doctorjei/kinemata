@@ -268,6 +268,55 @@ def test_suppression_can_be_disabled(tmp_path):
     assert len(review(reg, tmp_path, max_sites=None).bypasses) == 30
 
 
+def test_a_negative_threshold_means_off_in_both_spellings(tmp_path):
+    """One dial, and the declared spelling used to mean the opposite.
+
+    `review`'s test is `count > max_sites`, so a negative threshold made every
+    antipattern noisy: every finding suppressed, nothing reported, exit 0. The
+    flag has documented "negative disables suppression" since it existed, and
+    only the flag's branch applied it.
+    """
+    import argparse
+
+    from kinemata.cli import _max_sites
+    from kinemata.report import DEFAULT_MAX_SITES
+
+    def settings(value):
+        return type("S", (), {"max_sites": value})()
+
+    def flag(value):
+        return argparse.Namespace(max_sites=value)
+
+    assert _max_sites(flag(None), settings(-1)) is None
+    assert _max_sites(flag(-1), settings(None)) is None
+    assert _max_sites(flag(None), settings(5)) == 5
+    assert _max_sites(flag(7), settings(5)) == 7
+    assert _max_sites(flag(None), settings(None)) == DEFAULT_MAX_SITES
+
+
+def test_a_max_sites_that_is_not_a_count_is_refused(tmp_path):
+    """`true` compares as 1, so it would suppress nearly everything quietly."""
+    from kinemata.config import ConfigError, load
+
+    write(tmp_path, "consts.py", 'A = "x"\n')
+    for value in ('"20"', "true"):
+        write(
+            tmp_path,
+            "kinemata.toml",
+            "[project]\n"
+            'root = "."\n'
+            f"max_sites = {value}\n"
+            "\n"
+            "[[registry]]\n"
+            'name = "values"\n'
+            'kind = "python-constants"\n'
+            'modules = ["consts.py"]\n',
+        )
+        with pytest.raises(ConfigError) as caught:
+            load(tmp_path / "kinemata.toml")
+        assert "max_sites" in str(caught.value)
+
+
 # -- config -------------------------------------------------------------------
 
 
