@@ -265,6 +265,12 @@ def test_a_project_declaring_no_gates_says_nothing(tmp_path, capsys):
         name = "constants"
         kind = "python-constants"
         modules = ["src/consts.py"]
+
+        # Declared so the command has a scope at all. Without it this config
+        # declares nothing `claims` checks and is refused at exit 2 -- which is
+        # the point of the refusal, not an obstacle to this test.
+        [claims]
+        suffixes = [".md"]
         """,
     )
     assert main(["claims", "-c", str(tmp_path / "kinemata.toml")]) == 0

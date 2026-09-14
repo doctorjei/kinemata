@@ -148,6 +148,11 @@ def test_check_reports_a_stray_record_as_unscanned_rather_than_stale(
 
 def test_claims_does_not_claim_a_stray_record_either(tmp_path, capsys):
     declare(tmp_path, source='NAME = "app.name"\nOLD = "app.legacy"\n')
+    # A documentation scope, so the command has something of its own to check.
+    # Without one this config declares nothing `claims` looks at and is refused
+    # at exit 2 -- which is a different behavior from the one under test here.
+    with open(tmp_path / "kinemata.toml", "a") as handle:
+        handle.write('\n[claims]\nsuffixes = [".md"]\n')
     main(["baseline", "-c", cfg(tmp_path), "--record", "--until", "2099-01-01"])
     capsys.readouterr()
 

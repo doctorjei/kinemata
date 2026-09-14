@@ -1080,6 +1080,15 @@ def cmd_claims(args: argparse.Namespace) -> int:
 
     Gates, unlike ``undeclared``. A missing file is a fact, not a judgment.
 
+    **Refuses when nothing declares ``[claims]``** (exit 2), the way ``parity``,
+    ``shape``, ``context`` and ``undeclared`` do. This was the one mechanism here
+    that defaulted instead, and the default was not harmless: an adopter's
+    registry-only config ran a documentation scan nobody had scoped, under that
+    config's excludes, and ``baseline --record`` wrote 356 findings into a file
+    they would never read with a command they would never run. A scope nobody
+    chose is not a safe default -- it is a second answer to a question the real
+    claims config already answers differently.
+
     Prints the number of claims checked even when everything resolves, because
     "all resolve" and "nothing was looked at" read identically otherwise -- and
     this project has already shipped one check that passed by examining nothing.
@@ -1107,6 +1116,15 @@ def cmd_claims(args: argparse.Namespace) -> int:
       notices a deleted CI step.
     """
     settings = _settings(args)
+    if not settings.checks_claims:
+        print(
+            "error: nothing here declares anything for this command to check: "
+            "no [claims], no [[gate]], no [[count]] and no [[promise]]. "
+            "Declare one, or do not run this.",
+            file=sys.stderr,
+        )
+        return 2
+
     _note_unfitted(settings)
     found = _verify(args, settings)
     inventory = enforced(settings.root, settings.gates)
@@ -1859,7 +1877,12 @@ def cmd_baseline(args: argparse.Namespace) -> int:
     # Guarded the way the citation catch is, so `baseline -r claims` shows the
     # documentation half alone.
     stalled: list[str] = []
-    if args.registry in (None, CLAIMS_REGISTRY):
+    # ⚑ And not at all when nothing declares claims work. `kinemata claims`
+    # refuses such a config outright, so recording its findings would fill the
+    # baseline from a scan the gate will never run -- which is how an adopter's
+    # registry-only config accumulated 356 documentation findings in a file
+    # nothing would ever read. The writer and the gate answer to one rule.
+    if args.registry in (None, CLAIMS_REGISTRY) and settings.checks_claims:
         verified = _verify(args, settings)
         findings += verified.findings()
         stalled += verified.blocked

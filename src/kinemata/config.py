@@ -139,6 +139,37 @@ class Settings:
     #: and can be told they removed nothing, while reporting the same about a
     #: `.gitignore` entry would be noise about a file nobody was checking.
     declared_exclude: tuple[str, ...] = ()
+    #: Did the config declare ``[claims]`` at all? Every other mechanism refuses
+    #: when nothing declares it and this one defaulted, which is how an adopter
+    #: recorded a claims baseline under a registry-only config's excludes, into
+    #: a file nothing would ever read.
+    claims_declared: bool = False
+
+    @property
+    def checks_claims(self) -> bool:
+        """Does anything give ``kinemata claims`` something to check?
+
+        **Several declarations feed one command**, which is why this is a
+        property here rather than a condition spelled in the CLI: the
+        documentation scope, the gate inventory, the count oracles, the
+        deferrals and the citation policy.
+
+        Two drafts got this wrong in opposite directions, both caught by this
+        repository's own tests. Refusing on ``[claims]`` alone silently disarmed
+        the gate inventory for any project declaring gates and no documentation.
+        Then withholding the *default scope* from a config without ``[claims]``
+        broke ``[[count]]`` and ``[[promise]]``, which match their patterns
+        inside documents and so need a scope to read. The scope stays default;
+        what is refused is running at all when nobody asked for anything.
+        """
+        return bool(
+            self.claims_declared
+            or self.gates
+            or self.counts
+            or self.promised
+            or self.provenance
+        )
+
     suffixes: tuple[str, ...] = (".py",)
     max_sites: int | None = None
     claim_suffixes: tuple[str, ...] = DEFAULT_CLAIM_SUFFIXES
@@ -852,6 +883,7 @@ def load(path: str | Path) -> Settings:
         registries=registries,
         exclude=exclude,
         declared_exclude=declared_exclude,
+        claims_declared=raw.get("claims") is not None,
         suffixes=tuple(project.get("suffixes", (".py",))),
         max_sites=project.get("max_sites"),
         claim_suffixes=claim_suffixes,
