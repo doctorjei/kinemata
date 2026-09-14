@@ -106,6 +106,16 @@ than going through the derived surface:
 | `[[interpose]]`'s run-time judgment of an observed identifier | `declared()` |
 | `access.registry()`'s assertion on a declared key | `declared()` |
 
+⚑ **`declared()` takes one identifier and nothing else, and that is a contract decision rather than
+an oversight.** A registry cannot see the other identifiers in a run, so it cannot answer *this is
+only a finding if that one is absent*. A set-level method was proposed by an adopting project and
+declined: the protocol has no optional members, so adding one stops every structurally-satisfying
+class from satisfying it — the exact population `kind = "import"` exists for — and a method whose
+output is a **verdict override** rather than a **model** is the one shape this design cannot keep
+checkable. Where a judgement really does depend on the run, it belongs on the project's side of the
+seam: `[[interpose]]`'s `identify` may keep state and may defer its answer, which reaches as far as
+one test. See `introduction.md` [0TN50WE-Pa0004] § Known limits for why it stops there.
+
 So the `declared(id)` row's *override when* — **enumeration is too large to hold, and membership
 must be answered directly** — describes an adapter this contract invites and then half-serves. An
 adapter that answers membership by recognition, and whose `entries()` cannot enumerate the same
