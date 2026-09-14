@@ -134,11 +134,27 @@ mechanism can see*, and that is a separate wall — the harder one.
 about it.** Neither property is a statement about this tool's charge, which is checking for the
 mistakes an agent makes; both are statements about one mechanism.
 
-| | Reads source text at rest | Runs a declared oracle | The project's own run |
-|---|---|---|---|
-| **Negative** — *this must not appear* | the duplication scan, the closed-world catch, `clusters`, `unused` | — | — |
-| **Positive** — *this must hold* | `path`, `link` and `[[gate]]` claims; the context ceiling; the citation policy and the resource list; the shape check's declarative rules (`[[shape]]`) | `commit` (git), `url` (the network), `[[count]]` (any declared command), parity (`[[parity]]`) in both its membership and its per-entry value form, `confirm` re-verifying what it dates, a shape rule whose guard or claim is a **predicate the project names** | — |
-| **Behavioral** — *what the program did* | out of reach | out of reach | the run-time surface, asserted by the project's own tests; `kinemata interpose`, judging what crosses a declared funnel during the project's own run |
+| | Reads source text at rest | Runs a declared oracle | Calls the project's code | The project's own run |
+|---|---|---|---|---|
+| **Negative** — *this must not appear* | the duplication scan, the closed-world catch, `clusters`, `unused` | — | — | — |
+| **Positive** — *this must hold* | `path`, `link` and `[[gate]]` claims; the context ceiling; the citation policy and the resource list; the shape check's declarative rules (`[[shape]]`) | `commit` (git), `url` (the network), `[[count]]` (any declared command), parity (`[[parity]]`) in both its membership and its per-entry value form, `confirm` re-verifying what it dates, a shape rule whose guard or claim is a **predicate the project names** | — | — |
+| **Behavioral** — *what the program did* | out of reach | out of reach | the probe corpus (`[[probe]]`), calling a declared callable with cases the project supplies and judging acceptance against refusal | the run-time surface, asserted by the project's own tests; `kinemata interpose`, judging what crosses a declared funnel during the project's own run |
+
+⚑ **The third column is new as of 2026-09-14 and it moved a boundary this project had stated.**
+Until `[[probe]]`, every mechanism here either read text, ran an *oracle about* the project, or rode
+inside the project's own run. A probe **calls the subject directly** — there is no oracle in between
+and no test session around it, because the fact it settles has no value for an oracle to print:
+*this input is accepted, that one is refused.* An adopter's own criterion is the sharpest statement
+of what the old boundary was protecting — *a value oracle extracts a fact and you judge it; one that
+classifies hands you the judgement, and when the classifier is wrong you get agreement between a
+wrong classifier and a wrong declaration.* **That protection is kept and the boundary is not:** the
+project supplies the cases and the target, the *reading* of the outcome is declared in the config
+and done by this package, and there is deliberately no escape to a project predicate for it.
+
+⚑ **Two columns are not one column with a longer list.** `[[interpose]]` sees only what the
+project's suite exercises and cannot arrange anything; a probe arranges nothing either but is handed
+its cases, so it reaches facts no test happened to exercise — and it reaches **only** what the
+corpus names, where the interposition reaches whatever crossed. Neither subsumes the other.
 
 ⚑ **The citation layer was missing from this table until it was audited**, two days after it began
 gating in this repository — and every finding the shared baseline accepts here today is one of

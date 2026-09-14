@@ -215,3 +215,20 @@ jobs:
             echo "should now run it and expect 0." >&2
             exit 1
           fi
+
+      # The fourth, and the reason is the sharpest of them: a probe calls the
+      # project's own code, and here that code is the tool doing the calling.
+      # The suite probes it directly and better, so nothing declares `[[probe]]`.
+      - name: probe refuses, this repository declaring no corpus
+        run: |
+          set +e
+          kinemata probe
+          status=$?
+          set -e
+          if [ "$status" -ne 2 ]; then
+            echo "kinemata probe exited $status; expected 2." >&2
+            echo "This repository declares no [[probe]], so a refusal is the" >&2
+            echo "claim being pinned. If one was just declared, this step" >&2
+            echo "should now run it and expect 0." >&2
+            exit 1
+          fi

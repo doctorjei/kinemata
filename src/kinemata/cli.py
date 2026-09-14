@@ -69,6 +69,8 @@ from .gates import WORKFLOW_DIR, enforced
 from .literals import clusters
 from .parity import Disagreement, Divergence, Parity
 from .parity import survey as parity_survey
+from .probe import Mismatch, Probed
+from .probe import survey as probe_survey
 from .projection import project
 from .prose import ILLUSTRATION_ROLE
 from .provenance import (
@@ -929,6 +931,112 @@ def cmd_shape(args: argparse.Namespace) -> int:
             f"\nFAIL: {failed} rule(s) a declaration does not satisfy.",
             file=sys.stderr,
         )
+        return 1
+    return 0
+
+
+def _probe(args: argparse.Namespace, settings: Settings) -> list[Probed]:
+    """The probe run, shared by ``probe`` and ``baseline``.
+
+    Shared for ``_shape``'s reason: the command that writes the exemption list
+    has to run every check that feeds it.
+    """
+    return probe_survey(settings.probes)
+
+
+def cmd_probe(args: argparse.Namespace) -> int:
+    """What a project's own code accepts and refuses, against what it declared.
+
+    The one check here whose fact has no value on either side -- the answer is
+    that a callable took an input or would not. It reads no tree and takes no
+    path: the corpus comes from the project, and the target is named rather than
+    discovered.
+
+    **Refuses when nothing declares a probe** (exit 2), the way ``parity``,
+    ``shape`` and ``context`` refuse.
+
+    ⚑ **A corpus carrying one polarity FAILS and is reported as vacuous rather
+    than as a violation.** Nothing was wrong with a case; the corpus cannot tell
+    a discriminating callable from a constant one, which is the property it
+    exists to demonstrate. It is not a finding the baseline can accept either --
+    a run that could not discriminate has not earned the right to have its
+    records pruned.
+    """
+    settings = _settings(args)
+    if not settings.probes:
+        print(
+            "error: no [[probe]] declared: nothing says what this project's "
+            "code must accept and refuse. Declare a target, a case supplier "
+            "and an outcome, or do not run this.",
+            file=sys.stderr,
+        )
+        return 2
+
+    results = _probe(args, settings)
+    # One pass, keeping the mismatch beside the record built from it: `finding()`
+    # returns a fresh object every call, so asking twice would match nothing
+    # against the exemptions just resolved. Same reason as `cmd_shape`.
+    paired: list[tuple[str, Bypass, Mismatch]] = [
+        (item.scope, item.finding(), item)
+        for result in results
+        for item in result.mismatches
+    ]
+
+    baseline = Baseline.load(settings.baseline)
+    split = baseline.split(
+        [(scope, hit) for scope, hit, _ in paired],
+        scope=[name for result in results for name in result.scopes()],
+    )
+    exempt = {id(hit) for _, hit in split.accepted}
+    live: dict[str, list[Mismatch]] = {}
+    for _, hit, item in paired:
+        if id(hit) not in exempt:
+            live.setdefault(item.probe, []).append(item)
+
+    # Counted apart, because they are different failures and one summary line
+    # calling a vacuous corpus a "case the code answers otherwise" would name
+    # the wrong defect to the one reader who has to fix it.
+    mismatched = 0
+    unanswered = 0
+    for result in results:
+        shown = live.get(result.probe, [])
+        if not shown and not result.blocked and not result.vacuous:
+            if not args.quiet:
+                # What ran, not only that it passed. The two counts are the
+                # whole guarantee, so printing the total alone would hide a
+                # corpus drifting toward one side.
+                print(
+                    f"# {result.probe}: {result.examined} case(s), "
+                    f"{result.accepting} accept / {result.refusing} refuse"
+                )
+            continue
+        print(f"# {result.probe}")
+        if result.blocked:
+            print(f"  BLOCKED: {result.blocked}", file=sys.stderr)
+            unanswered += 1
+        elif result.vacuous:
+            print(f"  VACUOUS: {result.why_vacuous()}", file=sys.stderr)
+            unanswered += 1
+        for item in shown:
+            print(f"  {item}")
+        mismatched += len(shown)
+
+    if split.accepted and not args.quiet:
+        until = f", until {baseline.until}" if baseline.until else ""
+        print(f"\nbaseline: {len(split.accepted)} case(s) accepted as "
+              f"pre-existing in {settings.baseline.name}{until}")
+    if split.stale and not args.quiet:
+        gone = sum(item.count for item in split.stale)
+        print(f"{gone} accepted record(s) no longer present "
+              "-- `kinemata baseline --prune` drops them.")
+
+    if mismatched or unanswered:
+        said = []
+        if mismatched:
+            said.append(f"{mismatched} case(s) the code does not answer as declared")
+        if unanswered:
+            said.append(f"{unanswered} probe(s) that did not answer")
+        print(f"\nFAIL: {', '.join(said)}.", file=sys.stderr)
         return 1
     return 0
 
@@ -1934,6 +2042,16 @@ def cmd_baseline(args: argparse.Namespace) -> int:
         findings += shaped.findings()
         stalled += [f"{shaped.registry}: {why}" for why in shaped.unjudged()]
 
+    # Probe, for the fifth time and the same reason. It brings the third way a
+    # check can run without answering: a corpus carrying one polarity called the
+    # project's code and still could not tell a discriminating callable from a
+    # constant one. **The rule generalizes past oracles** -- anything that can
+    # look like it checked while checking nothing must stall the writer.
+    for probed in _probe(args, settings):
+        findings += probed.findings()
+        if probed.blocked or probed.vacuous:
+            stalled.append(probed.unjudged())
+
     # **A scan that could not run must not author the list.** Running every
     # check is only half the guarantee: an oracle that is not installed here
     # produces no findings, which is indistinguishable from a tree where it
@@ -2129,6 +2247,13 @@ def build_parser() -> argparse.ArgumentParser:
                          help="gate: a declaration against the rules it states "
                               "about its own shape")
     shp.set_defaults(func=cmd_shape)
+
+    # No `path` either, and for a second reason on top of shape's: the corpus is
+    # the project's to produce, so there is no tree here to narrow.
+    prb = sub.add_parser("probe", parents=[common],
+                         help="gate: what the project's code accepts and "
+                              "refuses, against what it declared")
+    prb.set_defaults(func=cmd_probe)
 
     unu = sub.add_parser("unused", parents=[common],
                          help="advisory: declared entries nothing mentions "

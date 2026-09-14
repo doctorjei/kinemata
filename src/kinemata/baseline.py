@@ -53,6 +53,7 @@ from pathlib import Path
 
 from .bypass import Bypass, is_strays_scope
 from .parity import VALUE_DIRECTION, is_parity_scope
+from .probe import is_probe_scope
 from .shape import is_shape_scope
 
 #: Where a project's accepted findings live when it does not say otherwise.
@@ -155,6 +156,15 @@ class Accepted:
         if is_shape_scope(self.registry):
             rule = self.registry.split(":", 2)[-1]
             return f"{self.path}: {self.entry_id} breaks {rule!r}{times}"
+        # A probe record's text carries the polarity that was declared, because
+        # a reader auditing this list needs to know which way the accepted
+        # disagreement runs -- an accepted case that should have been refused is
+        # a very different thing to carry than one that should have been taken.
+        if is_probe_scope(self.registry):
+            return (
+                f"{self.path}: {self.entry_id} answers otherwise{times} "
+                f"-- {self.text[:60]}"
+            )
         return (
             f"{self.path}: {self.antipattern!r} bypasses {self.entry_id}{times} "
             f"-- {self.text[:60]}"

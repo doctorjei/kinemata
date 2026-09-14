@@ -333,6 +333,15 @@ note = "declaration against what the code produces; refuses here, and the step p
 command = "kinemata shape"
 note = "a declaration against its own shape; refuses here, and the step pins it"
 
+# The fourth of the same shape, and the reason is the sharpest of the four:
+# a probe calls the project's own code, and this project's "code" is the tool
+# doing the calling. Declaring a probe here would mean kinemata probing
+# kinemata, which the suite already does directly and better -- so nothing
+# declares `[[probe]]` and the command refuses.
+[[gate]]
+command = "kinemata probe"
+note = "what the code accepts and refuses; refuses here, and the step pins it"
+
 # Two findings from `kinemata unused`, reviewed 2026-09-09 and set aside. This
 # is the second kind of promise -- not a file the project will produce, but a
 # question somebody answered and dated so the answer expires rather than

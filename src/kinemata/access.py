@@ -15,8 +15,22 @@ every key path written during a test run.
 was wrong in a way worth naming.** :mod:`kinemata.claims` runs ``git``, reaches
 the network, and runs whatever command a ``[[count]]`` declares -- comparing its
 output against a value a document states. The boundary is not *static versus
-dynamic*; it is that kinemata executes **oracles about** a project and never the
-project under observation.
+dynamic*.
+
+⚠ **And the boundary this paragraph drew instead -- that kinemata executes
+oracles about a project and never the project under observation -- stopped being
+true on 2026-09-14.** :mod:`kinemata.probe` calls a declared callable of the
+project's with arguments the project supplies, which is the project under
+observation and nothing else. It was built because the fact it settles cannot be
+reached any other way: *this input is accepted and that one is refused* has no
+value for an oracle to print. ``docs/structure.md`` [0TN58PP-Pa0001] § The
+second axis carries the column it added.
+
+**What survives, and it is narrower than the old sentence:** kinemata never runs
+the project's *suite* or its entry point, and it never **classifies** an outcome
+by reading output -- the reading is declared in the config and done here, so a
+project cannot hand back a verdict. That is the part the old wording was really
+protecting.
 
 This module is the complement to that boundary, not a way around it. A registry
 built from ``kinemata.toml`` is already a live Python object carrying

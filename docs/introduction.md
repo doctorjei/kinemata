@@ -278,6 +278,32 @@ record   = "build/census.jsonl"   # optional, and the only thing that survives
                                   # identifier stop being written". Relative to
                                   # `[project] root`
 
+# What the project's code must ACCEPT and REFUSE. The only check that calls the
+# project's own code. `cases` is the project's -- only it knows what its
+# allow-list holds and how it composes a key -- and the *reading* of the outcome
+# is declared here rather than supplied by the project, so a project cannot hand
+# back a verdict.
+#
+# A corpus carrying only one polarity FAILS. A refusal-only corpus is satisfied
+# by a callable that refuses everything, and an acceptance-only one by a callable
+# that accepts everything.
+[[probe]]
+name    = "whitelist"
+target  = "mypkg.templates:check_whitelist"
+cases   = "tests.support.probes:whitelist_cases"
+outcome = "raises"                    # the target refuses by raising
+refusal = "mypkg.errors:ScopeError"   # required, and never `Exception`: every
+                                      # failure is one, so a renamed function
+                                      # would read as a correct refusal
+
+[[probe]]
+name     = "keyspace"
+target   = "mypkg.keyspace:key_validity"
+cases    = "tests.support.probes:keyspace_cases"
+outcome  = "returns"   # the target refuses by returning a complaint
+accepted = "none"      # required; or `falsy` / `truthy`. The value's type is
+                       # never inferred
+
 # Checks that must run, and the file that must run them.
 [[gate]]
 command = "pytest -q"
@@ -295,6 +321,27 @@ external = ["/etc/pkg/built.md"]   # patterns that deliberately leave the tree,
 budget = 24064
 strip = ["html-comments"]
 ```
+
+**What a `cases` supplier returns.** A callable taking no arguments and returning `Case` objects.
+The rows are the project's because only the project can build them — here from its own manifest and
+its own spelling rule, so nothing is re-implemented in a config:
+
+```python
+# tests/support/probes.py
+from kinemata.probe import Case
+
+from mypkg.manifest import allow_entries, families, prefixes, spell
+
+def keyspace_cases():
+    for prefix, family in prefixes_x_families():
+        yield Case(expect="accept", args=(spell(prefix, family),), kwargs={"agents": AGENTS})
+    for prefix in prefixes():
+        # One segment past a terminal family is data, not a key.
+        yield Case(expect="refuse", args=(f"{spell(prefix, 'env')}.probe",), kwargs={"agents": AGENTS})
+```
+
+`label` is optional and is what a finding names the row by; without one the arguments stand in,
+which reads well for scalars and badly for a constructed object.
 
 **Adapters (`kind`):**
 
@@ -459,6 +506,7 @@ does not want this.
 | `kinemata claims` | documentation gate, ratcheted; also verifies `[[gate]]` declarations | a dead claim the baseline does not already accept, a baseline past its `until` that exempts claims here, or a declared gate that does not run. Refuses outright (exit 2) if nothing declares anything for it to check — no `[claims]`, `[[gate]]`, `[[count]]`, `[[promise]]` or `[citations] provenance` |
 | `kinemata parity` | membership gate, ratcheted — what a registry declares, against the set an oracle says the code produces. Both directions: produced and declared by nothing, declared and produced by nothing. With `field`, **also** each entry's declared value against what the oracle prints for it | a disagreement in any of the three directions that the baseline does not already accept, an oracle that could not answer, or a declared value no oracle could be expected to print. Refuses outright (exit 2) if no `[[parity]]` is declared |
 | `kinemata shape` | declaration gate, ratcheted — the one check whose subject is a declaration rather than the code, so it reads no tree and takes no path. A rule is a **guard** and a **claim**, and either may be a predicate the project names | a rule an entry does not satisfy that the baseline does not already accept, a rule that could not be evaluated, or **a rule that examined no entry at all**. Refuses outright (exit 2) if no `[[shape]]` is declared |
+| `kinemata probe` | behavior gate, ratcheted — a declared corpus of inputs against what the project's code **accepts and refuses**. The one check that calls the project's own code; it reads no tree and takes no path, because the corpus comes from the project | a case the code answers otherwise that the baseline does not already accept, a probe that could not be evaluated, or **a corpus carrying only one polarity**. Refuses outright (exit 2) if no `[[probe]]` is declared |
 | `kinemata context` | session-load gate | measured bytes exceed `budget` |
 | `kinemata baseline` | shows accepted findings; `--record --until`, `--prune` | — |
 | `kinemata stamp` | mints a citation stamp, or decodes one; reads no config | the text given is not a stamp |
@@ -607,6 +655,19 @@ outside, so the following are `ConfigError`, not silent skips:
 - a `[[count]]` naming a `run` no `[command]` declares, or giving both `command` and `run`
 - a `[[count]]` whose `occurrence` is neither `every` nor `first` — a misspelling that fell back to
   the default would re-read the history the key exists to stop reading
+- a `[[probe]]` missing `name`, `target` or `cases`; naming a `target`, `cases` or `refusal` that
+  is not a `module:attribute`; or reusing a `name` another `[[probe]]` holds — two of one name
+  would share a baseline scope, so a record could not say whose it was
+- a `[[probe]]` whose `outcome` is neither `raises` nor `returns`. **There is deliberately no
+  escape to a project predicate**: supplying the reading of an outcome is supplying the verdict,
+  and a wrong classifier reports agreement between itself and a wrong declaration
+- a `[[probe]]` declaring `outcome = "raises"` with no `refusal`, or `outcome = "returns"` with no
+  `accepted`. Each mode's discriminator is **required rather than defaulted**, so a project that
+  has not thought about the convention is refused instead of inheriting one
+- a `[[probe]]` carrying the *other* mode's discriminator — a `refusal` beside `returns` reads to
+  a human as a check that is switched on and is read by nothing
+- an `accepted` outside `none` / `falsy` / `truthy`. The value's type is not inferred: a callable
+  returning `0` for success and one returning `0` errors are the same bytes and the opposite sense
 - a `[[parity]]` naming a `registry` no `[[registry]]` declares — refused at load rather than at
   the command, because a misspelled name and a project whose declaration and code agree produce
   the same silence, and only one of them is a mistake
@@ -1213,6 +1274,10 @@ down, and the two shapes at the end are the findings that matter most.
   fact exist, so a conformance row whose fact is the outcome of an execution reachable only through
   a test's own fixtures is still out of reach — and that is one of the three worked rows an adopting
   project supplied.
+  ⚑ **Narrowed 2026-09-14 by `[[probe]]`, which does not arrange either but is *handed* its cases.**
+  A fact needing constructed inputs is reachable when the project's own case supplier can build
+  them; what stays out of reach is the arrangement that cannot leave the test module. See that
+  entry below for the measured size of what is left.
   ⚑ **It is a reminder, not a catch**, in the sense `docs/structure.md` §1 uses: the plugin is
   loaded by the adopting project's own test configuration and the funnel is named in its own
   `kinemata.toml`, both editable by the agent being constrained. What it buys is **reach** — over an identifier assembled
@@ -1248,6 +1313,47 @@ down, and the two shapes at the end are the findings that matter most.
   entirely static. It was taken on report rather than measured. `structure.md` § The second axis
   now classifies each mechanism by polarity and by what it observes, and that classification is
   **selectable by a project, not a ceiling on the tool.**
+
+- **accepted** · **~~A fact that is an acceptance or a refusal, rather than a value, has no
+  expression here.~~ `[[probe]]` expresses it, as of 2026-09-14.** Measured across the same 125
+  functions, **15 of them assert nothing else**: a predicate refuses a denied entry, a key one
+  segment past its family is not a key, an uncovered destination raises. No oracle reaches these,
+  because there is no value to print — the fact *is* the outcome. A probe declares a target, a
+  corpus of cases the project supplies, and how the answer is read; kinemata calls the target and
+  compares the observed polarity to the declared one.
+  ⚑ **It moved a boundary this project had stated**, and the sentence is worth naming because it was
+  shipped: *kinemata executes oracles about a project and never the project under observation.*
+  A probe **calls the subject directly**. `docs/structure.md` § The second axis carries the column
+  that added. What survives is narrower and is the part that was load-bearing: kinemata never runs
+  the project's suite or entry point, and it never classifies an outcome by reading output.
+  ⚑ **There is deliberately no escape to a project-supplied predicate for reading an outcome**,
+  though `[[shape]]` has one for describing a row. A shape predicate supplies a model of what a row
+  *is*; an outcome predicate supplies *the judgement*, and a wrong classifier reports agreement
+  between itself and a wrong declaration. **So an outcome convention neither `raises` nor `returns`
+  can read stays in the project's own tests** — that is the cost, stated rather than papered over.
+  ⚑ **A corpus carrying one polarity fails**, which is the property the mechanism is for: a
+  refusal-only corpus is satisfied by a callable that refuses everything. kinemata counts the
+  polarities on the rows it was handed, so the count is never self-reported. It is also not a
+  finding the baseline can accept — a run that could not discriminate has not earned a `--prune`.
+  ⚑ **It is a reminder, not a catch.** An agent can edit a case list and the code it probes in one
+  commit. And **its reach is exactly its corpus** — a probe says nothing about an input nobody
+  wrote a case for, where the interposition says something about whatever crossed. Neither
+  subsumes the other.
+- **accepted** · **How broad a `refusal` may be is the project's judgement, and only the root is
+  policed.** `except` matches subclasses, so a `refusal` naming a base class reads every subclass as
+  a refusal — measured on an adopting project's tree, where a base two levels above the real error
+  still passed every case. `Exception` and `BaseException` are refused outright, because at the root
+  it stops being a judgement: every failure is one, so a renamed function or a broken import would
+  read as the code correctly refusing. **Anything narrower is not checked**, and a project that
+  declares a base wider than it means gets a weaker probe with no warning.
+- **accepted** · **A probe arranges nothing; it is handed what to pass.** The construction lives in
+  the project's case supplier, which is right — only the project can build its own objects — but it
+  means a fact that exists only inside a test's own fixtures, with no way to rebuild the inputs
+  outside that test, is still out of reach. ⚑ **This narrows the entry above rather than repeating
+  it**: the interposition cannot construct inputs *at all*, where a probe's project-supplied corpus
+  can, so the shape still unreached is the one whose arrangement cannot leave the test module.
+  Measured at **7 of 125** functions in the suite this was drawn from — the smallest class in it,
+  and the most expensive to reach.
 
 **Where a declaration cannot say what a project means:**
 

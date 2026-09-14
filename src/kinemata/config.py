@@ -82,6 +82,7 @@ from .contract import (
 from .gates import Gate
 from .interpose import Funnel
 from .parity import AUTHORITIES, Oracle, Translation
+from .probe import ACCEPTED_SPELLINGS, OUTCOME_MODES, Outcome, Probe
 from .provenance import DEFAULT_STALE_AFTER, PROVENANCE_REGISTRY
 from .resources import (
     RESOURCE_TABLE,
@@ -223,6 +224,11 @@ class Settings:
     #: declaration rather than the code, so a project with none is not missing
     #: a check on its source.
     shapes: tuple[Shape, ...] = ()
+    #: Probe corpora: what the project's own code must accept and refuse. See
+    #: :mod:`kinemata.probe`. Empty unless declared, and a declared one runs the
+    #: project's code -- which is the same contract every ``module:attribute``
+    #: in this file already carries.
+    probes: tuple[Probe, ...] = ()
     #: Where accepted findings are recorded. Always a path, even when no file is
     #: there yet -- ``baseline --record`` has to know where to write the first
     #: one, and a project that has never recorded is the normal starting state.
@@ -629,6 +635,13 @@ PARITY_KEYS = frozenset(
 )
 SHAPE_KEYS = frozenset({"registry", "rule"})
 INTERPOSE_KEYS = frozenset({"registry", "target", "identify", "record"})
+#: What a ``[[probe]]`` may declare. ``refusal`` and ``accepted`` belong to one
+#: outcome mode each and are refused under the other, so the table is checked
+#: twice: once for a key that means nothing anywhere, once for one that means
+#: nothing *here*.
+PROBE_KEYS = frozenset(
+    {"name", "target", "cases", "outcome", "refusal", "accepted"}
+)
 
 #: Every table a ``kinemata.toml`` may declare. ⚑ **The root was the last table
 #: that absorbed silently, and the worst one to.** A top-level ``[[gates]]`` --
@@ -640,7 +653,7 @@ INTERPOSE_KEYS = frozenset({"registry", "target", "identify", "record"})
 ROOT_KEYS = frozenset(
     {
         "project", "registry", "count", "parity", "shape", "interpose", "gate",
-        "claims", "context", "citations", "promise", "command",
+        "probe", "claims", "context", "citations", "promise", "command",
     }
 )
 
@@ -989,6 +1002,7 @@ def load(path: str | Path) -> Settings:
         "[[parity]]": bool(raw.get("parity")),
         "[[shape]]": bool(raw.get("shape")),
         "[[interpose]]": bool(raw.get("interpose")),
+        "[[probe]]": bool(raw.get("probe")),
         "[[gate]]": bool(raw.get("gate")),
         "[claims]": raw.get("claims") is not None,
         "[context]": raw.get("context") is not None,
@@ -1150,6 +1164,7 @@ def load(path: str | Path) -> Settings:
                                [built.name for built in registries]),
         shapes=_build_shapes(raw.get("shape", []), path,
                              [built.name for built in registries]),
+        probes=_build_probes(raw.get("probe", []), path),
         baseline=root / project.get("baseline", BASELINE_NAME),
         gates=_build_gates(raw.get("gate", []), path),
         unfitted=tuple(unfitted),
@@ -1974,6 +1989,110 @@ def _shape_condition(
             ) from error
 
     return Condition(operator=operator, argument=argument, field=field_name)
+
+
+#: Which key each outcome mode requires, and therefore which the other refuses.
+#: A table rather than a chain of ``if``s, for :data:`SHAPE_CLAIMS`' reason: a
+#: third mode must not be able to arrive without its discriminator.
+_OUTCOME_DISCRIMINATORS = {"raises": "refusal", "returns": "accepted"}
+
+
+def _build_probes(
+    declarations: list[dict[str, Any]], path: Path
+) -> tuple[Probe, ...]:
+    """``[[probe]]`` tables, refused rather than skipped when incomplete.
+
+    **The shapes of ``target``, ``cases`` and ``refusal`` are checked here and
+    none of them is resolved**, which is :func:`_build_funnels`' split and its
+    reason: importing a project's own modules belongs inside a run, not inside
+    every ``kinemata check``.
+
+    ⚑ **Each outcome mode's discriminator is required and the other mode's is
+    refused.** A ``refusal`` beside ``outcome = "returns"`` is a reader's
+    evidence that the config means something it does not, and this package has
+    already paid once for a key that meant nothing being taken for a check that
+    was switched on.
+    """
+    built: list[Probe] = []
+    claimed: dict[str, int] = {}
+    for index, spec in enumerate(declarations):
+        where = f"{path}: [[probe]] {index}"
+        _reject_unknown(spec, PROBE_KEYS, where, absorbs=True)
+        missing = [key for key in ("name", "target", "cases") if not spec.get(key)]
+        if missing:
+            raise ConfigError(f"{where} is missing {', '.join(missing)}")
+
+        name = str(spec["name"]).strip()
+        if name in claimed:
+            raise ConfigError(
+                f"{where} is named {name!r}, which [[probe]] {claimed[name]} "
+                "already is. Names are how a baseline record says which probe "
+                "it belongs to, so two of one name would share a scope."
+            )
+        claimed[name] = index
+
+        for key in ("target", "cases"):
+            module, _, attribute = str(spec[key]).partition(":")
+            if not module.strip() or not attribute.strip():
+                raise ConfigError(
+                    f"{where} names {spec[key]!r} as {key}, which is not a "
+                    f"target. Write {FUNNEL_FORM}."
+                )
+
+        mode = str(spec.get("outcome", "")).strip()
+        if mode not in OUTCOME_MODES:
+            raise ConfigError(
+                f"{where} declares outcome {mode or '(nothing)'!r}, which is "
+                f"not how an answer can be read here "
+                f"(known: {', '.join(OUTCOME_MODES)}). There is deliberately no "
+                "escape to a project predicate: a project supplying the reading "
+                "of an outcome is supplying the verdict."
+            )
+        required = _OUTCOME_DISCRIMINATORS[mode]
+        forbidden = next(
+            value for key, value in _OUTCOME_DISCRIMINATORS.items() if key != mode
+        )
+        if not spec.get(required):
+            raise ConfigError(
+                f'{where} declares outcome "{mode}" and no {required}. It is '
+                "required rather than defaulted: a probe that inherited one "
+                "would be reading the project's answers by a convention nobody "
+                "chose."
+            )
+        if spec.get(forbidden):
+            raise ConfigError(
+                f'{where} declares outcome "{mode}" and {forbidden}, which '
+                f'only outcome "{"raises" if mode == "returns" else "returns"}" '
+                "reads. Nothing here would use it."
+            )
+
+        refusal = str(spec.get("refusal", "")).strip()
+        accepted = str(spec.get("accepted", "")).strip()
+        if mode == "raises":
+            module, _, attribute = refusal.partition(":")
+            if not module.strip() or not attribute.strip():
+                raise ConfigError(
+                    f"{where} names {refusal!r} as refusal, which is not a "
+                    f"target. Write {FUNNEL_FORM}, naming the exception type "
+                    "that means the input was refused."
+                )
+        elif accepted not in ACCEPTED_SPELLINGS:
+            raise ConfigError(
+                f"{where} declares accepted {accepted!r}, which is not one of "
+                f"{', '.join(ACCEPTED_SPELLINGS)}. The value's type is not "
+                "inferred: a callable returning 0 for success and one returning "
+                "0 errors are the same bytes and the opposite meaning."
+            )
+
+        built.append(
+            Probe(
+                name=name,
+                target=str(spec["target"]).strip(),
+                cases=str(spec["cases"]).strip(),
+                outcome=Outcome(mode=mode, refusal=refusal, accepted=accepted),
+            )
+        )
+    return tuple(built)
 
 
 def _build_shapes(
