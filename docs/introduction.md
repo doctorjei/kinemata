@@ -500,7 +500,16 @@ is the one still exempting something real. Records are tagged with the check tha
 so no gate reports another's as fixed — it names them instead, because silence about part of an
 exemption list reads exactly like having accounted for all of it. `kinemata baseline` runs every
 one of those scans, being the only command that writes the file; a `--prune` covering some of
-them would delete the rest's records on the strength of never having looked. Parity's records are
+them would delete the rest's records on the strength of never having looked.
+
+⚑ **Running a scan is not the same as the scan answering, and `--record` and `--prune` refuse
+(exit 2) while any declared oracle is blocked.** An oracle that is not installed on this machine
+produces no findings, which is indistinguishable from a tree where it found none — so a rebuild
+from that run drops every record it was covering, and the message says the findings are no longer
+present. Measured rather than reasoned about: a parity oracle pointed at a command that does not
+exist dropped a recorded exemption and reported it as fixed. The cost is that a machine missing a
+declared command cannot re-record; that is the intended trade, because the alternative is losing
+an exemption list to an absent binary. Parity's records are
 tagged `parity:<registry>:undeclared` and `parity:<registry>:unproduced`, and **both scopes are
 reported as judged on every run, including the empty ones** — a direction that found nothing is
 still a direction that looked. A declaration comparing values adds a third,

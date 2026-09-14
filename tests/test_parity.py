@@ -661,6 +661,54 @@ def test_the_baseline_writer_runs_the_parity_scan(tmp_path, capsys):
     )
 
 
+def test_a_blocked_oracle_refuses_to_rewrite_the_baseline(tmp_path, capsys):
+    """A machine that merely lacks the command must not delete the exemptions.
+
+    Running every scan is half the guarantee. An oracle that cannot answer
+    produces no findings, which reads exactly like a tree where it found none,
+    and both `--record` and `--prune` rebuild the file from what the run
+    produced.
+    """
+    from kinemata.baseline import Baseline
+
+    declare(tmp_path, declared=("app.name", "app.legacy"))
+    main(["baseline", "-c", cfg(tmp_path), "--record", "--until", "2099-01-01"])
+    capsys.readouterr()
+
+    body = (tmp_path / "kinemata.toml").read_text().replace(
+        '"{python}", "-c"', '"definitely-not-a-command-here", "-c"'
+    )
+    (tmp_path / "kinemata.toml").write_text(body)
+
+    assert main(["baseline", "-c", cfg(tmp_path), "--prune"]) == 2
+    assert "BLOCKED" in capsys.readouterr().err
+    assert Baseline.load(tmp_path / ".kinemata-baseline.json").size == 1
+
+
+def test_a_blocked_oracle_refuses_to_record_too(tmp_path, capsys):
+    """`--record` rebuilds the file from this run, so it loses them the same way."""
+    declare(tmp_path, declared=("app.name", "app.legacy"))
+    body = (tmp_path / "kinemata.toml").read_text().replace(
+        '"{python}", "-c"', '"definitely-not-a-command-here", "-c"'
+    )
+    (tmp_path / "kinemata.toml").write_text(body)
+    assert main(
+        ["baseline", "-c", cfg(tmp_path), "--record", "--until", "2099-01-01"]
+    ) == 2
+
+
+def test_a_blocked_oracle_still_shows_the_baseline(tmp_path, capsys):
+    """Reading is not writing: the refusal is about rewriting the file."""
+    declare(tmp_path, declared=("app.name", "app.legacy"))
+    main(["baseline", "-c", cfg(tmp_path), "--record", "--until", "2099-01-01"])
+    body = (tmp_path / "kinemata.toml").read_text().replace(
+        '"{python}", "-c"', '"definitely-not-a-command-here", "-c"'
+    )
+    (tmp_path / "kinemata.toml").write_text(body)
+    capsys.readouterr()
+    assert main(["baseline", "-c", cfg(tmp_path)]) == 0
+
+
 # -- values, end to end through the command -----------------------------------
 
 

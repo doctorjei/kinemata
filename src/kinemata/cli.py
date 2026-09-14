@@ -1670,6 +1670,11 @@ def cmd_baseline(args: argparse.Namespace) -> int:
     command that writes the file. ``check`` and ``claims`` each cover their own
     half and are scoped accordingly; a ``--prune`` that covered only one half
     would delete the other's records on the strength of never having looked.
+
+    ⚑ **And running a check is not the same as the check answering**, which is
+    the other half of the same guarantee: a write is refused outright while any
+    declared oracle is blocked. See the guard below for what that costs and why
+    it is worth it.
     """
     if args.record and args.prune:
         print("error: --record and --prune do different things; pick one",
@@ -1699,8 +1704,11 @@ def cmd_baseline(args: argparse.Namespace) -> int:
     #
     # Guarded the way the citation catch is, so `baseline -r claims` shows the
     # documentation half alone.
+    stalled: list[str] = []
     if args.registry in (None, CLAIMS_REGISTRY):
-        findings += _verify(args, settings).findings()
+        verified = _verify(args, settings)
+        findings += verified.findings()
+        stalled += verified.blocked
 
     # Catch A, for the same reason and with the same cost. Added 2026-09-13 when
     # the catch was ratcheted: a finding source the writing command does not run
@@ -1717,11 +1725,29 @@ def cmd_baseline(args: argparse.Namespace) -> int:
     # commands, so this is the second place `baseline` spawns a subprocess --
     # accepted knowingly, because a scan that does not run cannot author the
     # exemptions it is about to rewrite.
-    findings += [
-        finding
-        for result in _parity(args, settings, _target(args, settings))
-        for finding in result.findings()
-    ]
+    for result in _parity(args, settings, _target(args, settings)):
+        findings += result.findings()
+        if result.blocked:
+            stalled.append(f"{result.registry}: {result.blocked}")
+
+    # **A scan that could not run must not author the list.** Running every
+    # check is only half the guarantee: an oracle that is not installed here
+    # produces no findings, which is indistinguishable from a tree where it
+    # found nothing -- and both `--record` and `--prune` rebuild the file from
+    # what this run produced, so every record that oracle was covering is
+    # deleted by a machine that merely lacks the command. Measured, not
+    # reasoned about: a broken parity oracle dropped a recorded exemption and
+    # reported it as no longer present.
+    if stalled and (args.record or args.prune):
+        print(
+            "error: refusing to rewrite the baseline while a declared oracle "
+            "cannot answer. Its records would be dropped as though the "
+            "findings were fixed:",
+            file=sys.stderr,
+        )
+        for why in stalled:
+            print(f"  BLOCKED: {why}", file=sys.stderr)
+        return 2
 
     try:
         baseline = Baseline.load(settings.baseline)
