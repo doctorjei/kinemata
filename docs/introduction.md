@@ -1277,11 +1277,28 @@ down, and the two shapes at the end are the findings that matter most.
   declared `separator` composes an identifier out of two key levels, so a cell of a matrix is an
   entry a rule can speak about. **What that costs every consumer of a registry is documented where
   the key is introduced**, and it is not nothing: a composite identifier does not occur in the code.
-  ⚑ **One residual, and it is the rule language rather than the adapter.** A flattened id makes each
-  cell an entry, which answers a claim about **the whole set** of cells. A claim about *each
-  first-level key's group* — "every row's columns are exactly the relations axis" — is a different
-  question, and there is no per-group set operator. Recorded as a rule-language limit rather than
-  quietly reclassified, because the adapter now reaches what the measurement said it would.
+  ⚑ **One residual is the rule language rather than the adapter, and it has its own entry below.**
+  Recorded separately rather than quietly reclassified, because the adapter reaches exactly what the
+  measurement said it would.
+- **accepted** · **A rule speaks about the selected set, not about each group within it.** With a
+  flattened registry every cell of a matrix is an entry, so a rule can claim something about *all*
+  cells. *"Every row's columns are exactly the relations axis"* is a claim about **each first-level
+  key's group**, and there is no per-group set operator: a rule has one guard and one claim over
+  whatever the guard selected.
+  ⚑ **Measured rather than estimated, because the number decides whether it is worth building: of
+  the 10 rules needing a flattened view, exactly one needs grouping** —
+  `test_every_row_carries_exactly_the_relation_columns`, which is parametrized per row and asserts
+  the row's column set equals a declared axis. One of the 28 reachable rules overall.
+  ⚑ **The near-miss is worth naming, because it looks like a second case and is not.**
+  *"`append` appears on copy rows only, and somewhere"* collects the first-level keys of every cell
+  holding one value and asks whether they sit inside a named set. That is a claim about each
+  entry's identifier plus a non-emptiness claim, both of which a rule states today — the second
+  being exactly the anti-vacuity check `shape` already performs.
+  ⚑ **So this is undone rather than unreachable, and deliberately undone at one measured rule.**
+  What it would take is a way to partition the selected entries and apply the claim per partition,
+  with vacuity counted per group rather than once — the group key coming from a project-supplied
+  predicate, on the precedent the tier-4 escape already sets, rather than from an expression
+  language this package has refused once already.
 - **~~A project cannot supply its own registry adapter from `kinemata.toml`.~~** True until
   2026-09-09, and the first thing the first outside audit found: `config.BUILDERS` was a fixed
   table of kinds with no plugin path, so the `declared()` override the contract invites was
