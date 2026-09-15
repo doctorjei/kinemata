@@ -69,8 +69,42 @@ DIRECTIONS = ("undeclared", "unproduced")
 #: cannot judge is a set of records ``--prune`` deletes in silence.
 VALUE_DIRECTION = "divergent"
 
+#: On both sides, where the declaration claims nothing is. Its own scope for
+#: the reason :data:`VALUE_DIRECTION` is: only a ``disjoint`` run judges it, and
+#: a scope a run cannot judge is a set of records ``--prune`` deletes in
+#: silence.
+OVERLAP_DIRECTION = "overlapping"
+
 #: Every scope a parity run can produce.
-SCOPES = (*DIRECTIONS, VALUE_DIRECTION)
+SCOPES = (*DIRECTIONS, VALUE_DIRECTION, OVERLAP_DIRECTION)
+
+#: What a declaration claims about the two sets. ``equal`` is what this
+#: mechanism did before there was a choice, and is the default.
+#:
+#: Spelled as the claim rather than as a subtraction from ``equal`` -- not
+#: ``direction = "one"`` -- because membership otherwise *means* "and there is
+#: nothing else", and a reader of a config has to be able to see that a
+#: particular parity is not closed-world. The first sketch of this key was a
+#: direction and reached one of the three rows that wanted it: a disjointness is
+#: not a direction.
+RELATIONS = ("equal", "declared_contains", "produced_contains", "disjoint")
+
+#: Which membership sets a relation calls a finding. Everything not named here
+#: is computed and then *expected*, which is the whole point of the key.
+RELATION_FINDS: dict[str, tuple[str, ...]] = {
+    "equal": DIRECTIONS,
+    "declared_contains": ("undeclared",),
+    "produced_contains": ("unproduced",),
+    "disjoint": (OVERLAP_DIRECTION,),
+}
+
+#: What each relation claims, in the words a refusal and a report use.
+RELATION_SAYS = {
+    "equal": "the declaration and the code name the same identifiers",
+    "declared_contains": "every identifier the code produces is declared",
+    "produced_contains": "every identifier declared is produced by the code",
+    "disjoint": "no identifier is both declared and produced",
+}
 
 #: Which side of a value comparison is the claim. Required of a declaration
 #: that compares values and meaningless without one: see :class:`Divergence`.
@@ -199,6 +233,10 @@ class Oracle:
     #: ``docs/introduction.md`` [0TN7FP9-Pa0004] § Known limits, where the reach
     #: of one translation is measured and dispositioned.
     translate: Translation | None = None
+    #: What this declaration claims about the two sets, from :data:`RELATIONS`.
+    #: ``equal`` is the default and is what every parity meant before the key
+    #: existed, so no declaration written without it changes.
+    relation: str = "equal"
 
 
 def _listed(values: Iterable[str]) -> str:
@@ -221,6 +259,8 @@ class Disagreement:
     def __str__(self) -> str:
         if self.direction == "undeclared":
             return f"{self.identifier}: produced, declared by nothing"
+        if self.direction == OVERLAP_DIRECTION:
+            return f"{self.identifier}: declared and produced, where neither may be"
         return f"{self.identifier}: declared, produced by nothing"
 
     def finding(self) -> Bypass:
@@ -338,6 +378,13 @@ class Parity:
     produced: int = 0
     undeclared: tuple[str, ...] = ()
     unproduced: tuple[str, ...] = ()
+    #: On both sides. Only ever populated by a ``disjoint`` run, where being on
+    #: both sides is the mistake; under every other relation an identifier both
+    #: sides carry is the agreement being looked for.
+    overlapping: tuple[str, ...] = ()
+    #: What the declaration claimed about the two sets, which decides which of
+    #: the sets above are findings and which are expected.
+    relation: str = "equal"
     #: Entries both sides carry and disagree about, empty when the declaration
     #: named no field to compare.
     divergent: tuple[Divergence, ...] = ()
@@ -348,15 +395,21 @@ class Parity:
 
     @property
     def failed(self) -> bool:
-        return bool(
-            self.blocked or self.undeclared or self.unproduced or self.divergent
-        )
+        return bool(self.blocked or self.disagreements() or self.divergent)
 
     def disagreements(self) -> list[Disagreement]:
-        """The membership half, in both directions."""
+        """The membership half, in whichever directions this relation calls a
+        mistake.
+
+        A set the relation does not name is still computed -- it is the shape of
+        the claim, not a filter on the output -- and is *expected* rather than
+        suppressed: under ``declared_contains`` a declared identifier the code
+        never produces is the declaration being allowed to name more, which is
+        the whole reason somebody wrote that relation down.
+        """
         return [
             Disagreement(self.registry, identifier, direction)
-            for direction in DIRECTIONS
+            for direction in RELATION_FINDS[self.relation]
             for identifier in getattr(self, direction)
         ]
 
@@ -383,8 +436,19 @@ class Parity:
         **The value scope only when a field was compared**, for the same reason
         read the other way -- a membership-only run has not looked at value
         records and must not be counted as having found them gone.
+
+        ⚑ **Both membership directions are claimed under every relation**, not
+        only the ones it calls findings. The run computed both sets and ruled on
+        them, so records that stopped being findings because the relation
+        changed are correctly pruned -- that is the claim moving, not a scope
+        going unexamined. **``overlapping`` is the exception**: only a
+        ``disjoint`` run is in a position to judge it.
         """
-        names = (*DIRECTIONS, VALUE_DIRECTION) if self.compared else DIRECTIONS
+        names = [*DIRECTIONS]
+        if self.relation == "disjoint":
+            names.append(OVERLAP_DIRECTION)
+        if self.compared:
+            names.append(VALUE_DIRECTION)
         return tuple(parity_scope(self.registry, name) for name in names)
 
 
@@ -534,6 +598,22 @@ def compare(
     permissive one, because a vacuous run and a clean run read identically.
     Making membership part of the shape means nobody has to remember the rule.
     """
+    if spec.relation not in RELATIONS:
+        raise ValueError(
+            f"unknown parity relation: {spec.relation!r} "
+            f"(known: {', '.join(RELATIONS)})"
+        )
+    if spec.field and spec.relation != "equal":
+        # The config refuses this first; this is the second answer, for a caller
+        # assembling specs itself. A value comparison pairs identifiers both
+        # sides carry: under `disjoint` there are none by construction, and
+        # under a containment the pairing is defined only over the intersection,
+        # which is a claim nothing has asked for.
+        raise ValueError(
+            f"a parity claiming {spec.relation!r} cannot also compare "
+            f"{spell_path(spec.field)!r}: a value comparison needs identifiers "
+            "on both sides, which is the thing this relation is about"
+        )
     if spec.field and spec.authority not in AUTHORITIES:
         # The config layer refuses this first; this is the second answer, for a
         # caller assembling specs itself. A value divergence with no
@@ -554,17 +634,44 @@ def compare(
         entry.id if spec.field else translate.apply(entry.id) for entry in entries
     }
     if printed is None:
-        return Parity(registry=spec.registry, blocked=why, declared=len(declared))
+        return Parity(
+            registry=spec.registry,
+            blocked=why,
+            declared=len(declared),
+            relation=spec.relation,
+        )
+
+    # An oracle that produced nothing satisfies `declared_contains` and
+    # `disjoint` by having nothing to violate them with, and a vacuous run reads
+    # exactly like a clean one. `equal` needs no such rule -- an empty side puts
+    # every declared identifier in `unproduced` and fails loudly -- which is why
+    # this guard arrived with the relations rather than before them. Applied to
+    # `produced_contains` too, where it is not strictly needed: the rule is
+    # easier to hold without an exception, and it turns a pile of findings into
+    # the one diagnosis that explains them.
+    if spec.relation != "equal" and not printed.ids:
+        return Parity(
+            registry=spec.registry,
+            blocked=(
+                f"claims {RELATION_SAYS[spec.relation]}, and its oracle produced "
+                "no identifiers at all. Nothing can violate that, so the run "
+                "would pass by looking at nothing"
+            ),
+            declared=len(declared),
+            relation=spec.relation,
+        )
 
     membership = dict(
         undeclared=tuple(sorted(printed.ids - declared)),
         unproduced=tuple(sorted(declared - printed.ids)),
+        overlapping=tuple(sorted(declared & printed.ids)),
     )
     if not spec.field:
         return Parity(
             registry=spec.registry,
             declared=len(declared),
             produced=len(printed.ids),
+            relation=spec.relation,
             **membership,
         )
 
@@ -587,6 +694,7 @@ def compare(
                 declared=len(declared),
                 produced=len(printed.ids),
                 compared=spell_path(spec.field),
+                relation=spec.relation,
                 **membership,
             )
         theirs = values[entry.id]
@@ -608,6 +716,7 @@ def compare(
         produced=len(printed.ids),
         divergent=tuple(divergent),
         compared=spell_path(spec.field),
+        relation=spec.relation,
         **membership,
     )
 

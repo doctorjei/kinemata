@@ -43,6 +43,20 @@ this one is invisible to it until it is renamed.
   that reaches nothing, or that descends through a scalar, reads as *no value declared* rather
   than as an error, so a table mixing scalar and nested rows stays readable.
 
+- `[[parity]]` takes a `relation`, saying what the two sets are claimed to be:
+  `equal` (the default, and what every parity meant before the key existed),
+  `declared_contains`, `produced_contains`, or `disjoint`. Membership could previously claim only
+  that the two sets were the same, so a declaration that legitimately names more than the code
+  produces — a deny list, a set of rows the code must *not* emit — had to accept the difference
+  into the baseline, which is an exemption list standing in for a claim and needs a re-record every
+  time a row lands. Measured on a real conformance row: a deny block of eight against a code
+  constant of one is **7 findings under `equal` and clean under `declared_contains`**.
+  It is spelled as the claim rather than as a direction switched off, because membership otherwise
+  means "and there is nothing else" and a reader has to be able to see that a parity is not
+  closed-world. A relation other than `equal` **fails a run whose oracle produced nothing** —
+  `declared_contains` and `disjoint` are both satisfied by an oracle with nothing to violate them —
+  and cannot be combined with `field`, a value comparison needing identifiers on both sides.
+
 **Changed**
 
 - `kinemata review` and `kinemata check` report how many f-strings a `match_mode = "strings"`

@@ -83,7 +83,7 @@ from .contract import (
 )
 from .gates import Gate
 from .interpose import Funnel
-from .parity import AUTHORITIES, Oracle, Translation
+from .parity import AUTHORITIES, RELATIONS, Oracle, Translation
 from .probe import ACCEPTED_SPELLINGS, OUTCOME_MODES, Outcome, Probe
 from .provenance import DEFAULT_STALE_AFTER, PROVENANCE_REGISTRY
 from .resources import (
@@ -641,7 +641,7 @@ COUNT_KEYS = frozenset(
 PARITY_KEYS = frozenset(
     {
         "command", "run", "args", "directory", "registry", "extract", "field",
-        "authority", "translate",
+        "authority", "translate", "relation",
     }
 )
 SHAPE_KEYS = frozenset({"registry", "rule"})
@@ -1846,6 +1846,25 @@ def _build_parities(
                 "authoritative side is a finding nobody can act on."
             )
 
+        relation = str(spec.get("relation", "equal"))
+        if relation not in RELATIONS:
+            raise ConfigError(
+                f"{path}: [[parity]] {index} declares relation {relation!r}; "
+                f"it must be one of {', '.join(RELATIONS)}."
+            )
+        # A value comparison pairs identifiers both sides carry. Under
+        # `disjoint` there are none by construction, and under a containment the
+        # pairing is defined only over the intersection -- a claim nothing has
+        # asked for, and a capability with no reader is one this project
+        # declines rather than ships.
+        if value_field and relation != "equal":
+            raise ConfigError(
+                f"{path}: [[parity]] {index} claims relation {relation!r} and "
+                f"also compares the {spell_path(value_field)!r} field. A value "
+                "comparison needs identifiers on both sides, which is the thing "
+                "this relation is about. Declare one or the other."
+            )
+
         argv += _argv(spec.get("args"), f"{path}: [[parity]] {index}", "args")
         built.append(
             Oracle(
@@ -1856,6 +1875,7 @@ def _build_parities(
                 field=value_field,
                 authority=authority,
                 translate=_build_translation(spec.get("translate"), path, index),
+                relation=relation,
             )
         )
     return tuple(built)

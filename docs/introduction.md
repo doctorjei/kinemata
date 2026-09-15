@@ -258,6 +258,31 @@ authority = "declared"
 pattern = '/$'              # the manifest writes a directory prefix with a
 replacement = ''            # trailing separator; the code carries none
 
+# `relation` says what the two sets are claimed to be. Without it a parity
+# means `equal`, which is what it has always meant. The others are weaker or
+# inverted claims, spelled as what IS claimed rather than as a direction
+# switched off -- membership otherwise means "and there is nothing else", and a
+# reader has to be able to see that a particular parity is not closed-world.
+#
+#   equal              the same identifiers on both sides          (the default)
+#   declared_contains  every identifier the code produces is declared;
+#                      the declaration may name more
+#   produced_contains  every identifier declared is produced;
+#                      the code may produce more
+#   disjoint           no identifier is on both sides -- for a declaration that
+#                      says what the code must NOT emit
+#
+# A relation other than `equal` REFUSES a run whose oracle produced nothing:
+# `declared_contains` and `disjoint` are both satisfied by an oracle with
+# nothing to violate them, and a vacuous run reads exactly like a clean one.
+# It also cannot be combined with `field` -- a value comparison pairs
+# identifiers both sides carry, which is the thing a relation is about.
+[[parity]]
+registry = "denials"
+relation = "declared_contains"
+command = ["{python}", "-c", "import pkg; print(pkg.META_FILE)"]
+extract = '(?m)^(\S+)$'
+
 # Rules a declaration must satisfy about ITSELF -- the one check whose subject
 # is the declared document rather than the code. A rule is a `name`, a guard
 # (`when`, optional) and exactly one claim; one registry, one block.

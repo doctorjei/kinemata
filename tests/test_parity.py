@@ -940,3 +940,136 @@ def test_a_divergence_that_changes_re_fires_after_recording(tmp_path, capsys):
     declare_values(tmp_path, prints=(("app.name", "something-else"),))
     assert main(["parity", "-c", cfg(tmp_path)]) == 1
     assert "something-else" in capsys.readouterr().out
+
+
+# -- what the two sets are claimed to be --------------------------------------
+#
+# The key exists because membership could claim exactly one thing -- that the
+# sets are equal -- and three of an adopter's conformance rows want a weaker or
+# an inverted relation. The hazard here is the mirror of the direction hazard
+# above: a relation that suppressed the wrong set would pass on the mistake it
+# was declared to catch, and a relation with no anti-vacuity rule passes on an
+# oracle that printed nothing at all.
+
+
+def test_a_containment_does_not_report_the_side_it_allows(tmp_path, capsys):
+    """`declared_contains` is "the declaration may name more", and must not
+    then report the extras it just permitted."""
+    declare(
+        tmp_path,
+        declared=("app.name", "app.extra"),
+        prints=("app.name",),
+        extra='relation = "declared_contains"',
+    )
+    assert main(["parity", "-c", cfg(tmp_path)]) == 0
+    assert "every identifier the code produces is declared" in capsys.readouterr().out
+
+
+def test_a_containment_still_reports_the_side_it_claims(tmp_path, capsys):
+    """The negative control, and the one that matters: the relation is not a
+    way to turn the check off."""
+    declare(
+        tmp_path,
+        declared=("app.name",),
+        prints=("app.name", "app.surprise"),
+        extra='relation = "declared_contains"',
+    )
+    assert main(["parity", "-c", cfg(tmp_path)]) == 1
+    assert "app.surprise: produced, declared by nothing" in capsys.readouterr().out
+
+
+def test_the_other_containment_reports_the_other_side(tmp_path, capsys):
+    declare(
+        tmp_path,
+        declared=("app.name", "app.missing"),
+        prints=("app.name",),
+        extra='relation = "produced_contains"',
+    )
+    assert main(["parity", "-c", cfg(tmp_path)]) == 1
+    assert "app.missing: declared, produced by nothing" in capsys.readouterr().out
+
+
+def test_disjoint_reports_what_is_on_both_sides(tmp_path, capsys):
+    """The inverted claim: these are the rows the code must NOT produce."""
+    declare(
+        tmp_path,
+        declared=("app.name",),
+        prints=("app.name",),
+        extra='relation = "disjoint"',
+    )
+    assert main(["parity", "-c", cfg(tmp_path)]) == 1
+    assert "app.name: declared and produced, where neither may be" in (
+        capsys.readouterr().out
+    )
+
+
+def test_disjoint_is_clean_when_the_code_produces_something_else(tmp_path):
+    declare(
+        tmp_path,
+        declared=("app.name",),
+        prints=("app.other",),
+        extra='relation = "disjoint"',
+    )
+    assert main(["parity", "-c", cfg(tmp_path)]) == 0
+
+
+@pytest.mark.parametrize(
+    "relation", ["declared_contains", "produced_contains", "disjoint"]
+)
+def test_a_relation_blocks_when_the_oracle_produced_nothing(relation, tmp_path):
+    """🛑 The anti-vacuity rule, written before the capability existed.
+
+    `declared_contains` and `disjoint` are both satisfied by an oracle with
+    nothing to violate them, and a vacuous run reads exactly like a clean one --
+    the permissive-oracle hazard an adopting project ruled out in August. Under
+    `equal` no such rule is needed, since an empty side puts every declared
+    identifier in `unproduced` and fails loudly; the rule covers
+    `produced_contains` anyway, because one without an exception is easier to
+    hold and it turns a pile of findings into the diagnosis behind them.
+    """
+    declare(tmp_path, prints=(), extra=f'relation = "{relation}"')
+    assert main(["parity", "-c", cfg(tmp_path)]) == 1
+
+
+def test_equal_is_the_default_and_did_not_move(tmp_path):
+    """Every declaration written before the key meant `equal`, so the absence
+    of the key has to keep meaning exactly what it did."""
+    declare(tmp_path, declared=("app.name", "app.extra"), prints=("app.name",))
+    assert main(["parity", "-c", cfg(tmp_path)]) == 1
+    assert oracle().relation == "equal"
+
+
+def test_only_a_disjoint_run_claims_the_overlap_scope(tmp_path):
+    """A scope a run cannot judge is a set of records `--prune` deletes in
+    silence, so `overlapping` is claimed by the one relation that rules on it --
+    while both membership directions are claimed under every relation, the run
+    having computed and ruled on both.
+    """
+    equal = compare(*_registry_and(tmp_path, "equal"))
+    disjoint = compare(*_registry_and(tmp_path, "disjoint"))
+    assert parity_scope("keyspace", "overlapping") not in equal.scopes()
+    assert parity_scope("keyspace", "overlapping") in disjoint.scopes()
+    for result in (equal, disjoint):
+        assert parity_scope("keyspace", "undeclared") in result.scopes()
+        assert parity_scope("keyspace", "unproduced") in result.scopes()
+
+
+def _registry_and(tmp_path, relation):
+    declare(tmp_path)
+    settings = load(cfg(tmp_path))
+    registry = next(r for r in settings.registries if r.name == "keyspace")
+    return registry, oracle(relation=relation), tmp_path
+
+
+def test_an_unknown_relation_is_refused_by_name(tmp_path):
+    declare(tmp_path, extra='relation = "sort-of-equal"')
+    with pytest.raises(ConfigError, match="sort-of-equal"):
+        load(cfg(tmp_path))
+
+
+def test_a_relation_and_a_value_comparison_are_refused_together(tmp_path):
+    """A value comparison pairs identifiers both sides carry, which is the
+    thing a relation other than `equal` is about."""
+    declare_values(tmp_path, extra='relation = "disjoint"')
+    with pytest.raises(ConfigError, match="identifiers on both sides"):
+        load(cfg(tmp_path))

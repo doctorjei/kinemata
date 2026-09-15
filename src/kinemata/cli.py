@@ -67,7 +67,7 @@ from .contract import BaseRegistry, Entry
 from .exclusion import audit, excluded, relative_paths
 from .gates import WORKFLOW_DIR, enforced
 from .literals import clusters
-from .parity import Disagreement, Divergence, Parity
+from .parity import RELATION_SAYS, Disagreement, Divergence, Parity
 from .parity import survey as parity_survey
 from .probe import Mismatch, Probed
 from .probe import survey as probe_survey
@@ -839,9 +839,18 @@ def cmd_parity(args: argparse.Namespace) -> int:
                 # membership-only run print the same clean line otherwise, and
                 # the difference is the whole reason one of them was declared.
                 also = f", agreeing on {result.compared}" if result.compared else ""
+                # And *which claim* held, for the same reason one step further
+                # out: a containment and an equality both print "in agreement"
+                # while meaning different things, and the weaker one is the one
+                # a reader most needs told, since it is not closed-world.
+                held = (
+                    "in agreement"
+                    if result.relation == "equal"
+                    else RELATION_SAYS[result.relation]
+                )
                 print(
                     f"# {result.registry}: {result.declared} declared, "
-                    f"{result.produced} produced, in agreement{also}."
+                    f"{result.produced} produced, {held}{also}."
                 )
             continue
         print(f"# {result.registry}")
