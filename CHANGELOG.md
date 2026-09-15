@@ -66,6 +66,17 @@ this one is invisible to it until it is renamed.
   the typo disarmed the writer as well. The `[command]` table already refused this; the inline
   spellings on `[[count]]` and `[[parity]]` now do too. Note that `[[gate]]` takes a string
   deliberately, so the key's name does not tell you which form it wants.
+- A claim or citation was dropped without a word when a negation appeared on the line above it, or
+  in the sentence before it. Two bounds were wrong. The window limiting how far back a negation
+  reaches was measured separately on each line and the two were concatenated, so a 45-character
+  rule looked back as far as 91; and a full stop did not end a negation's clause, so "there is no
+  compatibility read. The loader is `a.py`" stopped checking `a.py`. Both are fixed, and an
+  abbreviation — `e.g.`, `etc.` — is not read as the end of a sentence.
+  **This makes the documentation and citation checks report more, not less.** A tree that was
+  green may now have findings, and they are not new text: they were always there and never
+  visible, because a dropped claim makes a check pass. On this repository the claims check went
+  from 99 to 113 and six citations came out from under it, all pre-existing. Expect to accept them
+  into your baseline rather than to fix them.
 
 ## 0.1.0a2.dev1
 
