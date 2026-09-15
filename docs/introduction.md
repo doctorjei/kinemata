@@ -22,9 +22,11 @@ pip install kinemata          # or kinemata[yaml] for kind = "yaml-mapping"
 pip install -e ".[dev]"       # working on kinemata itself, from a clone
 ```
 
-⚑ **Pin the version.** `0.1.0` is the first release that is not a pre-release, so a plain install
-resolves here rather than to one of the alphas before it. The interfaces are still not settled —
-this is a `0.x` — and an unpinned dependency changes meaning without changing spelling.
+⚑ **Pin the version.** Final releases exist, so a plain install resolves to the newest one rather
+than to a pre-release — pip skips pre-releases only while some other version satisfies the
+requirement. The interfaces are still not settled — this is a `0.x` — and an unpinned dependency
+changes meaning without changing spelling. The index says what is published; this sentence
+deliberately does not.
 
 ---
 

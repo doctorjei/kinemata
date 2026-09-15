@@ -9,6 +9,14 @@ a project outside this repository runs against kinemata and upgrades between pub
 Commits are in `git log`; the reasoning behind a design decision stays in the document that
 carries the decision. A changelog repeating either becomes a second carrier and goes stale.
 
+## Unreleased
+
+**Fixed**
+
+- The reference sheet's pin advice named the version a plain install resolves to, which every
+  release falsifies. It states the pip mechanism now and points at the index, as the README
+  already did.
+
 ## 0.1.1
 
 **New**
