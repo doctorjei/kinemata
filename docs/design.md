@@ -92,6 +92,13 @@ config names the field or no field is read, no meaning is attached to the name, 
 field stays untouched. That is the same bargain `machinery` and `clause_field` already strike —
 the project says which of its own fields answers a question the contract poses.
 
+⚑ **A field may be named by a path since 2026-09-15** — `field = ["default", "primary"]` reaches
+one arm of a nested map — and the bargain above is unchanged: the config still names it and the
+structure still guesses nothing. **A bare string stays exactly one key, however many dots it
+holds.** Splitting one would be the guess, and `extra` keys legitimately contain dots: this
+project's first adopter declares identifiers spelled `workset.boxes`. A guess that is wrong here
+does not fail — it compares the wrong cell and passes.
+
 ### 4.2 Derived, with overrides
 
 These have default implementations built from `entries()`. A registry overrides one

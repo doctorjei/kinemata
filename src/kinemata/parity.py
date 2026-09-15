@@ -49,7 +49,7 @@ from pathlib import Path
 
 from .bypass import Bypass
 from .claims import ORACLE_TIMEOUT, run_oracle
-from .contract import Entry, Registry
+from .contract import MISSING, Entry, Registry, at_path, field_path, spell_path
 
 #: The name parity findings travel under in a baseline record, so a reader can
 #: tell which scan produced an exemption and no scan reports another's records
@@ -180,7 +180,12 @@ class Oracle:
     #: ``type`` -- and ``extra`` is where a project's own fields already ride.
     #: **kinemata never picks the field**; a config names it or no value is
     #: compared.
-    field: str = ""
+    #:
+    #: A key, or a **path** into ``extra`` written as a list --
+    #: ``["default", "primary"]`` reaches the ``primary`` arm of a mode-keyed
+    #: map. A bare string is one key however many dots it holds; see
+    #: :func:`kinemata.contract.field_path`.
+    field: str | tuple[str, ...] = ""
     #: Which side is the claim, from :data:`AUTHORITIES`. Required alongside
     #: :attr:`field` and optional without it.
     authority: str = ""
@@ -434,7 +439,8 @@ def produced(
         return None, "has an extract with no capture group"
     if spec.field and pattern.groups < 2:
         return None, (
-            f"compares the {spec.field!r} field but its extract has one capture "
+            f"compares the {spell_path(spec.field)!r} field but its extract has one "
+            "capture "
             "group; group 1 is the identifier and group 2 is its value"
         )
     matches = list(pattern.finditer(output))
@@ -473,7 +479,13 @@ def _declared_values(
     has an internal order and a spelling no two sides agree on by accident, so
     ``str``-ing it would be a normalization that does not fail -- it passes.
     """
-    raw = entry.extra.get(spec.field)
+    found = at_path(entry.extra, field_path(spec.field))
+    # A path reaching nothing and a declared ``null`` collapse here, and did
+    # before paths existed: for a comparison, "this row has no such arm" and
+    # "this row declares nothing there" are the same claim. The distinction
+    # :data:`~kinemata.contract.MISSING` keeps is for a *selector*, where it
+    # decides membership rather than a value.
+    raw = None if found is MISSING else found
     if raw is None:
         return frozenset(), True, ""
     items = list(raw) if isinstance(raw, (list, tuple)) else [raw]
@@ -481,7 +493,8 @@ def _declared_values(
     if any(item is None for item in rendered):
         kinds = ", ".join(sorted({type(item).__name__ for item in items}))
         return None, False, (
-            f"declares {entry.id} with a {spec.field!r} holding {kinds}, which "
+            f"declares {entry.id} with a {spell_path(spec.field)!r} holding {kinds}, "
+            "which "
             "is not a scalar or a list of them and has no spelling an oracle "
             "could be expected to print"
         )
@@ -526,7 +539,7 @@ def compare(
         # caller assembling specs itself. A value divergence with no
         # authoritative side is two strings and no claim.
         raise ValueError(
-            f"a parity comparing {spec.field!r} needs an authority "
+            f"a parity comparing {spell_path(spec.field)!r} needs an authority "
             f"({' or '.join(AUTHORITIES)}): which side is the claim is a "
             "property of the row and cannot be inferred"
         )
@@ -573,7 +586,7 @@ def compare(
                 blocked=problem,
                 declared=len(declared),
                 produced=len(printed.ids),
-                compared=spec.field,
+                compared=spell_path(spec.field),
                 **membership,
             )
         theirs = values[entry.id]
@@ -582,7 +595,7 @@ def compare(
                 Divergence(
                     registry=spec.registry,
                     identifier=entry.id,
-                    field=spec.field,
+                    field=spell_path(spec.field),
                     authority=spec.authority,
                     declared=tuple(sorted(mine)),
                     produced=tuple(sorted(theirs)),
@@ -594,7 +607,7 @@ def compare(
         declared=len(declared),
         produced=len(printed.ids),
         divergent=tuple(divergent),
-        compared=spec.field,
+        compared=spell_path(spec.field),
         **membership,
     )
 

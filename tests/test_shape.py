@@ -84,6 +84,42 @@ def test_present_and_absent_read_a_field_by_name():
     assert [hit.name for hit in got.violations] == ["a"]
 
 
+def test_present_and_absent_read_a_path_into_a_nested_field():
+    """A guard has to be able to say *"has a primary arm under default"*: the
+    adopter's manifest states 18 of its 99 rows as a mode-keyed map and 47 as a
+    scalar, so *"has a default"* selects both and discriminates nothing."""
+    rows = (
+        entry("mode_keyed", default={"primary": "x", "named": "y"}),
+        entry("uniform", default="x"),
+        entry("bare"),
+    )
+    got = judge(rule(claim=Condition("present", ("default", "primary"))), *rows)
+    assert [hit.name for hit in got.violations] == ["uniform", "bare"]
+    got = judge(rule(claim=Condition("absent", ("default", "primary"))), *rows)
+    assert [hit.name for hit in got.violations] == ["mode_keyed"]
+
+
+def test_a_field_path_reads_a_nested_value():
+    rows = (
+        entry("a", default={"primary": "ansi"}),
+        entry("b", default={"primary": "truecolor"}),
+    )
+    got = judge(
+        rule(claim=Condition("equals", "truecolor", ("default", "primary"))), *rows
+    )
+    assert [hit.name for hit in got.violations] == ["a"]
+
+
+def test_a_dotted_field_name_is_one_key_and_is_never_split():
+    """Same property `parity` relies on, asserted where the operators live: a
+    string is a key however many dots it holds, so the two spellings stay
+    independent and a declaration written before paths existed cannot change
+    meaning under one."""
+    rows = (entry("a", **{"default.primary": "flat", "default": {"primary": "deep"}}),)
+    got = judge(rule(claim=Condition("equals", "flat", "default.primary")), *rows)
+    assert not got.violations
+
+
 def test_equals_compares_exactly_and_falsehood_is_a_value():
     """``equals = false`` is a claim, not an absent operator.
 

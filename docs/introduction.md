@@ -213,6 +213,23 @@ field = "default"
 authority = "declared"      # or "produced"; the code is on trial either way
                             # round, and this says which way
 
+# `field` may also be a PATH, written as a list, for a declaration that states
+# a value as a nested map -- `default: {primary: ..., named: ...}` -- with one
+# oracle run per arm. A bare string is one key however many dots it holds and
+# is never split: `extra` keys legitimately contain them, so splitting would
+# resolve an ambiguity by guessing, and a guess that is wrong here compares the
+# wrong cell and PASSES. The two spellings do not overlap.
+#
+# A path reaching nothing, or descending through a scalar, is "no value
+# declared" rather than an error -- a table where some rows hold a map and some
+# hold a scalar is the case this exists to read.
+[[parity]]
+registry = "modes"
+command = ["{python}", "-m", "pkg.settings", "--defaults", "--mode", "primary"]
+extract = '(?m)^(\S+)=(.*)$'
+field = ["default", "primary"]
+authority = "declared"
+
 # At most one translation, on the declared side, so a reader of the config can
 # see that a comparison is not literal. `map` or `pattern`/`replacement`,
 # never both.
@@ -1127,13 +1144,18 @@ limit is closed, in the same commit that closes it.**
   **What it would take:** a declared rendering for containers — an order and a separator the
   declaration states rather than the tool guessing — which is a form question, not a missing
   capability.
-- **accepted** · **`field` is a single-key lookup, so a nested cell cannot be named.**
-  `field = "default.primary"` is read as one key called `default.primary`, finds none, and reports
-  every identifier as declaring no value — it does **not** refuse at load, and the flat reading is
-  not obvious from the spelling. Nested cells are reachable only through a project-authored
-  flattening view of the registry. **What it would take:** a path form for `field`, with the same
-  question `[[registry]]`'s `section` already answered — a list rather than a dotted string, since a
-  dotted string cannot express a key containing a dot.
+- **accepted** · **~~`field` is a single-key lookup, so a nested cell cannot be named.~~**
+  **Closed 2026-09-15**, in the form this entry specified: `field = ["default", "primary"]` is a
+  path, and a bare string stays exactly one key however many dots it holds. The same spelling reaches
+  a `[[shape]]` rule's `field`, `present` and `absent`. **A path descending through a scalar, or
+  reaching nothing, reads as *no value declared* rather than raising** — a table mixing scalar and
+  nested rows is the case it exists to read, and 47 of the adopter's 99 manifest rows are the scalar
+  half against 18 that are mode-keyed.
+  ⚑ **What is left is the half a path does not touch:** the flat reading of a dotted string is still
+  not obvious from the spelling, and a config written as `field = "default.primary"` against a nested
+  cell still reports every identifier as declaring no value rather than refusing. **That is
+  deliberate, not an oversight** — the two spellings are kept independent so a declaration written
+  before paths existed cannot change meaning under one.
 - **accepted** · **An absent field and a field declared null are indistinguishable**, so *"this is
   an absence on both sides"* cannot be stated. Both read as the entry declaring no value, and an
   adopter whose manifest uses an explicit `null` to mean *this arm is deliberately nothing* has no

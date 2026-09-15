@@ -26,6 +26,14 @@ this one is invisible to it until it is renamed.
 - **This is the first check that calls the project's own code.** kinemata still never runs the
   project's test suite or entry point, and never classifies an outcome by reading output.
 
+- A `[[parity]]`'s `field`, and a `[[shape]]` rule's `field` / `present` / `absent`, may name a
+  **path** into an entry written as a list: `field = ["default", "primary"]` reaches one arm of a
+  nested map. A bare string is still exactly one key however many dots it holds, and is never
+  split — `extra` keys legitimately contain them, so splitting would resolve an ambiguity by
+  guessing, and a wrong guess here compares the wrong cell and passes rather than failing. A path
+  that reaches nothing, or that descends through a scalar, reads as *no value declared* rather
+  than as an error, so a table mixing scalar and nested rows stays readable.
+
 **Changed**
 
 - `kinemata review` and `kinemata check` report how many f-strings a `match_mode = "strings"`

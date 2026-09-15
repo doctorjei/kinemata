@@ -567,6 +567,97 @@ def test_a_second_parity_on_one_registry_is_refused(tmp_path):
         load(tmp_path / "kinemata.toml")
 
 
+# -- a field addressed by path ------------------------------------------------
+
+
+def test_a_field_path_reaches_an_arm_of_a_mode_keyed_map(tmp_path):
+    """The shape this was built for. An adopting project states a third of its
+    defaults as `{primary: ..., named: ..., standalone: ...}` and its oracle
+    answers per mode, so the comparison is one arm against one run."""
+    registry = Registry(
+        "app.name",
+        extra={"app.name": {"default": {"primary": "truecolor", "named": "ansi"}}},
+    )
+    result = compare(
+        registry, value_oracle(field=("default", "primary")), tmp_path
+    )
+    assert not result.failed, result.divergent
+
+
+def test_a_field_path_reports_the_arm_that_diverged(tmp_path):
+    registry = Registry(
+        "app.name",
+        extra={"app.name": {"default": {"primary": "ansi", "named": "ansi"}}},
+    )
+    result = compare(
+        registry, value_oracle(field=("default", "primary")), tmp_path
+    )
+    assert result.failed
+    assert "default.primary" in str(result.divergent[0])
+
+
+def test_a_dotted_string_field_is_one_key_and_is_never_split(tmp_path):
+    """The property that keeps the two spellings independent. `extra` keys
+    legitimately contain dots -- this package's first adopter declares
+    identifiers spelled `workset.boxes` -- so splitting one would resolve an
+    ambiguity by guessing, and a guess that is wrong here compares the wrong
+    cell and *passes*. A string means exactly what it meant before paths."""
+    registry = Registry(
+        "app.name",
+        extra={
+            "app.name": {
+                "default.primary": "truecolor",          # the flat key
+                "default": {"primary": "WRONG"},          # the path
+            }
+        },
+    )
+    result = compare(registry, value_oracle(field="default.primary"), tmp_path)
+    assert not result.failed, result.divergent
+
+
+def test_a_path_through_a_scalar_reads_as_no_value_rather_than_an_error(tmp_path):
+    """47 of the adopter's 99 manifest rows hold a scalar `default` where 18
+    hold a mode-keyed map. Refusing on the scalars would make the mixed table
+    unreadable, which is the thing a path exists to read."""
+    registry = Registry(
+        "app.name", extra={"app.name": {"default": "truecolor"}}
+    )
+    result = compare(
+        registry, value_oracle(field=("default", "primary")), tmp_path
+    )
+    assert result.failed
+    finding = str(result.divergent[0])
+    assert "records no default.primary" in finding
+    assert result.blocked == ""
+
+
+def test_a_field_path_is_declared_as_a_list(tmp_path):
+    declare_values(tmp_path, extra="")
+    body = (tmp_path / "kinemata.toml").read_text()
+    body = body.replace('field = "default"', 'field = ["default", "primary"]')
+    (tmp_path / "kinemata.toml").write_text(body)
+    settings = load(tmp_path / "kinemata.toml")
+    assert settings.parities[0].field == ("default", "primary")
+
+
+def test_an_empty_field_path_is_refused(tmp_path):
+    declare_values(tmp_path)
+    body = (tmp_path / "kinemata.toml").read_text()
+    body = body.replace('field = "default"', "field = []")
+    (tmp_path / "kinemata.toml").write_text(body)
+    with pytest.raises(ConfigError, match="reaches the entry itself"):
+        load(tmp_path / "kinemata.toml")
+
+
+def test_a_field_path_step_that_is_not_a_key_is_refused(tmp_path):
+    declare_values(tmp_path)
+    body = (tmp_path / "kinemata.toml").read_text()
+    body = body.replace('field = "default"', 'field = ["default", ""]')
+    (tmp_path / "kinemata.toml").write_text(body)
+    with pytest.raises(ConfigError, match=r"every.*step is the name of a key"):
+        load(tmp_path / "kinemata.toml")
+
+
 def test_an_inline_command_declared_as_a_bare_string_is_refused(tmp_path):
     """The `[command]` table has refused this since it was written; the inline
     spelling iterated the string instead, so `command = "python -m tool"` ran as

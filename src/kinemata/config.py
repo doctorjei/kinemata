@@ -77,6 +77,7 @@ from .contract import (
     Registry,
     closure_guard,
     missing_members,
+    spell_path,
     usable_boundary,
 )
 from .gates import Gate
@@ -1806,7 +1807,9 @@ def _build_parities(
             )
         claimed[target] = index
 
-        value_field = str(spec.get("field", ""))
+        value_field = _field_spelling(
+            spec.get("field"), f"{path}: [[parity]] {index}"
+        )
         authority = str(spec.get("authority", ""))
         if authority and authority not in AUTHORITIES:
             raise ConfigError(
@@ -1819,7 +1822,8 @@ def _build_parities(
         # saying which one is the claim.
         if value_field and not authority:
             raise ConfigError(
-                f"{path}: [[parity]] {index} compares the {value_field!r} field "
+                f"{path}: [[parity]] {index} compares the "
+                f"{spell_path(value_field)!r} field "
                 "but declares no authority. Say which side is the claim -- "
                 f"{' or '.join(AUTHORITIES)} -- because a divergence with no "
                 "authoritative side is a finding nobody can act on."
@@ -1993,22 +1997,28 @@ def _shape_condition(
         )
     if claim.companion and claim.companion not in spec:
         raise ConfigError(f"{where} claims {spelling!r} without {claim.companion!r}")
-    if claim.needs_field and not str(spec.get("field", "")):
+    field_name: str | tuple[str, ...] = _field_spelling(spec.get("field"), where)
+    if claim.needs_field and not field_name:
         raise ConfigError(
             f"{where} claims {spelling!r} without naming a field. Add "
             f"field = \"...\", or use id_matches to claim something about the "
             "entry's own identifier."
         )
 
-    field_name = str(spec.get("field", ""))
     argument: Any = spec[spelling]
+    if spelling in ("present", "absent"):
+        # These name their subject in the argument rather than in `field`, so a
+        # path spelling arrives here instead: `present = ["default", "primary"]`
+        # asks for an arm of a map. Checked by the same builder so one rule
+        # governs both slots.
+        argument = _field_spelling(argument, where)
     if spelling == "keys_of":
         # The two entry ids ride in the same two slots every other operator
         # uses, so `shape` needs no third field: `keys_of` names the entry whose
         # keys are read and `are` names the one whose values they must be.
         field_name, argument = str(spec["keys_of"]), spec["are"]
     elif spelling == "exhausts":
-        field_name, argument = str(spec["field"]), spec["exhausts"]
+        field_name, argument = _field_spelling(spec["field"], where), spec["exhausts"]
 
     if spelling in SHAPE_PATTERNS:
         try:
@@ -2202,6 +2212,39 @@ def _build_shapes(
             )
         built.append(Shape(registry=name, rules=tuple(rules)))
     return tuple(built)
+
+
+def _field_spelling(declared: object, where: str) -> str | tuple[str, ...]:
+    """A ``field``: one key, or a path into an entry written as a list.
+
+    **A list descends and a string never does**, however many dots it holds.
+    The alternative -- splitting ``"default.primary"`` -- would guess, and
+    ``extra`` keys legitimately contain dots: the first adopter's own
+    identifiers are spelled ``workset.boxes``. A guess that is wrong here does
+    not fail, it compares the wrong cell and passes, which is the failure this
+    package refuses by name. See :func:`kinemata.contract.field_path`.
+    """
+    if declared is None:
+        return ""
+    if isinstance(declared, str):
+        return declared
+    if isinstance(declared, (list, tuple)):
+        if not declared:
+            raise ConfigError(
+                f"{where} declares an empty 'field'. A path with no keys "
+                "reaches the entry itself, which is not a value to compare."
+            )
+        bad = [part for part in declared if not isinstance(part, str) or not part]
+        if bad:
+            raise ConfigError(
+                f"{where} declares a 'field' path with {bad!r} in it; every "
+                "step is the name of a key, so each must be a non-empty string."
+            )
+        return tuple(declared)
+    raise ConfigError(
+        f"{where} declares 'field' as {type(declared).__name__}; it takes a "
+        'key ("default") or a path into the entry (["default", "primary"]).'
+    )
 
 
 def _shape_guard(declared: object, where: str) -> Condition | Predicate:

@@ -68,7 +68,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .bypass import Bypass
-from .contract import Entry, Registry
+from .contract import MISSING, Entry, Registry, at_path, field_path, spell_path
 from .targets import TargetError, resolve
 
 #: The name shape findings travel under in a baseline record.
@@ -93,9 +93,18 @@ def is_shape_scope(name: str) -> bool:
     return name == SHAPE_SCOPE or name.startswith(f"{SHAPE_SCOPE}:")
 
 
-def _value(entry: Entry, field_name: str) -> Any:
-    """One field of an entry, or the entry's own id when no field is named."""
-    return entry.id if not field_name else entry.extra.get(field_name)
+def _value(entry: Entry, field_name: object) -> Any:
+    """One field of an entry, or the entry's own id when no field is named.
+
+    A path reaching nothing reads as ``None``, which is what a missing flat key
+    already read as -- so every operator below behaves on a path exactly as it
+    always has on a key.
+    """
+    path = field_path(field_name)
+    if not path:
+        return entry.id
+    found = at_path(entry.extra, path)
+    return None if found is MISSING else found
 
 
 def _listed(value: Any) -> list[Any]:
@@ -124,8 +133,13 @@ def _matches(value: Any, pattern: Any) -> bool:
 #: :data:`kinemata.claims.CLAIM_KINDS` is: a reader auditing what a config can
 #: say should find one list of the answers.
 ENTRY_OPERATORS: dict[str, Callable[[Entry, str, Any], bool]] = {
-    "present": lambda entry, _field, want: str(want) in entry.extra,
-    "absent": lambda entry, _field, want: str(want) not in entry.extra,
+    # These two name their subject in the *argument*, not in `field`, so a path
+    # spelling reaches them there: `present = ["default", "primary"]` asks for
+    # an arm of a map rather than a key of the row.
+    "present": lambda entry, _field, want: at_path(entry.extra, field_path(want))
+    is not MISSING,
+    "absent": lambda entry, _field, want: at_path(entry.extra, field_path(want))
+    is MISSING,
     "equals": lambda entry, field_name, want: _value(entry, field_name) == want,
     "choices": lambda entry, field_name, want: _value(entry, field_name) in list(want),
     "matches": lambda entry, field_name, want: _matches(
@@ -230,7 +244,9 @@ class Condition:
 
     operator: str
     argument: Any = None
-    field: str = ""
+    #: A key, or a path into ``extra`` written as a list. See
+    #: :func:`kinemata.contract.field_path` for why a string is never split.
+    field: str | tuple[str, ...] = ""
 
     @property
     def over_set(self) -> bool:
@@ -243,9 +259,9 @@ class Condition:
         return SET_OPERATORS[self.operator](entries, self.field, self.argument)
 
     def __str__(self) -> str:
-        where = self.field or "id"
+        where = spell_path(self.field) or "id"
         if self.operator in ("present", "absent"):
-            return f"{self.argument!r} is {self.operator}"
+            return f"{spell_path(self.argument)!r} is {self.operator}"
         return f"{where} {self.operator} {self.argument!r}"
 
 

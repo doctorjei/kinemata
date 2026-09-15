@@ -147,6 +147,61 @@ class Entry:
     home: tuple[str, ...] = ()
 
 
+#: What a path reached nothing at. Distinct from a declared ``None``, which a
+#: real declaration writes: the adopter's ``workset.workspaces`` states
+#: ``primary: null`` on purpose, and reading that as "no arm" would hide a row
+#: whose whole content is the absence.
+MISSING: Any = object()
+
+
+def field_path(named: object) -> tuple[str, ...]:
+    """A field spelling as a path into :attr:`Entry.extra`.
+
+    A **list descends**: ``["default", "primary"]`` is the ``primary`` arm of
+    the ``default`` map. **A string is one key and is never split**, however
+    many dots it holds, because ``extra`` keys legitimately contain them -- the
+    first adopter declares identifiers spelled ``workset.boxes`` -- so splitting
+    would resolve an ambiguity by guessing. That is the
+    normalization-that-does-not-fail this package refuses everywhere else, and
+    it makes the two spellings independent rather than overlapping: a bare
+    string means exactly today what it meant before paths existed.
+    """
+    if named is None:
+        return ()
+    if isinstance(named, str):
+        return (named,) if named else ()
+    if isinstance(named, (list, tuple)):
+        return tuple(str(part) for part in named)
+    return (str(named),)
+
+
+def at_path(extra: Mapping[str, Any], path: tuple[str, ...]) -> Any:
+    """What ``path`` reaches in one entry's ``extra``, or :data:`MISSING`.
+
+    **Descending through a non-mapping is missing, not an error.** A scalar
+    ``default`` has no ``primary`` arm, and 47 of the adopter's 99 manifest rows
+    are exactly that against 18 that are mode-keyed; refusing there would make a
+    mixed table unreadable, which is the thing a path exists to read. The empty
+    path reaches ``extra`` itself, so a caller that means "no field named" has
+    to say so rather than getting it by accident.
+    """
+    cursor: Any = extra
+    for key in path:
+        if not isinstance(cursor, Mapping) or key not in cursor:
+            return MISSING
+        cursor = cursor[key]
+    return cursor
+
+
+def spell_path(named: object) -> str:
+    """A path as a reader recognizes it: ``default.primary``.
+
+    **Display only, and never parsed back** -- the round trip is what would
+    reintroduce the ambiguity :func:`field_path` exists to keep out.
+    """
+    return ".".join(field_path(named))
+
+
 @runtime_checkable
 class Registry(Protocol):
     """Structural type for anything that can serve the registry role."""
