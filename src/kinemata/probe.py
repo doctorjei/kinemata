@@ -11,8 +11,8 @@ parity functions of an adopting project, 15 of them assert exactly this and
 nothing else -- ``_check_whitelist`` raising on a denied entry, ``key_validity``
 returning a message for a key one segment past its family, a copier refusing an
 uncovered destination. It was the largest block no mechanism here reached, and
-the ranking that chose it is ``manifest-parity-reach.md`` §5.2, which also
-records that this box's instinct about which shape was biggest was wrong by 3x.
+it was built because that ranking said so rather than because it appealed --
+the same pass predicted which shape was biggest and the data missed it by 3x.
 
 ⚑ **THE CONSTRAINT, and it comes from the sample rather than from this package:
 a probe corpus must carry BOTH polarities or it does not run.** Three separate
