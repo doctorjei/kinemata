@@ -1380,6 +1380,14 @@ down, and the two shapes at the end are the findings that matter most.
   oracle says the code produces, both directions, gating on either. **What it closed first is
   membership**, the half of that project's 125 manifest-parity test functions needing no new
   surface on `Entry`.
+  ⚑ **Narrowed again 2026-09-15 by `[[parity]] relation`.** *"Both directions, gating on either"*
+  was the only claim membership could make, so a declaration that legitimately names more than the
+  code produces, or that says what the code must **not** emit, could be run only by accepting the
+  difference into the baseline — an exemption list standing in for a claim. `declared_contains`,
+  `produced_contains` and `disjoint` say it instead. **What is still out of reach is a comparison
+  that is neither equality nor membership**: an **ordering** (a list is compared as a set, on
+  purpose), an **inequality**, and a second declared **translation**. Three conformance rows in the
+  measured population, one each.
   ⚑ **The other half — a declared entry's *field* against what the code prints for it — landed the
   same day**, with the translation and the authority marker the same project's worked rows asked
   for. **The entry stays open and `accepted`**, and what is left is of two different kinds. One is
