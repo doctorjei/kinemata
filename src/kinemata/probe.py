@@ -162,6 +162,19 @@ class Outcome:
     refusal: str = ""
     #: Under ``returns``: which returned values mean acceptance.
     accepted: str = ""
+    #: Under ``raises``: must the raised type be the declared one exactly?
+    #:
+    #: Off by default, which is the published behavior and a deliberate one --
+    #: ``except`` matches subclasses, and a project declaring a base is usually
+    #: saying *any of these means refusal*. **On, for a project whose refusals
+    #: are named and load-bearing.** An adopter asked for it with the case:
+    #: their closed keyspace refuses an undeclared key *by name*, their retired
+    #: key paths refuse *by name*, and a version skew and a capability limit are
+    #: different refusals that must not read as each other. A probe that tells
+    #: accept from refuse but not *which* refusal lets a wrong-but-related error
+    #: report agreement -- which is the permissive-oracle hazard the two modes
+    #: exist to prevent, arriving one level down.
+    exact: bool = False
 
 
 @dataclass(frozen=True)
@@ -314,7 +327,9 @@ def _refusal_type(probe: Probe) -> type[BaseException]:
             f"not an exception type"
         )
     # `except` matches subclasses, so a declared base admits every one of them.
-    # That is the project's judgement to make and is not policed here -- except
+    # That is the project's judgement to make and is not policed here -- a
+    # project whose refusals are named rather than categorical declares
+    # `exact` and gets the narrow reading -- except
     # at the root, where it stops being a judgement: `Exception` reads *any*
     # failure as a refusal, which is precisely the permissive reading this
     # module's two modes exist to prevent. Measured on a real adopter's tree,
@@ -340,7 +355,15 @@ def _observe(call: Any, case: Case, outcome: Outcome, refusal: Any) -> str:
     if outcome.mode == "raises":
         try:
             call(*case.args, **case.kwargs)
-        except refusal:
+        except refusal as exc:
+            if outcome.exact and type(exc) is not refusal:
+                raise ProbeError(
+                    f"case {case.name} raised {type(exc).__name__}, a subclass "
+                    f"of the declared refusal {outcome.refusal}. The probe "
+                    f"declares exact, so a related refusal is not the declared "
+                    f"one -- name the type this case refuses with, or drop "
+                    f"exact to accept any of them."
+                ) from exc
             return REFUSE
         # Anything else is the probe being unable to judge, not the code
         # refusing. Reported as blocked, with the case named.

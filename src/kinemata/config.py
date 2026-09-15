@@ -651,7 +651,7 @@ INTERPOSE_KEYS = frozenset({"registry", "target", "identify", "record"})
 #: twice: once for a key that means nothing anywhere, once for one that means
 #: nothing *here*.
 PROBE_KEYS = frozenset(
-    {"name", "target", "cases", "outcome", "refusal", "accepted"}
+    {"name", "target", "cases", "outcome", "refusal", "accepted", "exact"}
 )
 
 #: Every table a ``kinemata.toml`` may declare. ⚑ **The root was the last table
@@ -2146,6 +2146,13 @@ def _build_probes(
 
         refusal = str(spec.get("refusal", "")).strip()
         accepted = str(spec.get("accepted", "")).strip()
+        exact = bool(spec.get("exact", False))
+        if exact and mode != "raises":
+            raise ConfigError(
+                f'{where} declares exact beside outcome "{mode}", which has no '
+                "exception type to be exact about. It narrows refusal matching "
+                'and belongs with outcome "raises".'
+            )
         if mode == "raises":
             module, _, attribute = refusal.partition(":")
             if not module.strip() or not attribute.strip():
@@ -2167,7 +2174,9 @@ def _build_probes(
                 name=name,
                 target=str(spec["target"]).strip(),
                 cases=str(spec["cases"]).strip(),
-                outcome=Outcome(mode=mode, refusal=refusal, accepted=accepted),
+                outcome=Outcome(
+                    mode=mode, refusal=refusal, accepted=accepted, exact=exact
+                ),
             )
         )
     return tuple(built)

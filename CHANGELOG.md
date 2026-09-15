@@ -11,6 +11,20 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 ## Unreleased
 
+**New**
+
+- A `[[probe]]` may declare `exact = true`, narrowing `raises` to the exception type it names.
+  `except` matches subclasses, so a declared base admits every refusal beneath it — right where a
+  base means *any of these is a refusal*, wrong where refusals are **named**: a closed keyspace that
+  refuses an undeclared key by name, retired-key paths that refuse by name, a version skew and a
+  capability limit that must not read as each other. Without it a probe tells accept from refuse but
+  not *which* refusal, so a wrong-but-related error reports agreement. **Opt-in**, because the
+  subclass reading is the published behavior and a deliberate one. A subclass then blocks the case,
+  naming both types, rather than passing.
+
+  Asked for by an adopter, on their own codebase's grounds, after we published the mutant that
+  exposed it.
+
 **Fixed**
 
 - An **ignored directory removed files it does not name.** git's answer to *what is ignored here*

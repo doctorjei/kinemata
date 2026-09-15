@@ -358,6 +358,12 @@ outcome = "raises"                    # the target refuses by raising
 refusal = "mypkg.errors:ScopeError"   # required, and never `Exception`: every
                                       # failure is one, so a renamed function
                                       # would read as a correct refusal
+exact   = true                        # optional. `except` matches subclasses,
+                                      # so a declared base admits all of them —
+                                      # which is right where a base means "any
+                                      # of these is a refusal", and wrong where
+                                      # refusals are NAMED and a related error
+                                      # must not stand in for the declared one
 
 [[probe]]
 name     = "keyspace"
@@ -734,6 +740,8 @@ outside, so the following are `ConfigError`, not silent skips:
   has not thought about the convention is refused instead of inheriting one
 - a `[[probe]]` carrying the *other* mode's discriminator — a `refusal` beside `returns` reads to
   a human as a check that is switched on and is read by nothing
+- a `[[probe]]` declaring `exact` beside `outcome = "returns"`, where there is no exception type to
+  be exact about — the same reading, one key later
 - an `accepted` outside `none` / `falsy` / `truthy`. The value's type is not inferred: a callable
   returning `0` for success and one returning `0` errors are the same bytes and the opposite sense
 - a `[[parity]]` naming a `registry` no `[[registry]]` declares — refused at load rather than at
@@ -1473,6 +1481,15 @@ down, and the two shapes at the end are the findings that matter most.
   refusal-only corpus is satisfied by a callable that refuses everything. kinemata counts the
   polarities on the rows it was handed, so the count is never self-reported. It is also not a
   finding the baseline can accept — a run that could not discriminate has not earned a `--prune`.
+  ⚑ **Which refusal, not only whether — `exact`, since 2026-09-15.** `except` matches subclasses, so
+  a declared base admits every refusal beneath it. That is the right reading where a base means *any
+  of these is a refusal*, and the wrong one where refusals are **named and load-bearing**: an
+  adopter's closed keyspace refuses an undeclared key by name, their retired-key paths refuse by
+  name, and a version skew and a capability limit are different refusals that must not read as each
+  other. Without it a probe tells accept from refuse but not *which* refusal, so a wrong-but-related
+  error reports agreement — the permissive-oracle hazard the two modes exist to prevent, one level
+  down. **Opt-in, because the subclass reading is the published behavior and a deliberate one**; a
+  subclass then blocks the case by name rather than passing quietly.
   ⚑ **It is a reminder, not a catch.** An agent can edit a case list and the code it probes in one
   commit. And **its reach is exactly its corpus** — a probe says nothing about an input nobody
   wrote a case for, where the interposition says something about whatever crossed. Neither

@@ -61,6 +61,10 @@ SUBJECT = '''
         """What a renamed dependency raises. NOT a refusal."""
 
 
+    class NarrowlyRefused(Refused):
+        """A refusal with its own name. `except Refused` catches it too."""
+
+
     ALLOWED = {"box", "workset"}
 
 
@@ -76,6 +80,12 @@ SUBJECT = '''
 
     def explodes(name):
         raise Unrelated(name)
+
+
+    def check_narrowly(name):
+        """Refuses with the named subclass rather than the base."""
+        if name not in ALLOWED:
+            raise NarrowlyRefused(name)
 
 
     def always_accepts(name):
@@ -606,3 +616,53 @@ def test_a_baseline_record_reads_as_its_own_sentence():
     )
     assert "answers otherwise" in str(record)
     assert "bypasses" not in str(record)
+
+
+# --- exact: which refusal, not just whether -------------------------------
+#
+# An adopter's case, and it is theirs rather than a preference about
+# strictness: their closed keyspace refuses an undeclared key BY NAME, their
+# retired-key paths refuse BY NAME, and a version skew and a capability limit
+# are different refusals that must not read as each other.
+
+def test_a_subclass_satisfies_a_declared_base_by_default(project):
+    """The published reading, kept: ``except`` matches subclasses, and a
+    project naming a base is usually saying *any of these means refusal*."""
+    result = examine(probe("both", target="subject:check_narrowly"))
+    assert not result.failed
+    assert (result.accepting, result.refusing) == (2, 1)
+
+
+def test_exact_refuses_a_related_refusal(project):
+    """A ``ConfigError`` standing in for a ``TemplateScopeError`` is not a near
+    miss for a project whose refusals are named: it is the refusal saying
+    something else, and a probe that cannot tell them apart lets a
+    wrong-but-related error report agreement."""
+    exact = Outcome(mode="raises", refusal="subject:Refused", exact=True)
+    result = examine(probe("both", outcome=exact, target="subject:check_narrowly"))
+    assert result.failed
+    assert result.blocked
+    assert "NarrowlyRefused" in result.blocked
+
+
+def test_exact_passes_when_the_named_type_is_the_one_raised(project):
+    """The negative control: exact is not simply stricter about everything."""
+    exact = Outcome(mode="raises", refusal="subject:NarrowlyRefused", exact=True)
+    result = examine(probe("both", outcome=exact, target="subject:check_narrowly"))
+    assert not result.failed
+    assert (result.accepting, result.refusing) == (2, 1)
+
+
+def test_exact_beside_returns_is_refused_at_load(tmp_path):
+    """There is no exception type to be exact about, so it means nothing."""
+    path = config(tmp_path, '''
+        [[probe]]
+        name = "scopes"
+        target = "subject:validity"
+        cases = "corpus:both"
+        outcome = "returns"
+        accepted = "none"
+        exact = true
+    ''')
+    with pytest.raises(ConfigError, match="no exception type to be exact about"):
+        load(path)
