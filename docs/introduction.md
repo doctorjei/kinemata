@@ -1367,11 +1367,11 @@ down, and the two shapes at the end are the findings that matter most.
   denominator changed, the corpus boundary was drawn fresh, and the buckets differ. A successor, not
   a replacement, and not a before-and-after in either direction.
   ⚑ **The 125 named in the sentence above have been re-measured, and they are the one population
-  this project holds: 100 of 125 (80%) are expressible as things stand**, against 53 (42%) on the
+  this project holds: 103 of 125 (82%) are expressible as things stand**, against 53 (42%) on the
   morning of 2026-09-14 — the movement being `shape`, the widened adapter, `[[probe]]`, and then a
-  path-valued `field` and `[[registry]] where` on 09-15. **Reach, not adoption** — it says what
-  could be expressed, never what anyone has declared, and this adopter has declared none of the
-  last three.
+  path-valued `field`, `[[registry]] where` and `[[parity]] relation` on 09-15. **Reach, not
+  adoption** — it says what could be expressed, never what anyone has declared, and this adopter
+  has declared none of the last four.
   ⚑ **The twin is expressible for a value a document states, and was already** when this entry
   said it was not: a `[[count]]` declares the pattern, an oracle command and an exact comparison.
   ⚑ **Partly closed 2026-09-13. This entry said the twin aimed at declared data had no expression
