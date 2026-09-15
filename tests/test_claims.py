@@ -1295,3 +1295,29 @@ def test_commits_in_settles_a_hash_from_the_named_repository(tmp_path):
 
     assert verify(tmp_path / "notes", commits_in=["../corpus"]).broken == []
     assert broken(verify(tmp_path / "notes")) == {("commit", real)}
+
+
+def test_an_ignored_directory_does_not_drop_a_tracked_file_that_shares_its_name(tmp_path):
+    """The failure was loud and the cause was silent, which is the bad pairing.
+
+    Reported by an adopter: an untracked, ignored ``.claude/`` at the root
+    removed their tracked ``.../home/.claude/settings.json`` from the file
+    index, so a citation of a file that exists reported ``path does not
+    resolve`` -- a finding pointing at the prose rather than at the exclusion.
+    Nothing announced that a tracked file had left the index.
+
+    Both directions are asserted. The ignored directory's own contents must
+    still be exempt, or the fix trades one silence for a flood.
+    """
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    write(tmp_path, ".gitignore", "/.claude/\n")
+    write(tmp_path, "pkg/home/.claude/settings.json", "{}\n")
+    write(tmp_path, "doc.md", "The box ships `settings.json` in its home.\n")
+    (tmp_path / ".claude" / "worktrees").mkdir(parents=True)
+    write(tmp_path, ".claude/note.md", "See `no-such-file.md`.\n")
+
+    result = verify(tmp_path)
+    assert result.broken == []
+    # One claim, from ``doc.md`` alone: the note inside the ignored directory
+    # is still not read, so the fix did not trade one silence for a flood.
+    assert result.checked == 1

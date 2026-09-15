@@ -9,6 +9,23 @@ a project outside this repository runs against kinemata and upgrades between pub
 Commits are in `git log`; the reasoning behind a design decision stays in the document that
 carries the decision. A changelog repeating either becomes a second carrier and goes stale.
 
+## Unreleased
+
+**Fixed**
+
+- An **ignored directory removed files it does not name.** git's answer to *what is ignored here*
+  is a real root-relative path, and it was handed to the exclusion machinery as a plain fragment —
+  which matches anywhere in a path, by design, because a project's own `exclude` entry is a
+  substring. So an untracked, ignored `.claude/` at the root dropped a tracked
+  `packages/.../home/.claude/settings.json` from every file index, and a citation of that tracked
+  file reported `path does not resolve`: a finding pointing at the prose rather than at the
+  exclusion that removed the file. An **empty** directory was enough to do it, and a fresh clone
+  has none — so the tool disagreed with itself between a developer's tree and CI, with the
+  developer's tree the one that reds. git's paths are now anchored; a project's own `exclude`
+  fragments are unchanged.
+
+  Found and reproduced by an adopter against `0.1.0`, not here.
+
 ## 0.1.0
 
 **The first release that is not a pre-release.** What changes for an installer: while only

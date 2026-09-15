@@ -8,12 +8,14 @@ for the run against the actual tree.
 
 from __future__ import annotations
 
+import subprocess
 import textwrap
 
 from kinemata import Entry, scan, unused
 from kinemata.adapters.mapping import MappingRegistry
-from kinemata.bypass import crossings, strays
+from kinemata.bypass import crossings, git_ignored, strays
 from kinemata.contract import BaseRegistry
+from kinemata.exclusion import excluded
 from kinemata.prose import python_code_only, python_strings_only
 
 
@@ -334,3 +336,23 @@ def test_a_broken_link_is_not_a_file_to_read(tmp_path):
 
     reg = Constants({"WORKSET_META_FILE": (r"workset\.yaml", "config.py")})
     assert [hit.path for hit in scan(reg, tmp_path)] == ["names.py"]
+
+
+def test_an_ignored_directory_is_anchored_not_a_substring(tmp_path):
+    """git answers with paths, so they cannot be read as fragments.
+
+    An adopter's tree carried an untracked, ignored ``.claude/`` at the root and
+    a tracked ``.../home/.claude/settings.json`` further down. Unanchored, the
+    first removed the second from every file index, and the citation of that
+    tracked file reported as a dead claim -- a finding pointing at the
+    documentation rather than at the exclusion. An **empty** directory was
+    enough, and a fresh clone has none, so the tool disagreed with itself
+    between a developer's tree and CI.
+    """
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    write(tmp_path, ".gitignore", "/.claude/\n")
+    (tmp_path / ".claude" / "worktrees").mkdir(parents=True)
+
+    assert git_ignored(tmp_path) == ("/.claude",)
+    assert not excluded("pkg/home/.claude/settings.json", git_ignored(tmp_path))
+    assert excluded(".claude/worktrees", git_ignored(tmp_path))

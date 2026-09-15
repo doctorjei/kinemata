@@ -82,6 +82,17 @@ def git_ignored(root: str | Path) -> tuple[str, ...]:
     documents that only sit in the tree as test corpora.
 
     Empty when git cannot answer, which over-reports rather than under-reports.
+
+    **Anchored, because these are paths and not fragments.** A project's own
+    ``exclude`` entry is a substring by design; git's answer is a real
+    root-relative path, and spelling it unanchored let one remove files it does
+    not name. An adopter reported the shape: an untracked, ignored
+    :shown:`.claude/` at the root removed their tracked
+    :shown:`packages/agent-claude/.../home/.claude/settings.json` from the file
+    index, and a citation of that file then reported as a dead claim --
+    pointing at the documentation rather than at the exclusion that dropped it.
+    An **empty** directory was enough, and a fresh clone has none, so the tool
+    disagreed with itself between a developer's tree and CI.
     """
     root = Path(root)
     if not (root / GIT_DIR).exists():
@@ -94,7 +105,8 @@ def git_ignored(root: str | Path) -> tuple[str, ...]:
     if result.returncode != 0:
         return ()
     return tuple(
-        line.strip().rstrip("/") for line in result.stdout.splitlines() if line.strip()
+        "/" + line.strip().strip("/")
+        for line in result.stdout.splitlines() if line.strip()
     )
 
 
