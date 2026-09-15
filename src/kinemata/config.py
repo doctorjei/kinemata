@@ -1639,6 +1639,37 @@ def _commands(raw: Any, path: Path) -> dict[str, tuple[str, ...]]:
     return declared
 
 
+def _argv(raw: Any, where: str, key: str) -> tuple[str, ...]:
+    """One inline argument list, refused rather than iterated when it is a string.
+
+    TOML has no argv type, so ``command = "python -m tool"`` is the natural
+    thing to write and a string is iterable: it became one argument per
+    character and the run died on ``"p"``. The report named the *oracle* as
+    unrunnable, so a config defect was diagnosed as the project's command being
+    missing -- and a blocked parity oracle makes ``baseline --record`` refuse,
+    which turns the typo into a disarmed writer as well.
+
+    ⚑ **``[[gate]]`` spells ``command`` as a string on purpose**, so the key's
+    name does not say which form it takes. That is why this is checked per site
+    rather than inferred.
+
+    :func:`_commands` is deliberately not a caller: the ``[command]`` table also
+    requires a *non-empty* list, where an inline ``command`` reports emptiness
+    alongside the other keys a declaration is missing. Same predicate, different
+    contract -- the rule ``targets.py`` records about ``_build_import``.
+    """
+    if raw is None:
+        return ()
+    if isinstance(raw, str) or not isinstance(raw, (list, tuple)):
+        raise ConfigError(
+            f"{where} declares {key} as {type(raw).__name__}; it takes a list "
+            "of arguments, the way a shell would receive them: "
+            f"{key} = [\"python\", \"-m\", \"tool\"]. A string is iterable, so "
+            "this would run as one argument per character."
+        )
+    return tuple(str(part) for part in raw)
+
+
 def _build_counts(
     declarations: list[dict[str, Any]],
     path: Path,
@@ -1681,7 +1712,7 @@ def _build_counts(
                 )
             argv: tuple[str, ...] = known[name]
         else:
-            argv = tuple(str(part) for part in spec.get("command", ()))
+            argv = _argv(spec.get("command"), f"{path}: [[count]] {index}", "command")
 
         missing = [key for key in ("pattern", "extract") if not spec.get(key)]
         if not argv:
@@ -1690,7 +1721,7 @@ def _build_counts(
             raise ConfigError(
                 f"{path}: [[count]] {index} is missing {', '.join(missing)}"
             )
-        argv += tuple(str(part) for part in spec.get("args", ()))
+        argv += _argv(spec.get("args"), f"{path}: [[count]] {index}", "args")
         occurrence = str(spec.get("occurrence", EVERY))
         if occurrence not in OCCURRENCES:
             # Named rather than defaulted, on the rule the unknown `strip`
@@ -1746,7 +1777,7 @@ def _build_parities(
                 )
             argv: tuple[str, ...] = known[name]
         else:
-            argv = tuple(str(part) for part in spec.get("command", ()))
+            argv = _argv(spec.get("command"), f"{path}: [[parity]] {index}", "command")
 
         missing = [key for key in ("registry", "extract") if not spec.get(key)]
         if not argv:
@@ -1794,7 +1825,7 @@ def _build_parities(
                 "authoritative side is a finding nobody can act on."
             )
 
-        argv += tuple(str(part) for part in spec.get("args", ()))
+        argv += _argv(spec.get("args"), f"{path}: [[parity]] {index}", "args")
         built.append(
             Oracle(
                 registry=target,

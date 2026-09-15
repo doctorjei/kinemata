@@ -425,6 +425,36 @@ def test_a_command_declared_as_a_bare_string_is_refused(tmp_path):
         load(config)
 
 
+def test_an_inline_count_command_declared_as_a_bare_string_is_refused(tmp_path):
+    """The table above was fixed and the two inline sites were not -- the set,
+    not the member. `[[count]]` names its oracle inline far more often than it
+    borrows one, so this is the spelling a config actually reaches for."""
+    config = _count_config(tmp_path, """
+        [[count]]
+        label = "one"
+        pattern = '(\\d+) lines'
+        command = "wc -l one.md"
+        extract = '(\\d+)'
+        """)
+    with pytest.raises(ConfigError, match="one argument per character"):
+        load(config)
+
+
+def test_inline_count_args_declared_as_a_bare_string_are_refused(tmp_path):
+    """`args` appends to a command that came from either spelling, so a string
+    here corrupts a valid argument list rather than stopping the run."""
+    config = _count_config(tmp_path, """
+        [[count]]
+        label = "one"
+        pattern = '(\\d+) lines'
+        command = ["wc", "-l"]
+        args = "one.md"
+        extract = '(\\d+)'
+        """)
+    with pytest.raises(ConfigError, match="one argument per character"):
+        load(config)
+
+
 def test_a_promise_date_must_be_a_date(tmp_path):
     """Refused rather than ignored: a misparsed date would leave a deferral that
     looks bounded and lapses never."""

@@ -42,6 +42,13 @@ this one is invisible to it until it is renamed.
   paths that actually matched.
 - A `[[parity]]` comparing values threw away the membership result when a cell held a container
   it could not render. The value half still blocks, as it must; the membership half is reported.
+- An inline `command` or `args` written as a string — `command = "python -m tool"` — was iterated
+  into one argument per character instead of being refused. The run then failed on the first
+  letter and was reported as *the oracle could not be run*, blaming the project's command for a
+  defect in the config; and because a blocked parity oracle stops `kinemata baseline --record`,
+  the typo disarmed the writer as well. The `[command]` table already refused this; the inline
+  spellings on `[[count]]` and `[[parity]]` now do too. Note that `[[gate]]` takes a string
+  deliberately, so the key's name does not tell you which form it wants.
 
 ## 0.1.0a2.dev1
 

@@ -567,6 +567,33 @@ def test_a_second_parity_on_one_registry_is_refused(tmp_path):
         load(tmp_path / "kinemata.toml")
 
 
+def test_an_inline_command_declared_as_a_bare_string_is_refused(tmp_path):
+    """The `[command]` table has refused this since it was written; the inline
+    spelling iterated the string instead, so `command = "python -m tool"` ran as
+    one argument per character and died on `"p"`. What made it worse than noise
+    is where the report landed: the *oracle* was named unrunnable, and a blocked
+    parity oracle makes `baseline --record` refuse -- so a config typo read as
+    the project's own command going missing, and disarmed the writer with it."""
+    declare(tmp_path)
+    body = (tmp_path / "kinemata.toml").read_text()
+    body = body.replace(
+        'command = ["{python}", "-c", "print(\'app.name\')"]',
+        'command = "{python} -c pass"',
+    )
+    (tmp_path / "kinemata.toml").write_text(body)
+    with pytest.raises(ConfigError, match="one argument per character"):
+        load(tmp_path / "kinemata.toml")
+
+
+def test_inline_args_declared_as_a_bare_string_are_refused(tmp_path):
+    """`args` appends to whichever form named the command, so it is the same
+    defect one line down -- and quieter, because a string here corrupts an
+    argument list that is otherwise valid rather than stopping the run."""
+    declare(tmp_path, extra='args = "--verbose"')
+    with pytest.raises(ConfigError, match="one argument per character"):
+        load(tmp_path / "kinemata.toml")
+
+
 def test_a_field_without_an_authority_is_refused(tmp_path):
     declare(tmp_path, extra='field = "default"')
     with pytest.raises(ConfigError, match="declares no authority"):
