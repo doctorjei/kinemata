@@ -411,8 +411,13 @@ behalf, because a config able to inject import paths could shadow a stdlib modul
 TOML. Subclass `kinemata.contract.BaseRegistry` and everything but `entries()` is derived.
 
 ⚑ **This makes the config name code that gets executed.** That line was already crossed by
-`[[count]]`, whose oracles are shell commands run through `subprocess`. kinemata still reads the
-code it *checks* with `ast` and never executes it.
+`[[count]]`, whose oracles are shell commands run through `subprocess`.
+
+⚑ **This used to add *"kinemata still reads the code it checks with `ast` and never executes it"*,
+and `[[probe]]` falsified it** — a probe calls the callable under test, which is the whole
+mechanism. **The surviving claim is about the scan, where it matters most: declaring a registry
+never causes the scanned code to run.** See § Known limits for what a probe does and does not do
+with the code it calls.
 
 **The rule, and it is stated as one because the list keeps growing: wherever this config names a
 command or a `module:attribute`, kinemata runs what it names — and nowhere else.** A declared

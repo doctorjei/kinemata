@@ -193,8 +193,14 @@ one declared `closed` must still be able to recognize its own identifiers.
 **This makes `kinemata.toml` name code that gets executed, and that line was already crossed.**
 The `[[count]]` oracles name shell commands that `claims.py` runs through `subprocess` — which is
 how this repository settles the test count its own documentation states. The config has not been
-inert data since count oracles were built. What remains true, and is the distinction worth
-holding: **kinemata reads the code it *checks* with `ast` and never executes it.**
+inert data since count oracles were built.
+
+⚑ **The distinction this paragraph used to end on — *kinemata reads the code it checks with `ast`
+and never executes it* — was falsified by `[[probe]]` on 2026-09-14**, which calls the callable it
+is checking. **What remains true is narrower and is the part a reader of this contract needs:** the
+registry scan reads with `ast` and executes nothing, so declaring a registry never causes the
+scanned code to run. **A probe is opt-in and separate** — it names its target and its cases in the
+config, and it reads no registry at all.
 
 **Stated as a rule rather than as a list: wherever the config names a command or a
 `module:attribute`, kinemata runs what it names — and nowhere else.** Every such place is explicit

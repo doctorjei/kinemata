@@ -160,8 +160,17 @@ warned about.
 
 ⚑ **A `target` is code your config causes to run.** So is a `[[count]]` oracle,
 which is a shell command `claims` runs; the config has not been inert data since
-those were built. kinemata still reads the code it *checks* with `ast` and never
-executes it.
+those were built.
+
+⚑ **This used to end *"kinemata still reads the code it checks with `ast` and
+never executes it"*, and `[[probe]]` made that false** — a probe calls the
+callable it is checking, which is the point of it. The **duplication scan** still
+reads with `ast` and executes nothing, and that is the claim worth keeping,
+because it is the one a reader is asking about when they point this at a
+codebase. What holds everywhere: kinemata never runs your **test suite** or your
+entry point, and never decides what an outcome *means* by reading output — a
+probe's reading of accept-versus-refuse is declared in the config, not supplied
+by your code.
 
 **The rule, rather than a list of the exceptions: wherever the config names a
 command or a `module:attribute`, kinemata runs what it names — and nowhere
