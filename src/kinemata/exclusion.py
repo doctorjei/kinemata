@@ -218,8 +218,8 @@ def audit(
     scan's walk instead of writing a third.
 
     **Two narrowings, both measured on this repository rather than reasoned
-    about.** The first draft reported ``.venv/`` as removing nothing, which is
-    false in the way that matters: the directory is there, and the walk prunes
+    about.** The first draft reported :shown:`.venv/` as removing nothing, which
+    is false in the way that matters: the directory is there, and the walk prunes
     it before descending. ``pruned`` names those, and a fragment naming one is a
     redundancy rather than a mistake, so it is not reported at all.
 

@@ -393,9 +393,12 @@ class Tree:
         if not target:
             return True
         # On disk beats the index. Exclusions say which documents to *read*;
-        # they must not decide what exists. `corpus/` is gitignored and 39 MB of
-        # it is sitting right there, so a note describing it is telling the
-        # truth -- and reporting that is how a checker loses its reader.
+        # they must not decide what exists. :shown:`corpus/` is gitignored here
+        # and 39 MB of it is sitting right there, so a note describing it is
+        # telling the truth -- and reporting that is how a checker loses its
+        # reader. The role marks it: naming it as a claim would make this
+        # comment resolve in this tree and fail in every clone, which is what it
+        # did until 2026-09-15.
         if any((base / target).exists() for base in self.roots or (self.root,)):
             return True
         everything = self.files | self.directories
