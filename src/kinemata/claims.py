@@ -642,12 +642,20 @@ def _negated(line: str, start: int, end: int, previous: str = "") -> bool:
     without it, "there is no ``a.py``, but the loader is ``b.py``" silently
     stops checking ``b.py``, which is the under-reporting failure wearing the
     over-reporting fix's clothes.
+
+    The window is measured from the *claim*, and the line break is just another
+    character in it.
     """
-    window = line[max(0, start - NEGATION_WINDOW):start]
     # Wrapped prose puts the negation on the line above: "there is no\n``x.py``"
     # is one sentence and two lines, and looking only at this one reports it.
-    if start < NEGATION_WINDOW and previous:
-        window = previous[-NEGATION_WINDOW:] + " " + window
+    # Measured from the claim rather than per line: taking a whole window from
+    # each and concatenating them looked back 71 characters under a 45-character
+    # rule, so a "missing" that far back and about another subject dropped a
+    # real citation -- the check quietly checking less than it says.
+    preceding = line[:start]
+    if previous:
+        preceding = f"{previous[-NEGATION_WINDOW:]} {preceding}"
+    window = preceding[-NEGATION_WINDOW:]
     boundaries = list(CLAUSE_BOUNDARY.finditer(window))
     clause = window[boundaries[-1].end():] if boundaries else window
     if NEGATION.search(clause):

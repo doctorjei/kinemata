@@ -2,8 +2,15 @@
   "version": 1,
   "until": "2027-03-01",
   "by": "Jei",
-  "note": "undated citations in source docstrings when the citation policy was armed 2026-09-11. The policy is scoped to .py: user-facing prose keeps its claims check but is not where this project puts citation notation",
+  "note": "undated citations in source docstrings. Some were present when the citation policy was armed 2026-09-11; the rest were hidden by a negation defect in claims.py until 2026-09-15 and are the same class, not new text. The policy is scoped to .py: user-facing prose keeps its claims check but is not where this project puts citation notation",
   "findings": [
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": ".venv/",
+      "path": "src/kinemata/exclusion.py",
+      "text": "about.** The first draft reported ``.venv/`` as removing nothing, which is"
+    },
     {
       "registry": "citations",
       "entry": "provenance:path",
@@ -185,6 +192,13 @@
       "antipattern": "src/",
       "path": "src/kinemata/bypass.py",
       "text": "was pointed at (``pkg/constants.py`` when scanning ``src/``). A plain"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "targets.py",
+      "path": "src/kinemata/config.py",
+      "text": "contract -- the rule ``targets.py`` records about ``_build_import``."
     },
     {
       "registry": "citations",

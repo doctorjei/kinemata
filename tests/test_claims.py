@@ -120,6 +120,35 @@ def test_negation_does_not_disable_the_rest_of_the_line(tmp_path):
     assert broken(verify(tmp_path)) == {("path", "src/really_gone.py")}
 
 
+def test_a_negation_reaches_across_a_line_break(tmp_path):
+    """Wrapped prose puts the negation above its target.
+
+    The capability landed in `feb78aa` with tests for the two negation fixes
+    beside it and none for itself, which is how the bound in the test below
+    stayed wrong for ten days.
+    """
+    write(tmp_path, "doc.md", "This tree carries no\n`src/ssh_key.py` at all.\n")
+    assert verify(tmp_path).broken == []
+
+
+def test_a_negation_far_back_on_the_line_above_does_not_reach(tmp_path):
+    """The window is measured from the claim; a line break is one character.
+
+    Found 2026-09-15 against a green tree. Taking a whole window from each line
+    and concatenating them looked back 71 characters under a 45-character rule,
+    so "missing" -- that far away, on the line above, and about an entirely
+    different subject -- silently dropped a real citation. Under-reporting in a
+    policy whose argument is that it has no exemption list.
+    """
+    write(
+        tmp_path,
+        "doc.md",
+        "A declaration is missing. Same predicate, different\n"
+        "contract -- the rule `src/loader.py` records.\n",
+    )
+    assert broken(verify(tmp_path)) == {("path", "src/loader.py")}
+
+
 def test_a_placeholder_is_teaching_a_shape(tmp_path):
     write(tmp_path, "doc.md", "Point it at `src/pkg/constants.py` in your project.\n")
     assert verify(tmp_path).broken == []
