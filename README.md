@@ -105,11 +105,13 @@ Working on kinemata itself is a different install — `pip install -e ".[dev]"` 
 is what every command below assumes.
 
 What `init` writes runs immediately, because it declares `[claims]` and nothing
-else: **a config does not need a registry.** It needs at least one check —
-`[[registry]]`, `[[count]]`, `[[gate]]`, `[claims]` or `[context]` — and a config
+else: **a config does not need a registry.** It needs at least one check — a
+`[[registry]]`, or any of the other declarations a command reads — and a config
 that declares none of them is refused, because every command it configures would
-pass by doing nothing. A registry-shaped command run against a config with no
-registry refuses too, rather than scanning nothing and exiting 0.
+pass by doing nothing. **The refusal names the full list**, so it is one line to
+find out and it cannot fall behind the code the way a copy here would. A
+registry-shaped command run against a config with no registry refuses too,
+rather than scanning nothing and exiting 0.
 
 Declare your registries in `kinemata.toml`:
 

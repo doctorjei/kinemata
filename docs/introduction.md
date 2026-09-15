@@ -1188,6 +1188,9 @@ limit is closed, in the same commit that closes it.**
   from an adopter: one extra view added 101 lines to `ids`.** **What it would take:** a scope that
   names the field as well as the registry and the direction, which the value direction already
   half-does.
+  ⚑ **`where` makes a view cheap to *declare* and does not make it cheap to *carry*** (2026-09-15).
+  The projection cost above is unchanged, and this limit is not closed by it — a project comparing
+  three fields still declares three views, it just no longer has to hand-build each one.
 - **accepted** · **~~Membership cannot be filtered.~~** **Closed 2026-09-15** with `[[registry]]
   where`, in the form this entry named: the `[[shape]]` guard vocabulary, `Condition` or project
   predicate, selecting which entries a view carries. Measured on an adopter's 99-row manifest
