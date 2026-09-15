@@ -96,10 +96,11 @@ kinemata init                   # a starting config; --ci also writes a workflow
                                 # declares it as a gate. Refuses to overwrite either.
 ```
 
-**Pin the version.** `0.1.0` is the first release that is not a pre-release, so a plain install now
-resolves here rather than to an alpha. The interfaces are **not** settled — this is a `0.x` and the
-classifiers say so — and an unpinned dependency will change what it means without changing what it
-says.
+**Pin the version.** Final releases exist, so a plain install resolves to the newest one rather than
+to a pre-release — pip skips pre-releases only while some other version satisfies the requirement.
+The interfaces are **not** settled — this is a `0.x` and the classifiers say so — and an unpinned
+dependency will change what it means without changing what it says. The index says what is
+published; this sentence deliberately does not.
 
 Working on kinemata itself is a different install — `pip install -e ".[dev]"` from a clone, which
 is what every command below assumes.

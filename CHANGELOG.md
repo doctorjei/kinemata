@@ -9,7 +9,7 @@ a project outside this repository runs against kinemata and upgrades between pub
 Commits are in `git log`; the reasoning behind a design decision stays in the document that
 carries the decision. A changelog repeating either becomes a second carrier and goes stale.
 
-## Unreleased
+## 0.1.1
 
 **New**
 
@@ -39,6 +39,17 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   fragments are unchanged.
 
   Found and reproduced by an adopter against `0.1.0`, not here.
+
+**What an existing config will see change**
+
+- **Upgrading can report more, and the new findings are not new text.** Any tracked file that an
+  ignored directory's name was removing is back in the index, so a scan, `claims`, `undeclared`,
+  `unused` or the citation policy may now report sites that were always there and never visible. A
+  project affected by this had a gate that was quietly looking at fewer files; expect to read the
+  findings, then accept the ones you are not fixing into the baseline. **Nothing in this release
+  reports less.**
+- Whether you are affected is cheap to check: an ignored directory whose name also appears as a
+  path segment anywhere under it. A project with no such collision sees no change at all.
 
 ## 0.1.0
 
