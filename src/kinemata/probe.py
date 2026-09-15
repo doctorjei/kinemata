@@ -51,7 +51,7 @@ So there is **no predicate escape for reading an outcome**, though
 :mod:`kinemata.shape` has one for describing a row and this module would
 otherwise have copied it. The two are not the same seam: a shape predicate
 supplies a *model of what a row is*, an outcome predicate supplies *the
-judgement*. ``docs/introduction.md`` [0TN58PP-Pa0004] § Known limits carries
+judgement*. ``docs/introduction.md`` [0TN7FP9-Pa0004] § Known limits carries
 what that costs -- an outcome convention neither mode below can read stays in
 the project's own tests.
 

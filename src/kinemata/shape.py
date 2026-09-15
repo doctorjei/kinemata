@@ -54,7 +54,7 @@ fault the emptiness is.**
 
 **It is a reminder, not a catch.** An agent can edit a rule and the row it
 governs in one commit, exactly as it can edit a ``[[gate]]``'s declaration and
-the workflow that runs it. See ``docs/introduction.md`` [0TN4HDK-Pa0004]
+the workflow that runs it. See ``docs/introduction.md`` [0TN7FP9-Pa0004]
 § Known limits, which also publishes the limit this module cannot close: a
 predicate answering True for everything is indistinguishable from a declaration
 in good order.

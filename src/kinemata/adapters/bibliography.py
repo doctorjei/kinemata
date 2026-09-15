@@ -4,7 +4,7 @@ A citation stamp answers *when*. It does not answer *what*, and a citation that
 spells its target inline carries a fact that belongs in one declared place. The
 reference key supplies the second answer and this registry supplies the third::
 
-    The registry contract is `docs/design.md` [0TN49Y3-Pa0003].
+    The registry contract is `docs/design.md` [0TN7FP9-Pa0003].
 
     the stamp   when this was verified   inline
     the key     which source             inline
@@ -430,7 +430,7 @@ class Bibliography(BaseRegistry):
 
         Read as *stamps* rather than as bare names, which the default matcher
         cannot do. A sentence mentioning ``Pa0003`` in passing has not cited
-        anything; the token ``[0TN49Y3-Pa0003]`` has. Routing through
+        anything; the token ``[0TN7FP9-Pa0003]`` has. Routing through
         :func:`kinemata.stamps.find` also means a malformed token is refused
         here exactly as it is everywhere else, instead of being passed over by a
         matcher that never saw it.

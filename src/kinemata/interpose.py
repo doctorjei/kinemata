@@ -18,7 +18,7 @@ lines of path tagging with a retroactive correction pass, and a kinemata that
 tried to infer it would be a second, worse copy of the project's own model.
 
 So the project declares two things -- the funnel and an ``identify`` -- and this
-supplies the rest. See ``docs/introduction.md`` [0TN49Y3-Pa0004] § Commands.
+supplies the rest. See ``docs/introduction.md`` [0TN7FP9-Pa0004] § Commands.
 
 **What this is not.** It does not run the project's tests, arrange inputs, or
 decide anything beyond *declared or not*. :mod:`kinemata.access` remains the

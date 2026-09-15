@@ -23,20 +23,20 @@
 
 [[resource]]
 path = "README.md"
-confirmed = "2026-09-14"
+confirmed = "2026-09-15"
 note = "the first page a reader sees; a stamp here is a token they have to learn to skip"
 
 [[resource]]
 path = "docs/introduction.md"
-confirmed = "2026-09-14"
+confirmed = "2026-09-15"
 note = "the reference sheet, and the carrier for what the mechanisms cannot do"
 
 [[resource]]
 path = "docs/design.md"
-confirmed = "2026-09-14"
+confirmed = "2026-09-15"
 note = "the registry contract, read by adopters deciding whether to adopt"
 
 [[resource]]
 path = "docs/structure.md"
-confirmed = "2026-09-14"
+confirmed = "2026-09-15"
 note = "the method; prose an outside reader is meant to follow end to end"

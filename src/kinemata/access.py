@@ -1,8 +1,8 @@
 """Reaching a declared registry from the project's own code, while it runs.
 
 No other mechanism here observes a **running program** --
-``docs/structure.md`` [0TN49Y3-Pa0001] draws it as the second axis, and
-``docs/introduction.md`` [0TN49Y3-Pa0004] § Known limits says whether that
+``docs/structure.md`` [0TN7FP9-Pa0001] draws it as the second axis, and
+``docs/introduction.md`` [0TN7FP9-Pa0004] § Known limits says whether that
 absence is permanent. It is not this module's place to answer that.
 
 The first project to adopt this layer inventoried its 326-check
@@ -23,7 +23,7 @@ true on 2026-09-14.** :mod:`kinemata.probe` calls a declared callable of the
 project's with arguments the project supplies, which is the project under
 observation and nothing else. It was built because the fact it settles cannot be
 reached any other way: *this input is accepted and that one is refused* has no
-value for an oracle to print. ``docs/structure.md`` [0TN58PP-Pa0001] § The
+value for an oracle to print. ``docs/structure.md`` [0TN7FP9-Pa0001] § The
 second axis carries the column it added.
 
 **What survives, and it is narrower than the old sentence:** kinemata never runs

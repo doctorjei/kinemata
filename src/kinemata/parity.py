@@ -114,7 +114,7 @@ class Translation:
 
     ⚑ **One is not enough for real declarations, and this docstring used to say
     it was.** The sentence generalized a three-row sample; see
-    ``docs/introduction.md`` [0TN4W2N-Pa0004] § Known limits, which carries the
+    ``docs/introduction.md`` [0TN7FP9-Pa0004] § Known limits, which carries the
     measurement that withdrew it and what a wider form would take.
 
     Two forms, never both, and each is deliberately dull:
@@ -191,7 +191,7 @@ class Oracle:
     #:
     #: ⚑ **The cost of that is a declaration comparing values cannot translate
     #: its identifiers at all**, and membership runs regardless -- see
-    #: ``docs/introduction.md`` [0TN4W2P-Pa0004] § Known limits, where the reach
+    #: ``docs/introduction.md`` [0TN7FP9-Pa0004] § Known limits, where the reach
     #: of one translation is measured and dispositioned.
     translate: Translation | None = None
 
@@ -251,7 +251,7 @@ class Divergence:
     reader cannot act on is the inert signal this package exists to prevent.
 
     ⚠ What that buys is a **reminder** in the sense
-    ``docs/structure.md`` [0TN49Y3-Pa0001] uses: the authority is recorded, and
+    ``docs/structure.md`` [0TN7FP9-Pa0001] uses: the authority is recorded, and
     nothing here can stop the authoritative side being edited to silence the
     finding. The baseline has the same shape and the same answer -- it is a
     visible change to a committed file.

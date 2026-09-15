@@ -18,7 +18,7 @@ characters, a hyphen, a two-letter type -- and four more when the citation names
 a bibliography entry::
 
     The registry contract is `docs/design.md` [0TMQDKB-Ty].
-    The registry contract is `docs/design.md` [0TN49Y3-Pa0003].
+    The registry contract is `docs/design.md` [0TN7FP9-Pa0003].
 
 **The number is optional because the two halves answer different questions.**
 The stamp says *when*; the key says *which source*, and the entry for that key
