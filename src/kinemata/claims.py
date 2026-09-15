@@ -384,10 +384,10 @@ class Tree:
         """
         target = claim.strip().rstrip("/.,;:")
         # `./name` anchors to the document's own directory. Stripping it lets
-        # the fallbacks below answer: httpie's packaging README names
-        # `./get_release_artifacts.sh` [0TMVXHC-Px0002], the file sits beside
-        # it, and this reported it dead because the prefix survived into every
-        # lookup.
+        # the fallbacks below answer: httpie's packaging README cites
+        # `extras/packaging/linux/get_release_artifacts.sh` [0TMVXHC-Px0002]
+        # with a leading dot-slash, the file sits beside the README, and this
+        # reported it dead because the prefix survived into every lookup.
         if target.startswith("./"):
             target = target[2:]
         if not target:

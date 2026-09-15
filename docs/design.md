@@ -133,7 +133,7 @@ class from satisfying it — the exact population `kind = "import"` exists for �
 output is a **verdict override** rather than a **model** is the one shape this design cannot keep
 checkable. Where a judgement really does depend on the run, it belongs on the project's side of the
 seam: `[[interpose]]`'s `identify` may keep state and may defer its answer, which reaches as far as
-one test. See `introduction.md` [0TN50WE-Pa0004] § Known limits for why it stops there.
+one test. See `docs/introduction.md` [0TN50WE-Pa0004] § Known limits for why it stops there.
 
 So the `declared(id)` row's *override when* — **enumeration is too large to hold, and membership
 must be answered directly** — describes an adapter this contract invites and then half-serves. An
