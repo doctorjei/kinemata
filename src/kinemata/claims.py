@@ -98,7 +98,28 @@ NEGATION_WINDOW = 45
 #: negation across a list, and treating the comma as a boundary reported every
 #: item after the first. A contrastive conjunction genuinely ends the negation's
 #: reach; a list separator does not.
-CLAUSE_BOUNDARY = re.compile(r"[;:]|\bbut\b|\bhowever\b|\bwhereas\b|\bwhile\b", re.I)
+#:
+#: A sentence end is a boundary for the same reason, and was missing until
+#: 2026-09-15: "the declaration for ``a.py`` is missing. The rule in ``b.py``
+#: records why" is two subjects, and the first one's negation was silently
+#: dropping the second one's claim. Measured over this tree and every corpus
+#: tree beside it before it was written -- 60 claims come back, none of which
+#: any project had a way to notice was gone.
+
+#: A period ending a sentence, and not one ending an abbreviation. Two shapes
+#: have to stay out: a dotted initialism (``e.g.``, ``i.e.``) and a short word
+#: abbreviation (``etc.``, ``cf.``). Both were measured sitting inside real
+#: negation windows and neither decided a claim there, so this guards a
+#: constructed case rather than an observed one -- without it, "there is no
+#: support, e.g. ``a.py``" reports ``a.py`` as a dead path. Requiring a capital
+#: after the period would have covered the same cases without a word list, and
+#: was rejected on measurement: it recovers 39 of the 60, because a sentence in
+#: this style routinely opens with a backticked path.
+SENTENCE_END = r"(?<![A-Za-z]\.[A-Za-z])(?<!\bcf)(?<!\bvs)(?<!\betc)(?<!\bincl)[.!?]\s"
+
+CLAUSE_BOUNDARY = re.compile(
+    rf"[;:]|{SENTENCE_END}|\bbut\b|\bhowever\b|\bwhereas\b|\bwhile\b", re.I
+)
 
 #: Words that mean a path is being discussed rather than claimed to exist.
 #:

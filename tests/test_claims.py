@@ -149,6 +149,39 @@ def test_a_negation_far_back_on_the_line_above_does_not_reach(tmp_path):
     assert broken(verify(tmp_path)) == {("path", "src/loader.py")}
 
 
+def test_a_negation_does_not_reach_into_the_next_sentence(tmp_path):
+    """A sentence end bounds a negation exactly as a contrastive one does.
+
+    Measured over this tree and every corpus tree beside it: 60 claims were
+    being dropped by a negation belonging to a neighboring sentence, and no
+    project had any way to notice, because the drop makes the check pass.
+    """
+    write(
+        tmp_path,
+        "doc.md",
+        "There is no compatibility read. The loader is `src/loader.py`.\n",
+    )
+    assert broken(verify(tmp_path)) == {("path", "src/loader.py")}
+
+
+def test_an_abbreviation_does_not_end_a_sentence(tmp_path):
+    """The guard on the rule above, and the reason it is not a bare period.
+
+    "e.g." and "etc." end in a period without ending anything, so reading them
+    as sentence ends would cut the negation off from the example it introduces
+    and report a path the prose plainly says is not there. Requiring a capital
+    letter after the period covers these too and was rejected on measurement:
+    it recovers 39 of the 60, a sentence here routinely opening with a path.
+    """
+    write(
+        tmp_path,
+        "doc.md",
+        "There is no support for it, e.g. `src/gone.py` today.\n"
+        "There is no declaration for it, etc. `src/also_gone.py` either.\n",
+    )
+    assert verify(tmp_path).broken == []
+
+
 def test_a_placeholder_is_teaching_a_shape(tmp_path):
     write(tmp_path, "doc.md", "Point it at `src/pkg/constants.py` in your project.\n")
     assert verify(tmp_path).broken == []

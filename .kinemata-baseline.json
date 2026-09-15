@@ -35,6 +35,13 @@
     {
       "registry": "citations",
       "entry": "provenance:path",
+      "antipattern": "corpus/",
+      "path": "src/kinemata/claims.py",
+      "text": "# they must not decide what exists. `corpus/` is gitignored and 39 MB of"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
       "antipattern": "design.md",
       "path": "src/kinemata/baseline.py",
       "text": "``design.md`` \u00a74.3: \"record the baseline, fail on any increase, drive it down on"
@@ -141,8 +148,29 @@
       "registry": "citations",
       "entry": "provenance:path",
       "antipattern": "kinemata.toml",
+      "path": "src/kinemata/access.py",
+      "text": "built from ``kinemata.toml`` is already a live Python object carrying"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "kinemata.toml",
       "path": "src/kinemata/config.py",
       "text": "\"\"\"Read a ``kinemata.toml`` into ready-to-use registries.\"\"\""
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "kinemata.toml",
+      "path": "src/kinemata/config.py",
+      "text": "#: Every table a ``kinemata.toml`` may declare. \u2691 **The root was the last table"
+    },
+    {
+      "registry": "citations",
+      "entry": "provenance:path",
+      "antipattern": "kinemata.toml",
+      "path": "src/kinemata/config.py",
+      "text": "A mechanism nobody can turn on is not a mechanism. This reads a ``kinemata.toml``"
     },
     {
       "registry": "citations",
