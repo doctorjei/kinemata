@@ -197,8 +197,9 @@ kinemata unused      # advisory. Declared entries nothing mentions. Refuses
 kinemata check       # the gate. Exits 1 on a strong finding. Run in CI.
 kinemata claims      # the gate, for documentation. Exits 1 on a dead claim.
 kinemata parity      # the gate, for what a registry declares against the set an
-                     # oracle says the code produces: membership either way, and
-                     # with a `field`, each entry's value too. Exits 1 on a
+                     # oracle says the code produces: membership, in whichever
+                     # direction `relation` says is the claim, and with a
+                     # `field`, each entry's value too. Exits 1 on a
                      # disagreement; refuses without a [[parity]].
 kinemata shape       # the gate, for a declaration against its own shape: a
                      # field set, a vocabulary, a flag another field requires.
@@ -912,8 +913,9 @@ the denominator changed, the corpus boundary was drawn fresh, and the buckets di
 a successor but not a replacement, and neither number should be read as the other's before-and-after.
 
 ⚑ **What has been re-measured is the largest single reason below**, the 125 manifest-parity test
-functions: **94 of them (75%) are expressible as things stand**, against 53 (42%) earlier the same
-day. The movement is the shape check, a widened adapter and the probe corpus. That is a measurement
+functions: **103 of them (82%) are expressible as things stand**, against 53 (42%) on the morning
+of 2026-09-14. The movement is the shape check, a widened adapter, the probe corpus, and then a
+path-valued `field`, a registry selector and a parity `relation`. That is a measurement
 over a population this project holds — it says what *could* be expressed, never what anyone has
 declared.
 
