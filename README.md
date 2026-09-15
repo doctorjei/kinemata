@@ -194,6 +194,12 @@ kinemata shape       # the gate, for a declaration against its own shape: a
                      # Exits 1 on a rule an entry fails — or on a rule that
                      # examined no entry, which checks nothing. Refuses
                      # without a [[shape]].
+kinemata probe       # the gate, for what the project's own code accepts and
+                     # refuses, against a declared corpus of cases the project
+                     # supplies. Exits 1 on a case answered otherwise — or on a
+                     # corpus carrying only one polarity, which a callable that
+                     # refuses everything would satisfy. Refuses without a
+                     # [[probe]].
 kinemata baseline    # what the gates already accept. --record to change it;
                      # runs every scan that feeds it, being the one that writes.
 kinemata context     # the gate, for what a session loads. Exits 1 over the ceiling.

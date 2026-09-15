@@ -9,6 +9,40 @@ a project outside this repository runs against kinemata and upgrades between pub
 Commits are in `git log`; the reasoning behind a design decision stays in the document that
 carries the decision. A changelog repeating either becomes a second carrier and goes stale.
 
+## Unreleased
+
+Not published. Kept current as the work lands, rather than reconstructed at the next release from
+a commit range — which is how the entries below were nearly written. The heading carries no
+version deliberately: `[[count]] changelog version` reads the newest **versioned** heading, so
+this one is invisible to it until it is renamed.
+
+**New**
+
+- `kinemata probe` compares a declared corpus of inputs against what the project's own code
+  accepts and refuses — a fact with no value on either side, which no oracle can print. The
+  project supplies the target and the cases; how the answer is read is declared in the config,
+  not supplied by the project. A corpus carrying only one polarity fails rather than passing:
+  a refusal-only corpus is satisfied by a callable that refuses everything.
+- **This is the first check that calls the project's own code.** kinemata still never runs the
+  project's test suite or entry point, and never classifies an outcome by reading output.
+
+**Changed**
+
+- `kinemata review` and `kinemata check` report how many f-strings a `match_mode = "strings"`
+  registry could not read. An f-string is dropped whole by the literal extractor — not merely
+  its interpolated parts — so a registry matching on values is blind to every one of them and
+  reports clean. The behavior is unchanged; it is no longer silent.
+
+**Fixed**
+
+- The advice printed for an `exclude` fragment that matched by substring suggested an anchored
+  spelling derived from the fragment, which for a directory below the repository root reaches
+  none of the paths printed beside it. Following it would have silently stopped excluding whole
+  subtrees. The two cases are now told apart and the suggested spellings are derived from the
+  paths that actually matched.
+- A `[[parity]]` comparing values threw away the membership result when a cell held a container
+  it could not render. The value half still blocks, as it must; the membership half is reported.
+
 ## 0.1.0a2.dev1
 
 Mechanisms that did not exist in the first release, and changes an existing config can observe.
