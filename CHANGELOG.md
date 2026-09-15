@@ -9,12 +9,13 @@ a project outside this repository runs against kinemata and upgrades between pub
 Commits are in `git log`; the reasoning behind a design decision stays in the document that
 carries the decision. A changelog repeating either becomes a second carrier and goes stale.
 
-## Unreleased
+## 0.1.0
 
-Not published. Kept current as the work lands, rather than reconstructed at the next release from
-a commit range — which is how the entries below were nearly written. The heading carries no
-version deliberately: `[[count]] changelog version` reads the newest **versioned** heading, so
-this one is invisible to it until it is renamed.
+**The first release that is not a pre-release.** What changes for an installer: while only
+pre-releases existed, a plain `pip install kinemata` resolved to one, because pip skips a
+pre-release only when some other version satisfies the requirement. One does now, so an unpinned
+install moves here and stays on final versions from now on. The interfaces are still not settled
+and the classifiers still say so.
 
 **New**
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kinemata"
-version = "0.1.0a2.dev1"
+version = "0.1.0"
 description = "One declared place per fact; find the code that re-derives it."
 readme = "README.md"                 # without this a built distribution ships no
                                      # long description at all: the PyPI page and
@@ -20,10 +20,11 @@ authors = [{ name = "Jei Blanchard", email = "jjb@eng.ufl.edu" }]
 # thing this package exists to report. Same reasoning as the absent
 # `[tool.ruff] target-version` below.
 classifiers = [
-  # Matches the version above rather than restating it: an alpha says the API
-  # may move, which is the one thing a reader needs from this row. It was left
-  # out entirely until the release conversation, because it is a claim about
-  # readiness and nothing had decided that yet.
+  # A claim about readiness, which is the one thing a reader needs from this
+  # row, and it is deliberately NOT derived from the version. It read "matches
+  # the version above" while every published version carried a pre-release
+  # segment; 0.1.0 does not, and the maturity did not change on the day the
+  # segment was dropped. The API may still move.
   "Development Status :: 3 - Alpha",
   "Environment :: Console",
   "Intended Audience :: Developers",
