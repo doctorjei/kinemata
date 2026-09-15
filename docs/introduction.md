@@ -87,6 +87,27 @@ name = "constants"
 kind = "python-constants"
 modules = ["src/pkg/constants.py"]
 
+# One document, more than one view of it. `where` narrows a registry to the
+# entries a selector keeps, using the same vocabulary a [[shape]] rule's `when`
+# guard takes -- a table of operators, or a `module:attribute` naming a
+# predicate of the project's own. It exists because an oracle that answers for
+# part of a declaration otherwise pays an `unproduced` finding for every row
+# outside it: measured on a 99-row manifest against an oracle covering 10,
+# 93 findings became 9.
+#
+# It narrows the REGISTRY, so membership keeps meaning "and there is nothing
+# else" over the set the view declares, and the scan, `undeclared`, `shape` and
+# `unused` all see the same narrowing. A selector that keeps nothing is refused
+# at load -- running a check is not the check answering -- and `where` cannot be
+# combined with `closed`, which would call every identifier of an excluded row
+# undeclared.
+[[registry]]
+name = "keyspace-modekeyed"
+kind = "yaml-mapping"
+source = "keyspace-manifest.yaml"
+section = "keys"
+where = { present = ["default", "primary"] }
+
 # Code shapes: canonical helpers, declared by hand.
 [[registry]]
 name = "helpers"
@@ -1167,12 +1188,20 @@ limit is closed, in the same commit that closes it.**
   from an adopter: one extra view added 101 lines to `ids`.** **What it would take:** a scope that
   names the field as well as the registry and the direction, which the value direction already
   half-does.
-- **accepted** · **Membership cannot be filtered.** A registry declaring a superset of what one
-  oracle produces pays an `unproduced` tail for every member outside it, to be baselined or narrowed
-  by a separate view; for a project gating CI on parity that is a standing cost. One adopter's went
-  from 57 to 8 by adding an import view. **What it would take:** a declared predicate scoping which
-  entries an oracle is answerable for — the seam `[[shape]]`'s guard already is, applied to the
-  other mechanism.
+- **accepted** · **~~Membership cannot be filtered.~~** **Closed 2026-09-15** with `[[registry]]
+  where`, in the form this entry named: the `[[shape]]` guard vocabulary, `Condition` or project
+  predicate, selecting which entries a view carries. Measured on an adopter's 99-row manifest
+  against an oracle covering 10 of them: **93 findings to 9**, and the 9 that remain are rows that
+  view really does declare and that oracle really does not produce.
+  ⚑ **It narrows the registry, not the check** — so membership keeps its exact meaning (*the
+  registry is the set*) and the scan, `undeclared`, `shape` and `unused` all see the same view.
+  Putting it on `[[parity]]` was weighed and refused: it would make *"and there is nothing else"*
+  subset-relative for every adopter, and two narrowed parities would share
+  `parity:<registry>:<direction>`, so one's `--prune` would delete the other's records.
+  ⚑ **What is left, and it is the cost rather than an oversight:** a project now states several
+  views of one document, and **nothing checks that they agree with each other**. `where` is also
+  refused alongside `closed` — a closed subset would call every identifier of an excluded row
+  undeclared — so a project wanting both must close the whole view.
 - **boundary** · **A baseline is an allowlist.** An agent can silence a finding by re-recording
   it. What makes that survivable is that it is a committed file change, visible in review.
 - **boundary** · **`[[gate]]` verifies text presence, not execution.** Blind to a step disabled by

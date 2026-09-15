@@ -428,8 +428,16 @@ class Shaped:
         ]
 
 
-def _asked(what: Condition | Predicate) -> Callable[[Entry], bool]:
-    """One entry-scope question as a callable, resolving a predicate if needed."""
+def asked(what: Condition | Predicate) -> Callable[[Entry], bool]:
+    """One entry-scope question as a callable, resolving a predicate if needed.
+
+    ⚑ **Public since 2026-09-15, when a second mechanism needed it**:
+    ``[[registry]] where`` narrows a registry with the same guard vocabulary,
+    and :class:`~kinemata.contract.Selected` takes a plain callable so that
+    module never learns what a condition is. Two spellings of *"turn a guard
+    into a question"* is this package's own subject, and :mod:`kinemata.targets`
+    is the exact precedent for extracting one when the second caller arrives.
+    """
     if isinstance(what, Predicate):
         found = resolve(what.target)
         return lambda entry: bool(found.value(entry))
@@ -476,8 +484,8 @@ def _run(name: str, rule: Rule, entries: Sequence[Entry]) -> Judged:
             ),
         )
 
-    claim = _asked(rule.claim)
-    selects = _asked(rule.guard) if rule.guard is not None else None
+    claim = asked(rule.claim)
+    selects = asked(rule.guard) if rule.guard is not None else None
     group = [entry for entry in entries if selects is None or selects(entry)]
     return Judged(
         rule=rule,

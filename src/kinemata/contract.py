@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from functools import cached_property
 from typing import Any, Protocol, runtime_checkable
@@ -382,6 +382,63 @@ class BaseRegistry(ABC):
     def __post_init_check__(self) -> None:
         if self.closed:
             self.candidates("")
+
+
+#: What :class:`Selected` carries over from the registry it narrows. Every one
+#: is a property of the *data model* or of the project's configuration, and none
+#: of them changes because fewer rows are in view.
+_CARRIED = (
+    "name", "closed", "budget", "line_budget", "boundary", "match_mode",
+    "suffixes", "machinery", "mentions_are_uses",
+)
+
+
+class Selected(BaseRegistry):
+    """One registry narrowed to the entries a declared selector keeps.
+
+    **A wrapper rather than a filter inside each adapter**, because a selector
+    asks about an :class:`Entry` and every kind produces entries -- and
+    ``kind = "import"`` hands the class over whole, so a filter living in
+    :meth:`~BaseRegistry.entries` would be a contract change every adopter's own
+    class had to make.
+
+    **Everything derived is re-derived from the kept entries**, which is the
+    whole point rather than an implementation detail: :meth:`detect` over a
+    subset must not recognize an identifier the subset excludes, or a scan would
+    report a bypass against a declaration this view does not carry.
+
+    Two methods are **delegated** instead, because they ask what the data model
+    looks like rather than what is in it: :meth:`line` is how an adapter
+    projects a row and :meth:`candidates` is its identifier syntax. Narrowing
+    the set changes neither.
+
+    ⚑ **The selector arrives as a plain callable**, so this module still does
+    not learn what a ``[[shape]]`` condition is -- the same seam
+    :func:`kinemata.claims.verify` uses for ``elsewhere``.
+    """
+
+    def __init__(self, inner: Registry, keep: Callable[[Entry], bool]) -> None:
+        self._inner = inner
+        self._keep = keep
+        for attribute in _CARRIED:
+            setattr(
+                self,
+                attribute,
+                getattr(inner, attribute, getattr(BaseRegistry, attribute, None)),
+            )
+
+    def entries(self) -> Iterable[Entry]:
+        return [entry for entry in self._inner.entries() if self._keep(entry)]
+
+    def line(self, entry: Entry) -> str:
+        return self._inner.line(entry)
+
+    def candidates(self, text: str) -> list[str]:
+        return self._inner.candidates(text)
+
+    @property
+    def notices(self) -> tuple[str, ...]:
+        return tuple(getattr(self._inner, "notices", ()))
 
 
 def missing_members(obj: object) -> tuple[str, ...]:

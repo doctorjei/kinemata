@@ -26,6 +26,15 @@ this one is invisible to it until it is renamed.
 - **This is the first check that calls the project's own code.** kinemata still never runs the
   project's test suite or entry point, and never classifies an outcome by reading output.
 
+- `[[registry]]` takes a `where` selector, narrowing a view to the entries it keeps. The vocabulary
+  is a `[[shape]]` rule's guard — a table of operators, or a `module:attribute` naming a predicate
+  of the project's own — reused rather than invented. It exists because an oracle answering for part
+  of a declaration otherwise pays an `unproduced` finding for every row outside it: measured on a
+  99-row manifest against an oracle covering 10, **93 findings became 9**, and the 9 are real.
+  It narrows the **registry**, so membership keeps meaning *"and there is nothing else"* over the
+  set the view declares, and the scan, `undeclared`, `shape` and `unused` see the same narrowing.
+  A selector that keeps nothing is refused at load, and `where` may not be combined with `closed` —
+  a closed subset would call every identifier of an excluded row undeclared.
 - A `[[parity]]`'s `field`, and a `[[shape]]` rule's `field` / `present` / `absent`, may name a
   **path** into an entry written as a list: `field = ["default", "primary"]` reaches one arm of a
   nested map. A bare string is still exactly one key however many dots it holds, and is never

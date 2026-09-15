@@ -75,6 +75,7 @@ from .context import STRIPPERS, escapes
 from .contract import (
     BaseRegistry,
     Registry,
+    Selected,
     closure_guard,
     missing_members,
     spell_path,
@@ -91,8 +92,17 @@ from .resources import (
     ResourceError,
 )
 from .resources import declared as declared_resources
-from .shape import SET_OPERATORS, Condition, Predicate, Rule, Shape
+from .shape import (
+    SET_OPERATORS,
+    Condition,
+    Predicate,
+    Rule,
+    Shape,
+    ShapeError,
+    asked,
+)
 from .targets import TARGET_FORM as FUNNEL_FORM
+from .targets import TargetError
 
 CONFIG_NAMES = ("kinemata.toml", ".kinemata.toml")
 
@@ -664,7 +674,7 @@ ROOT_KEYS = frozenset(
 REGISTRY_KEYS = frozenset(
     {
         "name", "kind", "closed", "allow_empty", "suffixes", "machinery",
-        "match_mode", "boundary",
+        "match_mode", "boundary", "where",
     }
 )
 
@@ -1075,6 +1085,13 @@ def load(path: str | Path) -> Settings:
             registry.match_mode = _match_mode(spec, path)
         if "boundary" in spec and "boundary" not in BUILDER_KEYS.get(kind, ()):
             registry.boundary = _boundary(spec, path)
+        # Last of the cross-kind attributes, and the only one that changes what
+        # the registry *contains* rather than how it is read -- so it runs after
+        # everything a selector might be asked about has been set, and before
+        # the emptiness check below, which is what catches a selector that kept
+        # nothing.
+        if "where" in spec:
+            registry = _selected(registry, spec, path)
         # Every declaration above can be individually valid and still produce a
         # registry with nothing in it -- the modules exist and parse, they just
         # hold nothing this adapter recognizes. That check passes, reports
@@ -2212,6 +2229,55 @@ def _build_shapes(
             )
         built.append(Shape(registry=name, rules=tuple(rules)))
     return tuple(built)
+
+
+def _selected(registry: BaseRegistry, spec: dict[str, Any], path: Path) -> BaseRegistry:
+    """``[[registry]] where`` -- the same registry, narrowed to a group.
+
+    **The vocabulary is a ``[[shape]]`` guard, reused rather than invented.** It
+    is already the seam for *"which entries is this rule about"*, and a second
+    operator table would eventually disagree with the first.
+
+    **Why it lives on the registry and not on the check that wanted it.** The
+    motivating case is a parity whose oracle answers for 10 of 99 declared rows,
+    paying an ``unproduced`` tail for the other 89. Putting the selector on
+    ``[[parity]]`` would have made membership's *"and there is nothing else"*
+    subset-relative for everyone and broken the uniqueness of
+    ``parity:<registry>:<direction>``, so two narrowed parities' ``--prune``
+    would delete each other's records. Here the registry **is** the set,
+    membership keeps its meaning, and every other mechanism -- the scan,
+    ``undeclared``, ``shape``, ``unused`` -- sees the same narrowing.
+    """
+    name = spec.get("name", "?")
+    at = f"{path}: [[registry]] {name!r} where"
+    if spec.get("closed", False):
+        raise ConfigError(
+            f"registry {name!r} declares both 'closed' and 'where'. A closed "
+            "registry answers 'nothing declares this identifier', and over a "
+            "subset every identifier belonging to an excluded row would be a "
+            "finding that is wrong. Close the whole view, or narrow it."
+        )
+    guard = _shape_guard(spec["where"], at)
+    try:
+        keep = asked(guard)
+    except (ShapeError, TargetError) as exc:
+        raise ConfigError(f"{at} cannot be evaluated: {exc}") from exc
+    narrowed = Selected(registry, keep)
+    if not any(True for _ in narrowed.entries()):
+        # Refused rather than reported, and refused here rather than left to the
+        # emptiness notice below, which `allow_empty` can switch off: a selector
+        # that kept nothing makes every mechanism reading this registry vacuous
+        # at once. The two causes are told apart because the fixes are opposite.
+        if any(True for _ in registry.entries()):
+            raise ConfigError(
+                f"{at} ({guard}) kept none of the entries {name!r} declares, so "
+                "every check reading this view would pass by looking at nothing."
+            )
+        raise ConfigError(
+            f"registry {name!r} produced no entries at all, so its 'where' "
+            f"({guard}) has nothing to narrow."
+        )
+    return narrowed
 
 
 def _field_spelling(declared: object, where: str) -> str | tuple[str, ...]:
