@@ -15,7 +15,7 @@ import pytest
 from kinemata.claims import verify
 from kinemata.cli import main
 from kinemata.config import ConfigError, load
-from kinemata.gates import Gate, enforced
+from kinemata.gates import Gate, enforced, uncovered
 
 
 def write(tmp_path, rel, body):
@@ -547,3 +547,95 @@ def test_a_toml_native_date_is_accepted(tmp_path):
         """)
     (promise,) = load(config).promised
     assert promise.until.isoformat() == "2026-12-01"
+
+
+# -- sections no gate row runs ------------------------------------------------
+#
+# The cover line counts declared gates only, so a declared section kind with no
+# gate row runs nowhere while it prints green. Measured 2026-09-16 on an
+# adopter's tree: five `[[shape]]` blocks, gates for three other commands, and
+# `shape` running in no pipeline at all.
+
+
+def test_a_shape_block_with_no_shape_gate_is_named():
+    gates = (Gate(command="kinemata check"), Gate(command="kinemata claims"))
+    assert uncovered(gates, {"shape": True}) == ("[[shape]]",)
+
+
+def test_a_gate_naming_the_command_covers_its_section():
+    gates = (Gate(command="kinemata check"), Gate(command="python -m kinemata shape"))
+    assert uncovered(gates, {"shape": True}) == ()
+
+
+def test_a_registry_is_covered_by_check_or_by_undeclared():
+    assert uncovered((Gate(command="kinemata undeclared"),), {"registry": True}) == ()
+    assert uncovered((Gate(command="kinemata claims"),), {"registry": True}) == (
+        "[[registry]]",
+    )
+
+
+def test_a_context_with_no_context_gate_is_named():
+    assert uncovered((Gate(command="kinemata check"),), {"context": True}) == (
+        "[context]",
+    )
+
+
+def test_sections_the_claims_run_itself_exercises_are_never_listed():
+    """`[[count]]`, `[[promise]]` and `[claims]` are read by the command printing
+    this line -- a running `claims` covers them by definition, so listing them
+    would nag every documented project on every run."""
+    gates = (Gate(command="kinemata check"),)
+    assert uncovered(gates, {"shape": False, "probe": False}) == ()
+
+
+def test_the_warning_rides_the_cover_line(tmp_path, capsys):
+    """Printed, unsuppressed, and not a failure: the declaration may be run by
+    hand, in which case failing would force either real CI wiring or deleting
+    the declaration -- and deleting a check to satisfy its inventory is the
+    failure the inventory exists to prevent."""
+    write(tmp_path, "README.md", "x\n")
+    write(tmp_path, ".github/workflows/checks.yml", WORKFLOW)
+    write(
+        tmp_path,
+        "kinemata.toml",
+        """
+        [project]
+        root = "."
+
+        [claims]
+        suffixes = [".md"]
+
+        [context]
+        include = ["README.md"]
+        budget = 1024
+
+        [[gate]]
+        command = "kinemata check"
+        """,
+    )
+    assert main(["claims", "-c", str(tmp_path / "kinemata.toml")]) == 0
+    out = capsys.readouterr().out
+    assert "ungated: [context] declares checks no [[gate]] row runs" in out
+
+
+def test_no_gates_declared_means_no_coverage_sentence_to_correct(tmp_path, capsys):
+    """With no gates there is no `gates:` line, so no impression to correct --
+    warning here would nag every hand-run project on every run."""
+    write(tmp_path, "README.md", "x\n")
+    write(
+        tmp_path,
+        "kinemata.toml",
+        """
+        [project]
+        root = "."
+
+        [claims]
+        suffixes = [".md"]
+
+        [context]
+        include = ["README.md"]
+        budget = 1024
+        """,
+    )
+    assert main(["claims", "-c", str(tmp_path / "kinemata.toml")]) == 0
+    assert "ungated" not in capsys.readouterr().out

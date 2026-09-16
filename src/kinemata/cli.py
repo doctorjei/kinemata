@@ -65,7 +65,7 @@ from .confirm import ConfirmError, apply, dating, plan, redate
 from .context import measure
 from .contract import BaseRegistry, Entry
 from .exclusion import audit, excluded, relative_paths
-from .gates import WORKFLOW_DIR, enforced
+from .gates import WORKFLOW_DIR, enforced, uncovered
 from .literals import clusters
 from .parity import RELATION_SAYS, Disagreement, Divergence, Parity
 from .parity import survey as parity_survey
@@ -1327,6 +1327,20 @@ def cmd_claims(args: argparse.Namespace) -> int:
     if inventory.declared:
         print(f"gates: {len(inventory.verified)} of {inventory.declared} "
               f"declared check(s) run in {', '.join(inventory.searched) or 'nothing'}")
+        # Same condition, deliberately: with no gates declared there is no
+        # coverage sentence to be misleading, so nothing to correct. With gates,
+        # a declared section no gate row runs would keep the line above green
+        # while running nowhere -- the count measures declared gates, not
+        # declared checks.
+        declared = {
+            "registry": bool(settings.registries),
+            "parity": bool(settings.parities),
+            "shape": bool(settings.shapes),
+            "probe": bool(settings.probes),
+            "context": settings.context is not None,
+        }
+        for spelling in uncovered(settings.gates, declared):
+            print(f"ungated: {spelling} declares checks no [[gate]] row runs")
 
     # Same rule as the gate count and the exemption count, for the same reason:
     # a promise is a claim nobody is checking, so the number of them is not

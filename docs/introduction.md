@@ -1010,7 +1010,14 @@ cost stands; spending it is the author's per-span choice.
 
 **Gate verification** rides on `claims` rather than being its own command: a check that
 verifies other checks are wired up is worthless if nothing guarantees it runs. It fires on a
-deleted step **and** on a commented-out one.
+deleted step **and** on a commented-out one. Beside the cover line it prints a second one the
+cover line made necessary: a declared section no gate row runs — five `[[shape]]` blocks and
+gates for three other commands still printed `3 of 3`, because the count measures declared
+gates, not declared checks. `ungated:` names each such section. It warns rather than fails: the
+declaration may be run by hand, and failing would force either real CI wiring or deleting the
+declaration to satisfy its inventory. Advisory readers (`review`, `clusters`, `unused`, `ids`)
+never count, and neither do sections `claims` itself exercises (`[[count]]`, `[[promise]]`,
+`[claims]`) — a running `claims` covers those by definition.
 
 **`context`** models what a session loads: resolve `include` globs, apply declared `strip`
 transforms, sum bytes, compare to `budget`. `-v` lists files largest-first.

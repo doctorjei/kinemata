@@ -91,6 +91,53 @@ class Inventory:
         return "\n".join(f"  {item}" for item in self.absent)
 
 
+#: Declaration sections exercised by exactly one gate-shaped command each, as
+#: (config key, section as written, covering commands). A section listed here
+#: with no ``[[gate]]`` row naming one of its commands runs nowhere while the
+#: cover line reads green -- measured 2026-09-16 on an adopter's tree, where
+#: five ``[[shape]]`` blocks and no shape gate printed ``3 of 3 declared
+#: check(s) run``. The numerator and denominator come from the same place
+#: (declared gates only), so every new section kind re-opens the hole silently.
+#:
+#: What is *not* listed, and why: ``[[count]]``, ``[[promise]]`` and ``[claims]``
+#: are exercised by ``claims`` itself, which is the command printing this
+#: warning -- a running ``claims`` covers them by definition. ``[[interpose]]``
+#: runs as a pytest plugin, so no CLI command names it and no gate row could.
+#: ``[citations]`` is read by advisory commands. ``[[command]]`` declares
+#: helpers, not checks; ``[[gate]]`` is the inventory itself. Advisory readers
+#: (``review``, ``clusters``, ``unused``, ``ids``) cover nothing: the sentence
+#: being protected counts *checks that run*, and an advisory pass is not one.
+#: A registry is covered by ``check`` **or** ``undeclared`` -- closed
+#: registries are exercised by the latter, open ones by the former, and
+#: demanding one spelling would nag the other configuration.
+SECTION_COMMANDS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("registry", "[[registry]]", ("kinemata check", "kinemata undeclared")),
+    ("parity", "[[parity]]", ("kinemata parity",)),
+    ("shape", "[[shape]]", ("kinemata shape",)),
+    ("probe", "[[probe]]", ("kinemata probe",)),
+    ("context", "[context]", ("kinemata context",)),
+)
+
+
+def uncovered(
+    gates: tuple[Gate, ...], declared: dict[str, bool]
+) -> tuple[str, ...]:
+    """Sections declaring checks no gate row runs, as written (``[[shape]]``).
+
+    ``declared`` maps config keys to whether the section appears -- the caller
+    reads it off the loaded settings, so this function never learns what a
+    config is. A covering gate is one whose command names the exercising
+    command; flags after it are fine, so the match is containment, not equality.
+    """
+    names = [gate.command for gate in gates]
+    return tuple(
+        spelling
+        for key, spelling, commands in SECTION_COMMANDS
+        if declared.get(key, False)
+        and not any(command in name for command in commands for name in names)
+    )
+
+
 def _uncommented(text: str) -> str:
     """The file with whole-line comments removed.
 
