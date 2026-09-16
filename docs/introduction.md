@@ -459,9 +459,15 @@ when it wants to check a second fact about one source.
 ⚑ **Turning `flatten` on for an existing registry changes every identifier under it**, so every
 accepted finding keyed on one becomes unmatched: `--prune` deletes them as fixed and `--record`
 re-records them under new ids. Do it in a commit of its own and re-record the baseline there, with
-a note saying why the ids moved. **There is deliberately no migration** — rewriting fingerprints
-would be the tool guessing that an old id and a new id are the same finding, which is the
-permissive direction.
+a note saying why the ids moved. ⚑ **The same no-migration rule is what a renumber looks like from inside.** A claim fingerprint
+keys on the line's text, so inserting an item above ordinal-bearing claims reports each shifted
+claim twice — once as new, once as no-longer-present. Measured 2026-09-16: one inserted item,
+three shifted claims, six lines of report, zero real findings. **Do not re-record.** Edit the
+baseline file's texts to the new ordinals directly: the finding is unchanged, only its address
+moved, and `--record` would hand every accepted finding a fresh expiry lease for no measured
+gain. A content hash would not survive this either — the text itself changed — so only
+author-assigned stable ids would, and those tax all prose for a rare event with a three-line
+recovery. This paragraph is the whole remedy, on purpose.
 
 **`import` is the extension point**, and the list above is not the boundary of what a registry can
 be. A project whose data model no built-in adapter fits writes the adapter itself — most usefully
