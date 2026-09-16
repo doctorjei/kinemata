@@ -654,14 +654,18 @@ def outside_illustrations(source: str) -> str:
     goes red. The failure mode of a typo is a finding the author already knows
     how to fix, rather than a claim that quietly stopped being checked.
 
-    **``.py`` only, and that is a decision.** A reStructuredText role renders as
-    literal text in markdown, so adopting it there would put checker syntax in
-    front of a human reader; and no markdown claim in this tree needs it.
-    Markdown's answer to the same problem is the fence, which ``claims``
-    deliberately does not honor -- a cost named and measured in
-    :func:`outside_fenced_blocks`, not a gap to paper over with a second
-    notation. A suffix with no entry is scanned whole, which over-reports rather
-    than under-reports.
+    **``.py`` first, ``.md`` on measured demand.** The role began docstring-only, and
+    deliberately: a reStructuredText role renders as literal text in markdown, so
+    honoring it there puts checker syntax in front of a human reader, and no
+    markdown claim in this tree needed it. Two adopting projects falsified the
+    second half on the same day in 2026-09-16 -- one naming a real file that lives
+    outside the tree on purpose, one a generic filename that must stay in backticks
+    for readability -- and neither has any other permanent marking: a baseline
+    lapses by construction, de-backticking spends formatting on compliance, and a
+    fence cannot go mid-sentence. The render cost stands, and spending it is now
+    the author's per-span choice rather than this module's refusal. What does not
+    change is the paragraph above: one role only, misspelled suppresses nothing,
+    and every suppression is counted where it is printed.
 
     **Declared rather than guessed.** ``claims`` already infers illustrations
     from shape -- a one-letter stem, a placeholder word -- and those heuristics
@@ -721,9 +725,10 @@ UNFENCED_FILTERS = {".md": outside_fenced_blocks, ".py": shown_python}
 #: Documents minus the spans they merely *show*, marked inline with the
 #: illustration role. Applied by ``claims`` after
 #: :data:`DOCUMENTATION_FILTERS`, since a role means nothing outside prose.
-#: ``.py`` only -- see :func:`outside_illustrations` for why markdown is left
-#: out on purpose.
-ILLUSTRATION_FILTERS = {".py": outside_illustrations}
+#: ``.py`` and ``.md`` -- the latter on measured adopter demand, see
+#: :func:`outside_illustrations`; a suffix with no entry is scanned whole,
+#: which over-reports rather than under-reports.
+ILLUSTRATION_FILTERS = {".py": outside_illustrations, ".md": outside_illustrations}
 
 #: f-string skeletons, for comparing messages rather than values.
 MESSAGE_SKELETONS = {".py": python_message_skeletons}

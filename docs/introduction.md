@@ -978,10 +978,12 @@ about the tree. Whether that is worth arming is a measurement each project has t
 codebase whose docstrings cite *other* projects' files and commits, as this one's do, produces
 findings that are correct as written.
 
-**A docstring marks an illustration with a role.** A markdown document says *this text is shown,
+**A span marks itself an illustration with a role.** A markdown document says *this text is shown,
 not spoken* with a fence; a docstring had no equivalent, and the gap was the largest single class
 of finding when `.py` was first armed here — text that shows a shape rather than citing anything,
-sitting inside a sentence where a block-level fence cannot go. Putting `:shown:` immediately
+sitting inside a sentence where a block-level fence cannot go. The same gap has since been
+measured in markdown itself (2026-09-16, two adopting projects), where the fence is equally
+unavailable mid-sentence. Putting `:shown:` immediately
 before the span exempts it:
 
 | Written | Read as |
@@ -998,8 +1000,13 @@ real citation the day one of those is written. A misspelled role is therefore no
 exemption — the span is still read, and a dead path still fails. Suppressed spans are **counted
 on every run**, because a suppression nobody can count is an allowlist with a good story.
 
-`.py` only, deliberately: a reStructuredText role renders as literal text in markdown, and
-markdown's own answer is the fence, whose cost `claims` has already named and measured.
+Honored in `.py` **and `.md`**. The role began docstring-only, deliberately: a reStructuredText
+role renders as literal text in markdown, so honoring it there puts checker syntax in front of a
+human reader. Two adopting projects falsified the refusal on the same day in 2026-09-16 — one
+naming a real file that lives outside the tree on purpose, one a generic filename that must stay
+in backticks — and neither has any other permanent marking: a baseline lapses by construction,
+de-backticking spends formatting on compliance, and a fence cannot go mid-sentence. The render
+cost stands; spending it is the author's per-span choice.
 
 **Gate verification** rides on `claims` rather than being its own command: a check that
 verifies other checks are wired up is worthless if nothing guarantees it runs. It fires on a

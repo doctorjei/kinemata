@@ -232,7 +232,8 @@ def test_a_declared_py_suffix_that_yields_nothing_still_warns(tmp_path):
 # What is worth testing is the suppression's edges, since a suppression that
 # takes more than it was asked for is the under-reporting failure with a tidy
 # report: an unmarked path beside a marked one, some other role, a misspelled
-# one, and markdown, which is deliberately left out.
+# one -- each through both suffixes that honor the role, since one table entry
+# regressing must not take the other's word for it.
 
 
 def test_a_marked_path_is_not_a_claim(tmp_path):
@@ -396,19 +397,32 @@ def test_a_run_of_delimiters_is_matched_too(tmp_path):
     assert result.shown == 3
 
 
-def test_the_role_is_not_honored_in_markdown(tmp_path):
-    """Markdown is left out on purpose, not overlooked.
-
-    A reStructuredText role renders as literal text in markdown, so honoring it
-    there would put checker syntax in front of a human reader. Markdown's answer
-    to the same problem is the fence, whose cost ``claims`` has already named
-    and measured; a second notation would hide that decision rather than make
-    it.
+def test_the_role_is_honored_in_markdown(tmp_path):
+    """Reversed 2026-09-16: two adopting projects falsified the refusal on the
+    same day -- one naming a real file that lives outside the tree on purpose,
+    one a generic filename that must stay in backticks. Neither has any other
+    permanent marking: a baseline lapses by construction, de-backticking spends
+    formatting on compliance, and a fence cannot go mid-sentence. The render
+    cost the old version cited stands; spending it is now the author's per-span
+    choice.
     """
     write(tmp_path, "doc.md", "See :shown:`docs/gone.md`.\n")
     result = verify(tmp_path)
+    assert result.broken == []
+    assert result.shown == 1
+
+
+def test_an_unmarked_path_on_the_same_markdown_line_is_still_a_claim(tmp_path):
+    """The span, not the line, through the `.md` path as well.
+
+    Same property as the docstring version, tested separately because the two
+    suffixes reach the same function through different table entries -- one
+    entry regressing must not take the other's word for it.
+    """
+    write(tmp_path, "doc.md", "Unlike :shown:`docs/shown.md`, ``docs/gone.md`` is really there.\n")
+    result = verify(tmp_path)
     assert broken(result) == {("path", "docs/gone.md")}
-    assert result.shown == 0
+    assert result.shown == 1
 
 
 def test_the_filter_keeps_line_numbers_and_line_lengths(tmp_path):
