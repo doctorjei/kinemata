@@ -11,6 +11,17 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 ## Unreleased
 
+**New**
+
+- The illustration role is honored in markdown documents as well as docstrings. Two adopting
+  projects needed it on the same day — one for a real file that lives outside the tree on
+  purpose, one for a generic filename that must stay in backticks — and neither had any other
+  permanent marking: a baseline lapses by construction and the fence cannot go mid-sentence.
+- `claims` prints an `ungated:` line for each declared section no gate row runs. Five
+  `[[shape]]` blocks with gates for three other commands printed a green cover line while
+  `shape` ran nowhere, because the count measures declared gates rather than declared checks.
+  It warns rather than fails.
+
 **Fixed**
 
 - The reference sheet's pin advice named the version a plain install resolves to, which every
