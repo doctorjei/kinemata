@@ -7,13 +7,6 @@
     {
       "registry": "citations",
       "entry": "provenance:path",
-      "antipattern": ".venv/",
-      "path": "src/kinemata/exclusion.py",
-      "text": "about.** The first draft reported ``.venv/`` as removing nothing, which is"
-    },
-    {
-      "registry": "citations",
-      "entry": "provenance:path",
       "antipattern": "cli.py",
       "path": "src/kinemata/claims.py",
       "text": "a bare ``cli.py`` naming a module the reader can find. A checker that"
@@ -31,13 +24,6 @@
       "antipattern": "contract.py",
       "path": "src/kinemata/prose.py",
       "text": "the design. Two module docstrings, ``contract.py`` and ``projection.py``,"
-    },
-    {
-      "registry": "citations",
-      "entry": "provenance:path",
-      "antipattern": "corpus/",
-      "path": "src/kinemata/claims.py",
-      "text": "# they must not decide what exists. `corpus/` is gitignored and 39 MB of"
     },
     {
       "registry": "citations",
