@@ -1121,6 +1121,19 @@ to adopt this.**
 - **accepted** — **not a wall, just undone.** Real, contingent, revisitable; more work moves it,
   and some of it is work this project intends to do.
 
+⚑ **An entry that was considered and DECLINED names what would revive it**, which is a third thing
+a reader needs and neither disposition carries. *"What it would take"* is the **technical**
+requirement and is often already written; **what would revive it is evidence** — a second project
+hitting the same wall, a case the current shape misses, a measurement contradicting the one that
+declined it. Only the second is actionable by somebody outside this project, and it is the half
+that tends to go unwritten.
+⚑ **The convention exists because the alternative is losing the idea.** A capability declined *on a
+measurement* is not the same as one rejected *on principle*, and within a few months nothing in the
+record tells them apart — so the next reader either re-derives the whole analysis or, worse, builds
+the thing. **Naming the trigger keeps a declined idea available without keeping it open**, which is
+exactly what a deferral with no date fails to do. It is also the honest form: a decline that cannot
+be reopened by evidence was never a measurement, it was a preference.
+
 ⚑ **`boundary` read "and none is planned — read these as permanent" until 2026-09-13, and three
 entries falsified that in a single day.** *"Nothing here observes a running program"* was marked
 permanent and became `accepted` the same morning somebody asked whether a run-time hook was ever
@@ -1375,6 +1388,16 @@ limit is closed, in the same commit that closes it.**
   promise can drift, since nothing binds them; a rewritten claim leaves a promise that reads as
   though it still covers it. **This fails safe rather than silent** — the date still lapses and
   somebody still decides — which is why it is recorded here rather than treated as a defect.
+  ⚑ **Anchoring a `what` promise to its span was considered and declined on measurement**
+  (2026-09-18), not on principle. Three reasons, and the first is the one that decided it: the
+  reporting project's own three claims lived in a **workbook outside the scanned tree**, where an
+  inline marking cannot reach and a config declaration can, so the feature would not have helped
+  the only case anyone had measured. It also **inverts the failure direction** — an inline mark is
+  deleted along with the sentence it marks, where a config promise survives the rewrite and lapses
+  anyway. And neither `[[promise]]` in this repository has a prose site to anchor to.
+  **What would revive it:** a claim living in a *scanned* document, with the prose as its carrier,
+  where somebody was actually misled by a promise that had drifted from it. The locality benefit
+  alone does not, because writing the date into the sentence as ordinary text buys that for free.
 - **boundary** · **The catch is dogfooded here only through the bibliography.** ⚑ The mark covers
   the *scope statement* below — Catch A reaches registries whose entries are members of a
   describable namespace — which is permanent. It does **not** cover `python-constants`, which the
@@ -1695,6 +1718,26 @@ down, and the two shapes at the end are the findings that matter most.
   question — whether matching behavior is a property of the adapter class or something a project
   declares — and the answer is that the adapter supplies the default and the project overrides
   it. Both are refused rather than defaulted when they cannot mean anything.
+- **accepted** · **A registry can be closed in one axis and open in another, and `declared()`
+  cannot say so.** It returns a bool, so an adapter has two answers where some data models have
+  three. An adopter's keys are `agent.<agent>.<key>`, where the `<agent>` axis is contributed by
+  plugin packages **installed at run time**: the adapter can answer the *shape* honestly — this is
+  a well-formed key — and can never answer the *leaf*, because the authoritative list is absent
+  exactly where the check runs, their CI installing no plugins deliberately. `env.<VAR>` is the
+  same and unbounded by construction.
+  ⚑ **The missing answer is *"recognized as well-formed, membership not determinable here"***, and
+  without it an adapter author's only options are to answer confidently on an axis it cannot see or
+  to not declare the registry at all. **They chose to report the gap rather than let the check
+  answer**, which is the choice this project would want and currently makes no room for.
+  ⚑ **Not a `closed` / open question.** Open already means *undeclared identifiers go to a review
+  list*; this is narrower and orthogonal — membership is **knowable in principle and unavailable
+  here**, which is a different thing from tolerated.
+  **What it would take:** a third answer from `declared()`, or a separate method that reports
+  determinability, plus a decision about what every consumer does with it — `undeclared`,
+  `[[interpose]]` and `access.registry()` all read that method and would each need a position.
+  **What would revive it:** a second data model with a parametric axis fed from outside the scanned
+  corpus. One is an adopter's architecture; two is a shape. Reported 2026-09-18 from a read-only
+  scoping pass, so even the first is a design report rather than a built adapter hitting it.
 - **accepted** · **Registry scoping is inverted, with no exception.** Entries fire everywhere
   except `home`; there is no "fires only inside this one file", which is what an import-discipline
   check needs. Nothing about the model prevents the inverse scope. ⚑ **"Nobody has needed it
@@ -1819,6 +1862,10 @@ down, and the two shapes at the end are the findings that matter most.
   `:shown:` that takes an `until`. Nobody has asked for one beyond this case, and the lapsing
   baseline entry is already the instrument for it, so this is a choice the author makes rather than
   a gap in the tool.
+  **What would revive it:** a second project declining the role for the same reason. One project's
+  renaming habit is a property of that project; two is a property of the role, and the argument
+  that the baseline already covers it gets weaker each time somebody reaches for a permanent mark
+  and finds only a lapsing one.
 - **~~`resolve_in` fails open.~~** True until 2026-09-09. A directory that did not exist produced
   byte-identical output and **no warning on stderr**; in CI, where a sibling tree is usually not
   checked out, every claim it was resolving went unreported and the run still looked clean. It
