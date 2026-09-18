@@ -1766,10 +1766,16 @@ down, and the two shapes at the end are the findings that matter most.
   for an author, because only the author knows whether the name is a placeholder or a moving
   target.
   ⚑ **Measured on an adopter's tree rather than reasoned about** (2026-09-18): the role would have
-  reached **802 of their 848** accepted findings, and they declined it for the whole set. Not for
+  reached **804 of their 848 accepted findings**, and they declined it for the whole set. Not for
   the render cost this document leads with — their spans name their own runtime filenames, which
   they rename, and dating keeps those under review. **The largest reported use of this role to date
   is a considered refusal of it**, which is worth knowing before recommending it by default.
+  ⚑ **The unit is named because this entry first published the figure without one** — *802 of 848*,
+  a baseline **entry** count paired with an **accepted-finding** total, two units of one population
+  differing by the four entries that carry a `count`. Corrected by the party who measured it, who
+  caught it in their own tree before anyone caught it here. **Their number moves when they
+  re-record their baseline**, so read it as a measurement taken on a named day rather than as a
+  current property of anybody's tree.
   **What it would take:** a marking that expires without being a finding — a dated role, or a
   `:shown:` that takes an `until`. Nobody has asked for one beyond this case, and the lapsing
   baseline entry is already the instrument for it, so this is a choice the author makes rather than
