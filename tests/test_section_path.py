@@ -342,3 +342,55 @@ def test_a_scalar_row_under_a_flatten_is_refused_not_skipped(tmp_path):
         )
     message = str(caught.value)
     assert "'delete'" in message and "not a mapping" in message
+
+
+# -- the dotted-string remedy -------------------------------------------------
+#
+# The rule is unchanged: a string is one key however many dots it holds, and is
+# never split, because a key may legitimately contain one -- `NESTED` above
+# declares three that do -- and a guess would compare the wrong cell and pass.
+#
+# What changed is which question the refusal answers. Listing what the level
+# holds is right for a typo; somebody who wrote `policy.seed_whitelists` knows
+# what they meant and is asking why their path did not descend. That question
+# has an answer exactly when the split would resolve, and it was not printed.
+
+
+def test_a_dotted_section_that_would_resolve_names_the_list_form(tmp_path):
+    with pytest.raises(ConfigError) as caught:
+        build(tmp_path, NESTED, '"policy.seed_whitelists"')
+    message = str(caught.value)
+    assert 'section = ["policy", "seed_whitelists"]' in message
+    assert "never split" in message
+
+
+def test_the_hint_carries_the_segments_already_walked(tmp_path):
+    """The remedy is the whole path, not the tail that happened to fail."""
+    with pytest.raises(ConfigError) as caught:
+        build(
+            tmp_path,
+            """
+            policy:
+              seed_whitelists:
+                alpha:
+                  spec: first
+            """,
+            '["policy", "seed_whitelists.alpha"]',
+        )
+    assert 'section = ["policy", "seed_whitelists", "alpha"]' in str(caught.value)
+
+
+def test_a_dotted_section_that_would_not_resolve_gets_no_hint(tmp_path):
+    """A typo that happens to contain a dot is not a path question. Offering
+    the split there would teach the reader a remedy that does not apply."""
+    with pytest.raises(ConfigError) as caught:
+        build(tmp_path, NESTED, '"policy.nope"')
+    assert "never split" not in str(caught.value)
+
+
+def test_a_plain_missing_key_still_just_lists_the_level(tmp_path):
+    with pytest.raises(ConfigError) as caught:
+        build(tmp_path, NESTED, '"polciy"')
+    message = str(caught.value)
+    assert "never split" not in message
+    assert "'policy'" in message

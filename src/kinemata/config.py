@@ -340,6 +340,37 @@ def _spell(segments: Sequence[str]) -> str:
     return " -> ".join(repr(segment) for segment in segments)
 
 
+def _dotted_hint(level: Any, walked: Sequence[str], segment: str, key: str) -> str:
+    """The list form, when splitting a failed segment on dots would have worked.
+
+    **The rule it serves is unchanged: a string is one key however many dots it
+    holds, and is never split.** ``extra`` keys legitimately contain them, so
+    splitting on a guess would compare the wrong cell and *pass*, which is the
+    normalization this package refuses everywhere.
+
+    What was missing is that the existing refusal answers a question the reader
+    is not asking. Listing what the level holds is right for a typo; somebody
+    who wrote ``policy.seed_whitelists`` knows what they meant and is asking why
+    their path did not descend. That question has an answer whenever the split
+    would resolve, and printing it costs one walk that only ever runs on a path
+    already headed for a refusal.
+    """
+    if "." not in segment:
+        return ""
+    parts = segment.split(".")
+    cursor = level
+    for part in parts:
+        if not isinstance(cursor, dict) or part not in cursor:
+            return ""
+        cursor = cursor[part]
+    spelled = ", ".join(f'"{part}"' for part in (*walked, *parts))
+    return (
+        f". A {key} that is a string is one key however many dots it holds and "
+        f"is never split, because a key may legitimately contain one -- write "
+        f"{key} = [{spelled}] to descend through them."
+    )
+
+
 def _walk(
     document: Any, section: Any, name: str, source: str, key: str = "section"
 ) -> Any:
@@ -401,6 +432,7 @@ def _walk(
             raise ConfigError(
                 f"registry {name!r}: {key} segment {segment!r} is not in "
                 f"{source}{where}. That level holds: {shown or 'nothing'}"
+                f"{_dotted_hint(document, walked, segment, key)}"
             )
         document = document[segment]
         walked.append(segment)
