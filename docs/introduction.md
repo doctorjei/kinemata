@@ -1269,6 +1269,12 @@ limit is closed, in the same commit that closes it.**
   different claim from *"this check must run"* and is counted in the same number. Deliberate — the
   inventory asks whether every declared command is still run here, and that question is the same
   for both — but a reader of `gates: N of N` should know the count mixes them.
+  ⚑ **And the count measures declared *gates*, never declared *checks*** — numerator and
+  denominator come from the same place, so a section kind with no gate row runs nowhere while the
+  line reads green. Reported by an adopter 2026-09-16, whose five `[[shape]]` blocks and three
+  unrelated gates printed `3 of 3`. **The `ungated:` line beside it is the cover**, and it is a
+  warning rather than a failure: the declaration may be run by hand, and failing would force
+  either real CI wiring or deleting the declaration to satisfy its own inventory.
   ⚑ **Reading what a step *does* is a different instrument** — a YAML parse plus a model of the
   runner, which would then be a second model of CI that drifts from the real one. Declined on that
   basis rather than on cost, and the mirror-image hole in branch protection is the entry below.
