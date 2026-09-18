@@ -1351,6 +1351,30 @@ limit is closed, in the same commit that closes it.**
   works": a page that now redirects to a parking domain answers `200`, and a host that refuses
   an unfamiliar client answers `403`, which this reports as unchecked rather than dead. It
   settles *gone*, not *good*.
+- **boundary** · **A negative claim about anything outside the tree rots silently, and nothing here
+  will object.** Positive claims fail loudly — a path moves, a symbol vanishes, a link answers
+  `404`, and a checker walks into it. A negative breaks nothing when it becomes false: *"X is not
+  installed"*, *"that endpoint has no listing"*, *"this cannot be done here"*. No test fails, no
+  link dies. The claim quietly stops being true and goes on being read.
+  ⚑ **They are disproportionately load-bearing**, which is why this is worth stating rather than
+  filing under *things a static checker cannot do*: a stale **positive** sends a reader to the
+  wrong file, and a stale **negative** stops them looking at all.
+  ⚑ **Reported with a measurement** (adopter, 2026-09-18): three such claims in their own notes had
+  compounded into a release-gating item that read as *blocked on another party*. It was blocked on
+  nobody. One `curl` and two installs cleared the whole thing in the session that finally probed
+  them, and the work landed the same day — including a defect only a live run could surface.
+  **Correctness is the boundary and always will be**: the subject is an installed binary, a remote
+  service, a host environment, another project's behavior. Nothing in this tree can settle any of
+  them, and this is not a case where a different mechanism here would help.
+  ⚑ **Age is not the boundary, and is already reachable.** A `[[promise]]` with `what` carries the
+  claim, a signer, a reason and a required `until`; when the date passes it fails and says to decide
+  again. **That reports nothing unprovable** — the fact being checked is the age of a declaration,
+  not the truth of the claim. Dating a load-bearing negative is therefore a thing a project can do
+  today, and the asymmetry above is the argument for bothering.
+  ⚑ **What is still unreached: the promise lives in the config, not at the sentence.** Prose and
+  promise can drift, since nothing binds them; a rewritten claim leaves a promise that reads as
+  though it still covers it. **This fails safe rather than silent** — the date still lapses and
+  somebody still decides — which is why it is recorded here rather than treated as a defect.
 - **boundary** · **The catch is dogfooded here only through the bibliography.** ⚑ The mark covers
   the *scope statement* below — Catch A reaches registries whose entries are members of a
   describable namespace — which is permanent. It does **not** cover `python-constants`, which the
