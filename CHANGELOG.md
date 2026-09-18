@@ -11,6 +11,17 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 ## Unreleased
 
+**Fixed**
+
+- `claims` now prints `negated: N` for path claims a negation withdrew. This was the only
+  suppression in the tool that reported nothing — illustrations, inert suffixes and unread
+  f-strings all had a line — so a run that quietly stopped checking a claim looked exactly like a
+  clean one. An adopter found it sideways: their sentence ended *"and needs no edit"*, where the
+  `no` governs `edit` and exempted two paths before it, and they noticed only because editing an
+  unrelated token on the same line changed which claims fell inside the window. The rule is
+  unchanged and still right far more often than not; what changed is that you can see what it
+  took.
+
 **New**
 
 - `kind = "toml-value"`: a registry whose entries are the **values** a TOML file declares at a

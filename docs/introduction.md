@@ -1364,6 +1364,28 @@ limit is closed, in the same commit that closes it.**
   works": a page that now redirects to a parking domain answers `200`, and a host that refuses
   an unfamiliar client answers `403`, which this reports as unchecked rather than dead. It
   settles *gone*, not *good*.
+- **accepted** · **A negation withdraws a path claim by proximity, not by grammar.** A negation
+  word within 45 characters of the claim, in the same clause, reads it as discussed rather than
+  asserted. That is right far more often than not — *"there is no `src/gone.py`"* is not a claim
+  that the file exists — but nothing here knows which word a negation **governs**. In
+  *"— moves with it and needs no edit"* the `no` governs `edit`, and it exempts every path inside
+  the window before it.
+  ⚑ **The consequence worth knowing: the exempt set depends on character distance**, so editing an
+  *unrelated* token on the same line moves other claims into and out of it. An adopter watched one
+  line's findings go from one token, to another, to two others across three edits that touched
+  none of them (2026-09-18) — and correctly **stopped probing** rather than iterating against the
+  gate, which is how a gate gets tuned green by accident.
+  ⚑ **It is counted now rather than silent** — `negated: N` — and that silence was the real defect.
+  Illustrations, inert suffixes and unread f-strings each reported; this one did not, in the
+  summary or under `-v`, so a run that lost claims to it was indistinguishable from a clean one.
+  **The count does not say the rule was wrong. It says how much came off the table.**
+  **What it would take:** grammar instead of proximity, which is parsing, and the core takes no
+  runtime dependency. ⚑ **A cheaper partial exists and is untested: treating an em-dash as a clause
+  boundary**, which would have fixed the reported case exactly — the aside closes before the
+  negation begins. It is not done because it **un-suppresses**, and a change in that direction
+  creates findings rather than hiding them; it needs measuring across the corpus first.
+  **What would revive it:** a project whose `negated:` count is large and contains claims it needed
+  checked. The count exists so that evidence can now be gathered, which it could not be before.
 - **boundary** · **A negative claim about anything outside the tree rots silently, and nothing here
   will object.** Positive claims fail loudly — a path moves, a symbol vanishes, a link answers
   `404`, and a checker walks into it. A negative breaks nothing when it becomes false: *"X is not

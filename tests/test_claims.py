@@ -1321,3 +1321,60 @@ def test_an_ignored_directory_does_not_drop_a_tracked_file_that_shares_its_name(
     # One claim, from ``doc.md`` alone: the note inside the ignored directory
     # is still not read, so the fix did not trade one silence for a flood.
     assert result.checked == 1
+
+
+# -- the suppression that reported nothing -----------------------------------
+#
+# Negation is right far more often than not, and it was the one filter here
+# that dropped a claim silently: illustrations, inert suffixes and unread
+# f-strings each had a line, this had none, in the summary or under `-v`.
+#
+# An adopter found it sideways and could not have found it any other way
+# (2026-09-18). Their sentence ended "and needs no edit" -- a negation
+# governing `edit` -- which exempted the paths before it. They noticed only
+# because editing an UNRELATED token changed the line's length, moved the
+# others in and out of the window, and made the finding set appear to move on
+# its own across three runs.
+
+
+def test_a_negated_claim_is_counted_rather_than_dropped_silently(tmp_path):
+    write(tmp_path, "doc.md", "There is no `src/ssh_key.py` in this tree.\n")
+    found = verify(tmp_path)
+    assert found.broken == []
+    assert found.negated == 1
+
+
+def test_nothing_is_counted_when_no_negation_withdrew_anything(tmp_path):
+    write(tmp_path, "doc.md", "The loader is `src/loader.py`.\n")
+    write(tmp_path, "src/loader.py", "x\n")
+    assert verify(tmp_path).negated == 0
+
+
+def test_a_negation_governing_another_word_still_counts_what_it_took(tmp_path):
+    """The adopter's line, reduced. `no` governs `edit`; two paths go with it,
+    and the third is outside the window and reported. The count is what makes
+    the difference between those two outcomes visible at all."""
+    write(
+        tmp_path,
+        "doc.md",
+        "Everything inside it — `agent.yaml`, `common/`, `caches/` — "
+        "moves with it and needs no edit.\n",
+    )
+    found = verify(tmp_path)
+    assert broken(found) == {("path", "agent.yaml")}
+    assert found.negated == 2
+
+
+def test_the_count_moves_when_an_unrelated_token_on_the_line_does(tmp_path):
+    """The observation that surfaced this: same two tokens, same prose about
+    them, different result -- because their distance from the negation changed.
+    The behavior is deliberate; being unable to see it was not."""
+    write(
+        tmp_path,
+        "doc.md",
+        "Everything inside it — the agent store, `common/`, `caches/` — "
+        "moves with it and needs no edit.\n",
+    )
+    found = verify(tmp_path)
+    assert found.broken == []
+    assert found.negated == 2

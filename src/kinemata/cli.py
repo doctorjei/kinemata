@@ -1357,6 +1357,16 @@ def cmd_claims(args: argparse.Namespace) -> int:
         print(f"illustrations: {found.shown} span(s) marked `:{ILLUSTRATION_ROLE}:` "
               "and not read as claims")
 
+    # And again, for the suppression nobody declared. A negation in the same
+    # clause withdraws a path claim, which is right far more often than not and
+    # was the one suppression here that printed nothing at all. The reader needs
+    # the size of it: "needs no edit" is a negation governing `edit` that exempts
+    # every path within the window before it, and a run that lost claims that way
+    # is indistinguishable from a clean one.
+    if found.negated:
+        print(f"negated: {found.negated} path claim(s) read as discussed rather "
+              "than asserted, a negation being in the same clause")
+
     # And again, for the suppression that is a declaration rather than a
     # marker: these citations were not checked here because the project said
     # they are somebody else's. `cite --where` resolves any one of them to its

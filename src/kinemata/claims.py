@@ -495,6 +495,26 @@ class Verification:
     #: promise -- and a suppression nobody can count is an allowlist with a good
     #: story. The number is the reading; the sites are not.
     shown: int = 0
+    #: Path claims dropped because a negation sits in the same clause, within
+    #: :data:`NEGATION_WINDOW` characters. **Counted for the same reason
+    #: :attr:`shown` is, and it was the one suppression here that reported
+    #: nothing** -- not in the summary, not under ``-v`` -- while illustrations,
+    #: inert suffixes and unread f-strings all had a line.
+    #:
+    #: An adopter found it sideways (2026-09-18) and could not have found it any
+    #: other way: their sentence ended "and needs no edit", so the ``no``
+    #: governed *edit* while silently exempting two paths before it. They only
+    #: noticed because editing an **unrelated** token on the line changed its
+    #: length, moved the others in and out of the window, and made the finding
+    #: set appear to move on its own.
+    #:
+    #: **That is the dangerous direction**: a false suppression is a check
+    #: quietly checking less than it says, and nothing about a clean run
+    #: distinguishes it from a clean tree. The number does not say the rule was
+    #: wrong -- the rule is right far more often than not -- it says how much it
+    #: took off the table, which is the thing a reader needs to decide whether
+    #: to look.
+    negated: int = 0
 
     @property
     def declarations_failed(self) -> bool:
@@ -694,7 +714,11 @@ def _negated(line: str, start: int, end: int, previous: str = "") -> bool:
 
 
 def _path_claims(
-    line: str, previous: str = "", file_suffixes: frozenset[str] = FILE_SUFFIXES
+    line: str,
+    previous: str = "",
+    file_suffixes: frozenset[str] = FILE_SUFFIXES,
+    *,
+    muted: list[str] | None = None,
 ) -> Iterator[str]:
     for match in _BACKTICKED.finditer(line):
         token = match.group(2)
@@ -729,12 +753,23 @@ def _path_claims(
         if PLACEHOLDER.search(token) or EXAMPLE_STEM.search(token):
             continue
         if _negated(line, match.start(), match.end(), previous):
-            continue  # discussed, not asserted
+            # Discussed, not asserted -- and recorded on the way past. This is
+            # the only filter here that drops a token the extractor had already
+            # decided was path-shaped, which is what makes it worth counting:
+            # every other `continue` above says "never was a claim", this one
+            # says "was a claim, and something in the prose withdrew it".
+            if muted is not None:
+                muted.append(token)
+            continue
         yield token
 
 
 def _link_claims(
-    line: str, previous: str = "", file_suffixes: frozenset[str] = FILE_SUFFIXES
+    line: str,
+    previous: str = "",
+    file_suffixes: frozenset[str] = FILE_SUFFIXES,
+    *,
+    muted: list[str] | None = None,
 ) -> Iterator[str]:
     """Link targets, minus the one thing that is never link text.
 
@@ -757,7 +792,11 @@ def _link_claims(
 
 
 def _commit_claims(
-    line: str, previous: str = "", file_suffixes: frozenset[str] = FILE_SUFFIXES
+    line: str,
+    previous: str = "",
+    file_suffixes: frozenset[str] = FILE_SUFFIXES,
+    *,
+    muted: list[str] | None = None,
 ) -> Iterator[str]:
     for match in _SHA.finditer(line):
         sha = match.group(2)
@@ -773,7 +812,11 @@ def _commit_claims(
 
 
 def _url_claims(
-    line: str, previous: str = "", file_suffixes: frozenset[str] = FILE_SUFFIXES
+    line: str,
+    previous: str = "",
+    file_suffixes: frozenset[str] = FILE_SUFFIXES,
+    *,
+    muted: list[str] | None = None,
 ) -> Iterator[str]:
     """Web addresses, wherever a document put them.
 
@@ -1468,17 +1511,21 @@ def verify(
         source, illustrations = _as_documentation(source, path.suffix)
         found.shown += illustrations
         before = len(pending)
+        muted: list[str] = []
 
         previous = ""
         for number, line in enumerate(source.splitlines(), start=1):
             for kind in kinds:
                 if historic and kind.current_only:
                     continue
-                for text in kind.extract(line, previous, known_suffixes):
+                for text in kind.extract(
+                    line, previous, known_suffixes, muted=muted
+                ):
                     pending.append(
                         (kind, text, Claim(kind.name, text, rel, number, line))
                     )
             previous = line
+        found.negated += len(muted)
         yielded[path.suffix] += len(pending) - before
 
     _report_inert_suffixes(read, yielded, root, found)
