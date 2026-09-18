@@ -420,6 +420,7 @@ which reads well for scalars and badly for a constructed object.
 |---|---|---|
 | `python-constants` | module-level constants in named `modules` | derived from the values |
 | `yaml-mapping` | a YAML mapping file (`source`), optionally a `section` inside it — one key, or a list of keys to descend through | derived from the values |
+| `toml-value` | the **values** a TOML file declares at `path` — a scalar, or a flat list of them. Every other kind makes an identifier out of a *name*; this one makes it out of the value | derived from the values |
 | `code-patterns` | hand-declared `[[registry.entry]]` tables | declared |
 | `substitutions` | `[registry.words]` or an external `source` TOML | the forbidden spelling |
 | `bibliography` | `[[entry]]` tables in an external `source` TOML | none — a citation *accompanies* its target by default, so a target spelled beside its key is the readable half of a declared citation rather than a re-derivation of it |
@@ -468,6 +469,50 @@ moved, and `--record` would hand every accepted finding a fresh expiry lease for
 gain. A content hash would not survive this either — the text itself changed — so only
 author-assigned stable ids would, and those tax all prose for a rare event with a three-line
 recovery. This paragraph is the whole remedy, on purpose.
+
+**A `toml-value` declares the values, not the keys holding them.** Every other kind makes an
+identifier out of a name; this one makes it out of the scalar itself, which is what a claim about a
+*value* needs on its declared side. `tomllib` is stdlib, so this adds no dependency and no extra.
+
+```toml
+[[registry]]
+name = "tree-version"
+kind = "toml-value"
+source = "pyproject.toml"
+path = ["project", "version"]     # a list of keys, or one key; never a dotted string
+```
+
+`path` reaches a scalar — one entry — or a **flat list** of them, one entry each. A table is
+refused, and the refusal lists what that level holds so an author who stopped a key short can
+finish the path. A nested list and a TOML date are refused for one reason: `str` of either is a
+spelling no oracle prints by accident, which is the line `[[parity]]` already draws on the declared
+side. An entry carries **no** `extra` — the value *is* the identifier, so a `{"value": …}` beside it
+would be one fact spelled twice.
+
+**The claim this was built for**, and the relation it uses was not built for it — `disjoint`
+already answered both directions before the adapter existed:
+
+```toml
+# The version this tree declares must not be one the index already carries.
+[[parity]]
+registry = "tree-version"
+relation = "disjoint"
+command = ["{python}", "-c", "..."]   # prints one published version per line
+extract = '(?m)^(\S+)$'
+```
+
+Between a release and the next version bump, a tree sits on a version that is already published —
+and :shown:`pip install "pkg @ git+https://…@<sha>"` then **builds the metadata, sees that version
+already installed, and skips**. The install succeeds, the suite passes, and the person validating reports
+back that a fix works having never fetched it. Two unrelated projects hit this independently, which
+is what moved it from an anecdote to a claim worth declaring.
+
+⚑ **Two things to get right, and neither is the config.** The oracle reads an index over the
+network, so it must defeat **both** caching layers — a `Cache-Control: no-cache` header *and* a
+changing query parameter, since the header alone does not reach a CDN. A cached read makes this
+gate pass wrongly, which is the failure it exists to prevent. And a relation other than `equal`
+**refuses an oracle that produced nothing**, so this claim fails on a project that has never
+published, until its first release.
 
 **`import` is the extension point**, and the list above is not the boundary of what a registry can
 be. A project whose data model no built-in adapter fits writes the adapter itself — most usefully

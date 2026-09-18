@@ -58,6 +58,7 @@ from .adapters.constants import PythonConstants
 from .adapters.mapping import MappingRegistry
 from .adapters.patterns import CodePatterns
 from .adapters.substitutions import Substitutions
+from .adapters.values import ValueRegistry
 from .baseline import BASELINE_NAME
 from .bypass import MODE_FILTERS, git_ignored
 from .citations import DEFAULT_ACCOMPANY_MAX
@@ -77,6 +78,7 @@ from .contract import (
     Registry,
     Selected,
     closure_guard,
+    field_path,
     missing_members,
     spell_path,
     usable_boundary,
@@ -338,8 +340,10 @@ def _spell(segments: Sequence[str]) -> str:
     return " -> ".join(repr(segment) for segment in segments)
 
 
-def _descend(document: Any, section: Any, name: str, source: str) -> Any:
-    """The mapping a registry addresses, down a declared path of keys.
+def _walk(
+    document: Any, section: Any, name: str, source: str, key: str = "section"
+) -> Any:
+    """Whatever a declared path of keys reaches, mapping or not.
 
     ``section`` is one key, as it has always been, or a list of them. **A list
     rather than a dotted string**, and that is the whole decision here: a dotted
@@ -354,7 +358,14 @@ def _descend(document: Any, section: Any, name: str, source: str) -> Any:
     **Every refusal names the segment that failed and what the level actually
     held.** "section not found" against a five-deep path is a refusal somebody
     has to go and locate by hand, which is the failure mode this package spends
-    its error messages avoiding.
+    its error messages avoiding. ``key`` is the spelling the *author* used, so a
+    ``toml-value`` registry is not told about a ``section`` it never wrote.
+
+    **What is at the end is the caller's to judge**, which is the whole reason
+    this is not :func:`_descend`: a mapping registry addresses a table and a
+    value registry addresses a scalar, and both want these refusals on the way
+    down. Splitting them was cheaper than a second walker that would have drifted
+    from this one's messages.
     """
     if section is None or section == "":
         return document
@@ -364,12 +375,12 @@ def _descend(document: Any, section: Any, name: str, source: str) -> Any:
         segments = [str(segment) for segment in section]
     else:
         raise ConfigError(
-            f"registry {name!r}: 'section' is {type(section).__name__}; it "
+            f"registry {name!r}: {key!r} is {type(section).__name__}; it "
             "takes one key, or a list of keys to descend through."
         )
     if not segments:
         raise ConfigError(
-            f"registry {name!r}: 'section' is an empty list, which addresses "
+            f"registry {name!r}: {key!r} is an empty list, which addresses "
             "nothing. Name the keys to descend through, or drop the key."
         )
 
@@ -384,23 +395,34 @@ def _descend(document: Any, section: Any, name: str, source: str) -> Any:
             )
         if segment not in document:
             held = list(document)
-            shown = ", ".join(repr(key) for key in held[:SECTION_SIBLINGS])
+            shown = ", ".join(repr(sibling) for sibling in held[:SECTION_SIBLINGS])
             if len(held) > SECTION_SIBLINGS:
                 shown += f", and {len(held) - SECTION_SIBLINGS} more"
             raise ConfigError(
-                f"registry {name!r}: section segment {segment!r} is not in "
+                f"registry {name!r}: {key} segment {segment!r} is not in "
                 f"{source}{where}. That level holds: {shown or 'nothing'}"
             )
         document = document[segment]
         walked.append(segment)
 
-    if not isinstance(document, dict):
-        raise ConfigError(
-            f"registry {name!r}: section {_spell(walked)} in {source} is "
-            f"{type(document).__name__}, not a mapping. A mapping registry "
-            "addresses a table of entries."
-        )
     return document
+
+
+def _descend(document: Any, section: Any, name: str, source: str) -> Any:
+    """The mapping a registry addresses: :func:`_walk`, and a table at the end."""
+    reached = _walk(document, section, name, source)
+    # With nothing declared there is no path to name, and the top level has
+    # always been handed on as it arrived. Tightening that here would be a
+    # behavior change belonging to its own cause.
+    if section is None or section == "":
+        return reached
+    if not isinstance(reached, dict):
+        raise ConfigError(
+            f"registry {name!r}: section {_spell(field_path(section))} in "
+            f"{source} is {type(reached).__name__}, not a mapping. A mapping "
+            "registry addresses a table of entries."
+        )
+    return reached
 
 
 def _levels(
@@ -509,6 +531,93 @@ def _build_yaml_mapping(spec: dict[str, Any], root: Path, path: Path) -> BaseReg
         document,
         name=spec.get("name", "keys"),
         clause_field=spec.get("clause_field"),
+        syntax=spec.get("syntax"),
+        closed=spec.get("closed", False),
+        budget=spec.get("budget"),
+        line_budget=spec.get("line_budget"),
+    )
+
+
+#: What a ``toml-value`` accepts as an identifier, and it is deliberately the
+#: same set :func:`kinemata.parity._rendered` accepts on the declared side of a
+#: comparison: one place decides what a scalar looks like when a check has to
+#: put it beside text a command printed. TOML's dates and times are absent for
+#: that reason rather than a new one -- ``str`` of a ``datetime`` is a spelling
+#: no oracle agrees with by accident.
+VALUE_SCALARS = (str, int, float, bool)
+
+
+def _scalars(reached: Any, name: str, source: str, where: str) -> list[str]:
+    """One scalar, or a flat list of them, as the identifiers they will be.
+
+    **A mapping is refused rather than read**, and the refusal lists what that
+    level holds so an author who stopped one key short can finish the path --
+    the remedy, not just the complaint. A nested list is refused for the reason
+    :func:`kinemata.parity._declared_values` gives about containers: it has an
+    internal order and a spelling no two sides agree on by accident, so
+    rendering it would be a normalization that *passes*.
+    """
+    items = list(reached) if isinstance(reached, (list, tuple)) else [reached]
+    if isinstance(reached, dict):
+        held = list(reached)
+        shown = ", ".join(repr(key) for key in held[:SECTION_SIBLINGS])
+        if len(held) > SECTION_SIBLINGS:
+            shown += f", and {len(held) - SECTION_SIBLINGS} more"
+        raise ConfigError(
+            f"registry {name!r}: {where} in {source} is a table, and this kind "
+            f"reads the values themselves rather than the keys that hold them. "
+            f"Name a key to descend into: that level holds {shown or 'nothing'}"
+        )
+    rendered: list[str] = []
+    for item in items:
+        if not isinstance(item, VALUE_SCALARS):
+            raise ConfigError(
+                f"registry {name!r}: {where} in {source} holds a "
+                f"{type(item).__name__}, which has no spelling an oracle would "
+                "print by accident. This kind reads a scalar, or a flat list "
+                "of them."
+            )
+        rendered.append(str(item))
+    return rendered
+
+
+def _build_toml_value(spec: dict[str, Any], root: Path, path: Path) -> BaseRegistry:
+    """Scalars a TOML file declares, as the identifiers themselves.
+
+    ``tomllib`` is stdlib, so this adds no dependency and no extra -- which is
+    what makes it the right home for the case that forced it. The version a
+    Python project declares lives in :shown:`pyproject.toml` by definition --
+    any project's, which is why that is an illustration rather than a path here
+    -- and
+    putting it on the declared side of a ``disjoint`` parity is how a tree
+    claims it is not sitting on a version the index already has.
+    """
+    name = str(spec.get("name", "?"))
+    source = spec.get("source")
+    if not source:
+        raise ConfigError(f"registry {name!r}: needs 'source'")
+    file = root / str(source)
+    if not file.is_file():
+        raise ConfigError(f"registry {name!r}: no such file: {file}")
+    declared = spec.get("path")
+    if declared is None or declared == "" or declared == []:
+        raise ConfigError(
+            f"registry {name!r}: needs 'path', the keys naming the value this "
+            "registry declares -- a list, or one key. Without it the whole "
+            "document is the value, which is never a scalar."
+        )
+    try:
+        document = tomllib.loads(file.read_text())
+    except tomllib.TOMLDecodeError as error:
+        raise ConfigError(
+            f"registry {name!r}: {source} is not readable as TOML ({error})"
+        ) from error
+
+    reached = _walk(document, declared, name, str(source), key="path")
+    values = _scalars(reached, name, str(source), _spell(field_path(declared)))
+    return ValueRegistry(
+        values,
+        name=spec.get("name", "values"),
         syntax=spec.get("syntax"),
         closed=spec.get("closed", False),
         budget=spec.get("budget"),
@@ -696,6 +805,9 @@ KIND_KEYS = {
             "line_budget", "flatten", "separator",
         }
     ),
+    "toml-value": frozenset(
+        {"source", "path", "syntax", "budget", "line_budget"}
+    ),
     "code-patterns": frozenset({"entry"}),
     "substitutions": frozenset({"source", "words", "case_sensitive"}),
     "bibliography": frozenset({"source", "interpreted", "standardized"}),
@@ -878,6 +990,7 @@ def _build_import(spec: dict[str, Any], root: Path, path: Path) -> Registry:
 BUILDERS = {
     "python-constants": _build_constants,
     "yaml-mapping": _build_yaml_mapping,
+    "toml-value": _build_toml_value,
     "code-patterns": _build_code_patterns,
     "substitutions": _build_substitutions,
     "bibliography": _build_bibliography,

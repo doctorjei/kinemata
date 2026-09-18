@@ -147,9 +147,9 @@ target = "mypkg.registries:KeyspaceRegistry"
 sections = ["core", "vault"]
 ```
 
-The built-in kinds — `python-constants`, `yaml-mapping`, `code-patterns`,
-`substitutions`, `bibliography` — are a convenience, **not the boundary of what a
-registry can be.** `import` is the extension point: subclass
+The built-in kinds — `python-constants`, `yaml-mapping`, `toml-value`,
+`code-patterns`, `substitutions`, `bibliography` — are a convenience, **not the
+boundary of what a registry can be.** `import` is the extension point: subclass
 `kinemata.contract.BaseRegistry`, implement `entries()`, override `declared()`
 where membership cannot be enumerated, and name the class from your config. This
 existed as a contract from the start and was reachable only by importing kinemata
@@ -492,7 +492,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **1074 tests**, and
+The companion guard is a number with an oracle. This suite is **1091 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 

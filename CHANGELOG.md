@@ -11,7 +11,22 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 ## Unreleased
 
-Nothing yet.
+**New**
+
+- `kind = "toml-value"`: a registry whose entries are the **values** a TOML file declares at a
+  `path`, rather than the keys holding them. Every other adapter makes an identifier out of a
+  name, which is exactly wrong when the fact being declared is the scalar. `tomllib` is stdlib,
+  so this adds no dependency and no extra. A scalar becomes one entry, a flat list becomes one
+  each; a table is refused with the keys that level holds, so an author who stopped a key short
+  is told the way on.
+- The claim it was built for, which needed no new mechanism: **the version a tree declares must
+  not be one the index already carries**, as a `[[parity]]` with `relation = "disjoint"`. Between
+  a release and the next bump, `pip install "pkg @ git+…@<sha>"` builds the metadata, sees that
+  version already installed and **skips** — the install succeeds, the suite passes, and whoever
+  was validating a fix reports back that it works having never fetched it. Two unrelated projects
+  hit this independently. The reference sheet carries the recipe and the two things to get right:
+  cache-busting the index read at both layers, and that this claim fails on a project that has
+  never published.
 
 ## 0.1.2
 
