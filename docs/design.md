@@ -152,6 +152,25 @@ run that found nothing.
 Found by an adopter reading the source before writing an `import` adapter, not by a check here;
 the asymmetry is between two mechanisms and no mechanism's subject is this contract.
 
+⚑ **Derive `declared()` from the declaration document, never from the project's own classifier**
+(adopter, 2026-09-18, from a read-only scoping pass rather than a built adapter). Two failures, and
+the second is the one that matters:
+
+- **A ternary verdict collapses into a binary one.** Their keyspace answers *declared*, *retired*
+  or *undeclared*, with the retired arm firing from inside the undeclared one. `declared()` is
+  binary, so the obvious `verdict == DECLARED` silently merges retired into undeclared and the
+  distinction the project maintains stops existing at the boundary.
+- **The check certifies itself.** An adapter that calls the classifier asks *the code under
+  observation* to judge the corpus, so drift in that classifier is invisible to every check built
+  on it. The registry stops being an independent statement of what ought to be there and becomes a
+  second reading of what is — and a scan comparing the code against it then compares the code
+  against itself.
+
+This is the rule this project already applies to an oracle, arriving at the contract: the
+declaration and the thing it judges must not share a source. **An adapter author reaches for the
+classifier first**, because it is the obviously correct-looking call and it is already written,
+which is why it is stated here rather than left to be inferred from the contract.
+
 ⚑ **They were not equally reachable, and this section claimed they were.** For the project's
 whole life until 2026-09-09, a project-supplied adapter could only be used by importing kinemata
 as a library: `config.BUILDERS` was a fixed table of kinds with no plugin path, so `[[registry]]`
