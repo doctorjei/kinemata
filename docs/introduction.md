@@ -1757,6 +1757,23 @@ down, and the two shapes at the end are the findings that matter most.
   illustration role, which reaches counted claims for exactly this reason: honoring a declared
   suffix for paths while reading the same file raw for values would let a number be shown in one
   sentence and asserted in the next.
+- **accepted** · **The illustration role never expires, so a marked span is blind to a later
+  rename.** Marking is permanent and unconditional by design — that is what makes it the right
+  answer for a genuine placeholder or a foreign-tree path, which do not become wrong. It is the
+  wrong instrument for a name the project **renames**: the span goes silent forever, and nothing
+  will ever ask about it again. A baseline entry is the opposite trade — it lapses, so a renamed
+  path comes back for review — and the choice between them is per span, with no rule that can pick
+  for an author, because only the author knows whether the name is a placeholder or a moving
+  target.
+  ⚑ **Measured on an adopter's tree rather than reasoned about** (2026-09-18): the role would have
+  reached **802 of their 848** accepted findings, and they declined it for the whole set. Not for
+  the render cost this document leads with — their spans name their own runtime filenames, which
+  they rename, and dating keeps those under review. **The largest reported use of this role to date
+  is a considered refusal of it**, which is worth knowing before recommending it by default.
+  **What it would take:** a marking that expires without being a finding — a dated role, or a
+  `:shown:` that takes an `until`. Nobody has asked for one beyond this case, and the lapsing
+  baseline entry is already the instrument for it, so this is a choice the author makes rather than
+  a gap in the tool.
 - **~~`resolve_in` fails open.~~** True until 2026-09-09. A directory that did not exist produced
   byte-identical output and **no warning on stderr**; in CI, where a sibling tree is usually not
   checked out, every claim it was resolving went unreported and the run still looked clean. It
