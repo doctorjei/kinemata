@@ -95,8 +95,11 @@ class Inventory:
 #: (config key, section as written, covering commands). A section listed here
 #: with no ``[[gate]]`` row naming one of its commands runs nowhere while the
 #: cover line reads green -- measured 2026-09-16 on an adopter's tree, where
-#: five ``[[shape]]`` blocks and no shape gate printed ``3 of 3 declared
-#: check(s) run``. The numerator and denominator come from the same place
+#: declared ``[[shape]]`` blocks and no shape gate printed ``3 of 3 declared
+#: check(s) run``. **How many blocks is deliberately not stated**: the figure
+#: this line carried was withdrawn by the party who measured it, having been
+#: typed once into a letter and never re-measured, and the defect never rested
+#: on it. The numerator and denominator come from the same place
 #: (declared gates only), so every new section kind re-opens the hole silently.
 #:
 #: What is *not* listed, and why: ``[[count]]``, ``[[promise]]`` and ``[claims]``

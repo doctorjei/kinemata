@@ -1062,7 +1062,7 @@ cost stands; spending it is the author's per-span choice.
 **Gate verification** rides on `claims` rather than being its own command: a check that
 verifies other checks are wired up is worthless if nothing guarantees it runs. It fires on a
 deleted step **and** on a commented-out one. Beside the cover line it prints a second one the
-cover line made necessary: a declared section no gate row runs — five `[[shape]]` blocks and
+cover line made necessary: a declared section no gate row runs — declared `[[shape]]` blocks and
 gates for three other commands still printed `3 of 3`, because the count measures declared
 gates, not declared checks. `ungated:` names each such section. It warns rather than fails: the
 declaration may be run by hand, and failing would force either real CI wiring or deleting the
@@ -1316,7 +1316,7 @@ limit is closed, in the same commit that closes it.**
   for both — but a reader of `gates: N of N` should know the count mixes them.
   ⚑ **And the count measures declared *gates*, never declared *checks*** — numerator and
   denominator come from the same place, so a section kind with no gate row runs nowhere while the
-  line reads green. Reported by an adopter 2026-09-16, whose five `[[shape]]` blocks and three
+  line reads green. Reported by an adopter 2026-09-16, whose declared `[[shape]]` blocks and three
   unrelated gates printed `3 of 3`. **The `ungated:` line beside it is the cover**, and it is a
   warning rather than a failure: the declaration may be run by hand, and failing would force
   either real CI wiring or deleting the declaration to satisfy its own inventory.

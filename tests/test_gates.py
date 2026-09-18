@@ -553,8 +553,8 @@ def test_a_toml_native_date_is_accepted(tmp_path):
 #
 # The cover line counts declared gates only, so a declared section kind with no
 # gate row runs nowhere while it prints green. Measured 2026-09-16 on an
-# adopter's tree: five `[[shape]]` blocks, gates for three other commands, and
-# `shape` running in no pipeline at all.
+# adopter's tree: declared `[[shape]]` blocks, gates for three other commands,
+# and `shape` running in no pipeline at all.
 
 
 def test_a_shape_block_with_no_shape_gate_is_named():
