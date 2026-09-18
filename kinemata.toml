@@ -342,13 +342,16 @@ note = "the sdist builds and tests itself away from this tree"
 command = "kinemata context"
 note = "the session-load ceiling; refuses here, and the step pins the refusal"
 
-# The same shape, for the same reason. This repository declares no `[[parity]]`
-# -- no registry here has a set the code can print, the bibliography being a
-# list of citations rather than something produced -- so the command refuses,
-# and the refusal is what the step asserts.
+# No longer one of the refusing four. This repository declared no `[[parity]]`
+# for its whole life -- no registry here had a set the code could print, the
+# bibliography being a list of citations rather than something produced -- and
+# both this note and the step asserted the refusal. `tree-version` is the set
+# that changed it: the index produces it, and this tree declares one member.
+#
+# It is the only gate here that reads the network, after `claims`.
 [[gate]]
 command = "kinemata parity"
-note = "declaration against what the code produces; refuses here, and the step pins it"
+note = "the tree's version against what the index already carries"
 
 # The third of the same shape. This repository's own declarations are a
 # bibliography and two negative registries, and a rule about the shape of a
@@ -497,3 +500,38 @@ kind = "bibliography"
 closed = true
 suffixes = [".md", ".py"]
 source = "docs/bibliography.toml"
+
+# The version this tree declares, as an identifier rather than as a key's value.
+# One entry; the `[[parity]]` below is the whole reason it exists.
+[[registry]]
+name = "tree-version"
+kind = "toml-value"
+source = "pyproject.toml"
+path = ["project", "version"]
+
+# The version in the tree must not be one the index already carries.
+#
+# Between a release and the next bump, a tree sits on a published version --
+# and `pip install "kinemata @ git+https://...@<sha>"` then builds the metadata,
+# sees that version already installed and **skips**. The install succeeds, the
+# suite passes, and whoever was validating a fix reports back that it works
+# having never fetched it. This project shipped that window, and an adopter
+# reproduced it independently in a tree sharing none of our code, which is what
+# moved it from an anecdote to something worth declaring.
+#
+# The post-release `.dev` bump is the fix; this is the check that the fix
+# happened. A step in a procedure is forgotten, which is the argument this
+# repository already makes about its own changelog gate.
+#
+# Cache-busting is not decoration. PyPI's JSON has reported the previous version
+# as latest while the new one was on the index, and a cached read here makes the
+# gate pass wrongly -- the one failure it exists to prevent. The header alone
+# does not reach a CDN; the changing query parameter is what does.
+#
+# `disjoint` refuses an oracle that produced nothing, so this also fails if the
+# index read returns an empty set rather than quietly agreeing with itself.
+[[parity]]
+registry = "tree-version"
+relation = "disjoint"
+command = ['{python}', '-c', 'import json,time,urllib.request; u="https://pypi.org/pypi/kinemata/json?_="+str(int(time.time()*1000)); r=urllib.request.Request(u,headers={"Cache-Control":"no-cache"}); [print(v) for v in json.load(urllib.request.urlopen(r,timeout=30))["releases"]]']
+extract = '(?m)^(\S+)$'
