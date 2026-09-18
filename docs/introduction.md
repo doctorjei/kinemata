@@ -279,6 +279,21 @@ replacement = ''            # trailing separator; the code carries none
 # nothing to violate them, and a vacuous run reads exactly like a clean one.
 # It also cannot be combined with `field` -- a value comparison pairs
 # identifiers both sides carry, which is the thing a relation is about.
+#
+# **POINT THE ORACLE AT THE HEALTHY POPULATION, NOT THE UNHEALTHY ONE.** That
+# refusal decides which way round a claim has to be written, and the wrong way
+# round is the one an author reaches for first. "No generated artifact is
+# stale" reads as `disjoint` over an oracle printing the stale ones -- and a
+# tree with nothing stale prints nothing, so the healthy state is the refusal.
+# Written the other way, "every generated artifact is among those the generator
+# reports current" is `equal` over an oracle printing the fresh ones, and the
+# stale one comes back as `declared, produced by nothing`.
+#
+# The discriminator is one question: **is the oracle's set non-empty when
+# everything is fine?** Published versions are (that is why the version gate
+# below can be `disjoint`); a list of what is broken is not. Measured both ways
+# on a scratch tree rather than reasoned about, after an adopter asked whether
+# artifact freshness was a shape this tool wanted.
 [[parity]]
 registry = "denials"
 relation = "declared_contains"
