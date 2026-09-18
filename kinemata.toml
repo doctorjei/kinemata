@@ -175,27 +175,52 @@ pattern = 'projection budget `(\d+)` B'
 command = ["{python}", "-c", "from kinemata.contract import DEFAULT_BUDGET; print(f'budget={DEFAULT_BUDGET}')"]
 extract = 'budget=(\d+)'
 
-# The changelog's newest heading against the version being shipped. A changelog
-# is *required* to name a version, so this is one fact with two carriers by
-# nature rather than by mistake -- and the honest answer to that is an oracle,
-# not a convention. Declared with the first release, because the drift it
-# catches is only possible once there is something to drift from: bumping
-# `version` and forgetting the heading, or writing the heading for a release
-# that was never cut.
+# The changelog's newest heading against the state the version string declares.
+# A changelog is *required* to name a version, so this is one fact with two
+# carriers by nature rather than by mistake -- and the honest answer to that is
+# an oracle, not a convention. Declared with the first release, because the
+# drift it catches is only possible once there is something to drift from.
 #
-# `## Unreleased` does not match and is not meant to.
+# It asks whether the newest heading matches *what the version says the tree
+# is*, rather than whether the changelog names the version being shipped --
+# because the second is only a fact at release time. Between releases the
+# version carries a `.dev` segment and there is no heading it could match: the
+# tree is working toward something nobody has published, and writing
+# `## 0.1.3.dev1` to satisfy a checker is the "heading for a release that was
+# never cut" this declaration exists to catch. Having the oracle read the
+# changelog in that state was the other candidate, and it is worse: the check
+# would be answering with the thing it is compared against.
+#
+# Reworked 2026-09-18, when the post-release dev bump landed. Without that bump
+# every commit between releases carries the last released version, so
+# `pip install "kinemata @ git+...@<sha>"` finds the requirement already
+# satisfied and installs nothing -- an adopter measured the previous build that
+# way and nearly reported a shipped feature broken.
+#
+# It is strictly stronger than the version-to-version comparison it replaces,
+# because a forgotten bump now fails in both directions: released without
+# re-opening `## Unreleased`, and re-opened without bumping.
+#
+# The pattern is an alternation rather than `(\S+)` because `first` reads the
+# first match in *each* document: unscoped it claims the opening heading of
+# every markdown file in the tree. Measured -- six documents, including
+# `README.md` and the reference sheet.
 #
 # `occurrence` is what makes this survive a second release. The entries below
 # the newest one are permanent records of releases that already happened, and
 # reading them as claims about the version now shipping made the first
 # release's own entry false the moment `version` moved -- which is exactly how
 # this was found, at the second release and not before.
+#
+# The `.dev` test is stdlib on purpose. `packaging.version` answers it exactly,
+# but an oracle that cannot import reports as *blocked*, which reads as the
+# project's fault rather than the config's, and this runs wherever the gate does.
 [[count]]
-label = "changelog version"
+label = "changelog heading"
 occurrence = "first"
-pattern = '## (\d+\.\d+\.\d+[a-zA-Z0-9.]*)'
-command = ["{python}", "-c", "import tomllib, pathlib; print('version=' + tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])"]
-extract = 'version=(\S+)'
+pattern = '^## (Unreleased|\d+\.\d+\.\d+[a-zA-Z0-9.]*)$'
+command = ["{python}", "-c", "import re, tomllib, pathlib; v = tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version']; print('heading=' + ('Unreleased' if re.search(r'\\.dev\\d+$', v) else v))"]
+extract = 'heading=(\S+)'
 
 # The checks that must run, and the workflow that must run them. Deleting a
 # step from CI now fails this gate instead of quietly passing; the only way to
