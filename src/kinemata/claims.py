@@ -164,6 +164,16 @@ EXAMPLE_STEM = re.compile(r"(^|/)[a-z]\.[a-z]+$")
 #: Prefixes that put a path outside the tree, where this cannot verify it.
 #: ``%`` joined them after a Windows ``%APPDATA%\\httpie\\config.json`` in
 #: httpie's documentation was reported as a dead path in httpie's own tree.
+#:
+#: **This skip is silent and stays silent, re-examined 2026-09-19 against the
+#: negation count and deliberately not given one.** An adopter noticed the
+#: asymmetry -- a ``~/`` spelling would have made their failing header pass --
+#: and declined to use it, on the grounds that going green by hiding from the
+#: checker is not the same as going green. They were right about their header
+#: and the asymmetry is not the same shape: a token starting with one of these
+#: **was never a claim about this tree**, which is a classification, where a
+#: negated token *was* one and prose withdrew it. Counting a claim that never
+#: existed would put a number on every absolute path in every document.
 EXTERNAL_PREFIXES = ("~", "/", "#", "@", "$", "%")
 
 #: A backslash means this is not a path *here*: a Windows path, which cannot be
