@@ -294,6 +294,21 @@ replacement = ''            # trailing separator; the code carries none
 # below can be `disjoint`); a list of what is broken is not. Measured both ways
 # on a scratch tree rather than reasoned about, after an adopter asked whether
 # artifact freshness was a shape this tool wanted.
+#
+# **AND THE DECLARED SIDE MUST NOT BE DERIVED FROM THE PRODUCED ONE.** A
+# registry enumerated from the same place the oracle reads compares that place
+# with itself: whatever leaves, leaves both sides at once, and the run reports
+# agreement. The adopter who took the freshness shape hit this and reported it
+# with a control -- a registry read off the artifact directory cannot see an
+# artifact DELETED, because the row and the file vanish together, while a
+# hand-maintained declaration reds immediately. **A declaration is a statement
+# of what ought to be there**, which is exactly what it cannot be if the tree
+# writes it.
+#
+# This is `docs/design.md`'s rule about `declared()` arriving from the other
+# side: the declaration and the thing it judges must not share a source. There
+# it is an adapter calling the project's own classifier; here it is a registry
+# generated from the directory being checked. Same defect, and both pass.
 [[parity]]
 registry = "denials"
 relation = "declared_contains"
