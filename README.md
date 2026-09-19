@@ -286,9 +286,9 @@ size of the exemption list **on every run, including clean ones**. `review` is
 deliberately unaffected — the ratchet governs the gate, not the advice.
 
 **One list, several gates**, and the number is deliberately not given here — it
-said *three* while it was four and then six. Every gate that ratchets reads the
-same baseline, so a documentation tree or a closed registry that is already
-failing can be adopted the same way. A second exemption list was the alternative and is the failure
+said *three* and was overtaken twice. Every gate that ratchets reads the same
+baseline, so a documentation tree or a closed registry that is already failing
+can be adopted the same way; `kinemata baseline` prints the scopes. A second exemption list was the alternative and is the failure
 mode: two lists eventually disagree about what a project accepted, and the one
 nobody reads is the one still exempting something real. Records carry the check
 that produced them, so no gate reports another's as fixed — it names them
