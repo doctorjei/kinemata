@@ -27,6 +27,12 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   right. Tuning the negation word list was considered and measured first: no word is reliably
   wrong across trees, `had` withdrawing four claims in one tree that all named resolving paths and
   four in another that named none. Listing is what makes that evidence gatherable at all.
+- A refused `section` or `path` that is a dotted string now names the list form, when splitting it
+  on dots would have resolved: `section = ["policy", "seed_whitelists"]`. The rule is unchanged —
+  a string is one key however many dots it holds, because a key may legitimately contain one — but
+  the old message listed what the level held, which answers a typo and not the question somebody
+  who wrote the dotted form is actually asking. A dotted string that would *not* resolve still
+  gets the old message.
 
 **New**
 
