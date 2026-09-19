@@ -253,12 +253,27 @@ extract = '(?m)^(\S+)=(.*)$'
 field = ["default", "primary"]
 authority = "declared"
 
-# At most one translation, on the declared side, so a reader of the config can
-# see that a comparison is not literal. `map` or `pattern`/`replacement`,
-# never both.
+# A translation, on the declared side, so a reader of the config can see that a
+# comparison is not literal. `map` or `pattern`/`replacement`, never both.
+# `translate` lands on whichever side this parity compares: the values when a
+# `field` is named, the identifiers when one is not.
 [parity.translate]
 pattern = '/$'              # the manifest writes a directory prefix with a
 replacement = ''            # trailing separator; the code carries none
+
+# The second hop, for a declaration whose KEYS are spelled one way and whose
+# VALUES are spelled another. Membership runs in every parity, so without this
+# a value run compared identifiers raw and reported both spellings as findings
+# -- and the only way to green it was to have the ORACLE re-key its own output,
+# which puts the hop where no reader of the config can see it. That escape is
+# the reason this key exists rather than a convenience.
+#
+# Refused alongside a bare `translate` when no `field` is named: there is one
+# side to translate then, and two keys naming it is a declaration saying the
+# same thing twice.
+[parity.translate_identifier]
+pattern = '^agent\.<agent>\.'   # the manifest declares one templated row
+replacement = 'agent.claude.'   # the code emits it per agent
 
 # `relation` says what the two sets are claimed to be. Without it a parity
 # means `equal`, which is what it has always meant. The others are weaker or
@@ -1270,12 +1285,21 @@ limit is closed, in the same commit that closes it.**
   ⚑ **A fourth cause is not a spelling divergence at all** and is worth separating, because no
   translation form whatever would reach it: a **parametric row with no code-side member**. That one
   is the registry's addressing, not the comparison's notation.
-  ⚑ **And the sharpest consequence is structural rather than a matter of degree.** The translation
-  has one target, chosen by whether `field` is declared — so a comparison that names a `field`
-  translates the **values** and compares the **identifiers raw**. Membership runs either way and is
-  not made optional by a value declaration, which is deliberate; but it means a declaration whose
-  identifiers need a spelling map and whose values need comparing has **no form for the first
-  one at all**.
+  ⚑ **~~And the sharpest consequence is structural rather than a matter of degree.~~ Closed
+  2026-09-19 by `translate_identifier`.** The translation had one target, chosen by whether `field`
+  was declared — so a comparison naming a `field` translated the **values** and compared the
+  **identifiers raw**, and membership runs either way. A declaration whose identifiers need a
+  spelling map *and* whose values need comparing had no form for the first, and the only way to
+  green one was to have the oracle re-key its own output.
+  ⚑ **That workaround is why it was built, and the general form of the argument is worth more than
+  the key.** A capability whose absence is routed around **silently** is not absent — it is
+  undeclared, and the routing lands in the one place this entry already says a reader cannot see.
+  Measured on an adopter's real manifest row rather than argued: the re-keyed oracle turns the run
+  green, and nothing in the config says a hop happened.
+  ⚑ **It moved no reach figure**, which is stated because the temptation is to claim one: the row
+  it was measured against is still unreached, on an assertion about a *templated* declaration row
+  standing for several produced identifiers, which is the fourth cause named above and is the
+  registry's addressing rather than the comparison's notation.
   ⚑ **“No real row has needed two” was already false when it was published**, by a measurement in
   this project's own records rather than by the one above: of an adopting project's five translated
   rows, one needs two — a reference hop *and* a segment substitution — and the characterization
@@ -1587,13 +1611,17 @@ down, and the two shapes at the end are the findings that matter most.
   purpose), an **inequality**, and a second declared **translation**. Three conformance rows in the
   measured population, one each.
   ⚑ **All three were run against that project's real files on 2026-09-19 rather than reasoned
-  about, and two are reachable in a form worse than the gap.** An oracle can re-key its output to
-  the declaration's spelling, which carries the second translation — and spends the visibility
-  `translate` exists for. An oracle can print a **verdict** per row against a declared constant,
-  which carries the inequality — and then the comparison is the oracle's and nothing checks it.
-  **Neither is counted as reach**, on the rule that an oracle answers what the code *produces*
-  while a declaration answers what it *must be*: once the oracle answers whether it is **right**,
-  the declaration is a rubber stamp.
+  about, and two were reachable only in a form worse than the gap.** An oracle can re-key its
+  output to the declaration's spelling, which carried the second translation — and spent the
+  visibility `translate` exists for. An oracle can print a **verdict** per row against a declared
+  constant, which carries the inequality — and then the comparison is the oracle's and nothing
+  checks it. **Neither counts as reach**, on the rule that an oracle answers what the code
+  *produces* while a declaration answers what it *must be*: once the oracle answers whether it is
+  **right**, the declaration is a rubber stamp.
+  ⚑ **The translation half was then closed properly**, the same day, by `translate_identifier` —
+  the entry above carries it. **Finding the silent workaround is what justified building it**, not
+  the row: a capability an adopter can route around without saying so is undeclared rather than
+  absent. The inequality stands, and so does the ordering.
   ⚑ **The ordering half is disclosed rather than silent** — `set-valued: N` on every run, clean or
   failing, whose declared cell held a list. The set rule is deliberate and stays; what was wrong is
   that a declaration pinning an enum's `choices` printed *agreeing on choices* while the oracle

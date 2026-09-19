@@ -11,6 +11,17 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 ## Unreleased
 
+**New**
+
+- `[[parity]] translate_identifier`: a second declared translation, for the identifiers, in a run
+  that also compares values. `translate` lands on whichever side the parity compares — the values
+  when a `field` is named — so a declaration whose keys are spelled one way and whose values
+  another had no form for the first, and membership runs in every parity, so both spellings came
+  back as findings. The only way to make such a run green was to have the *oracle* re-key its own
+  output, which puts the hop where no reader of the config can see it: the thing `translate` exists
+  to prevent. Refused alongside a bare `translate` when no `field` is named, where there is one
+  side and two keys naming it would be a declaration saying the same thing twice.
+
 **Fixed**
 
 - `parity` now prints `set-valued: N` for declared cells that held a list, on every run, clean or

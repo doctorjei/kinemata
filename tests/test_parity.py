@@ -360,6 +360,64 @@ def test_a_list_valued_field_is_compared_as_a_set(tmp_path):
     assert not result.failed
 
 
+def test_a_value_parity_can_translate_its_identifiers_as_well(tmp_path):
+    """The second hop, and the reason it is a capability rather than a nicety.
+
+    A declaration whose keys are spelled one way and whose values are spelled
+    another needs a hop on each side of the seam. With one translation, the
+    side it lands on is decided by ``field`` -- so a value run left identifiers
+    untranslated and reported both as membership findings, and the only way to
+    green it was to have the *oracle* re-key its own output, putting the hop
+    where no reader of the config can see it. Measured on an adopter's real
+    manifest before this existed.
+    """
+    result = compare(
+        Registry("keyspace.old", extra={"keyspace.old": {"default": "THEME"}}),
+        value_oracle(
+            command=("{python}", "-c", "print('keyspace.new=theme')"),
+            translate=Translation(pattern="^THEME$", replacement="theme"),
+            translate_identifier=Translation(pattern=r"\.old$", replacement=".new"),
+        ),
+        tmp_path,
+    )
+    assert not result.failed
+    assert result.undeclared == () and result.unproduced == ()
+
+
+def test_a_divergence_names_the_identifier_as_translated(tmp_path):
+    """The spelling the oracle printed, which is the run the reader is holding.
+
+    Membership is compared in the translated vocabulary, so a value finding
+    naming the untranslated one would make a single run speak two languages.
+    """
+    result = compare(
+        Registry("keyspace.old", extra={"keyspace.old": {"default": "THEME"}}),
+        value_oracle(
+            command=("{python}", "-c", "print('keyspace.new=other')"),
+            translate_identifier=Translation(pattern=r"\.old$", replacement=".new"),
+        ),
+        tmp_path,
+    )
+    (found,) = result.divergent
+    assert found.identifier == "keyspace.new"
+
+
+def test_translate_identifier_without_a_field_is_refused(tmp_path):
+    """Two keys naming one side is a declaration saying the same thing twice.
+
+    Without a field there is only the identifier side, and `translate` already
+    reaches it -- so this is refused rather than resolved by preferring one,
+    which would leave the other line inert in a config that reads as if both
+    applied.
+    """
+    declare(tmp_path, extra=(
+        'translate_identifier = { pattern = "^a$", replacement = "b" }'
+    ))
+    with pytest.raises(ConfigError) as caught:
+        load(Path(cfg(tmp_path)))
+    assert "already translates its identifiers" in str(caught.value)
+
+
 def test_a_list_valued_field_says_it_was_compared_as_a_set(tmp_path):
     """The rule above is deliberate; reporting nothing about it was not.
 

@@ -151,6 +151,12 @@ class Translation:
     ``docs/introduction.md`` [0TN7FP9-Pa0004] § Known limits, which carries the
     measurement that withdrew it and what a wider form would take.
 
+    ⚑ **One per SIDE, since 2026-09-19.** A value comparison spends this on the
+    values, so :attr:`Oracle.translate_identifier` is the identifier hop -- see
+    that attribute for why it is a capability rather than a convenience. Still
+    one translation per side: a pipeline of them is what nobody can read off a
+    config.
+
     Two forms, never both, and each is deliberately dull:
 
     ``table``
@@ -227,12 +233,24 @@ class Oracle:
     #: identifiers when :attr:`field` is empty, the values when it is not. One
     #: target, so what a translation touches is a thing a reader can settle from
     #: the config rather than infer.
-    #:
-    #: ⚑ **The cost of that is a declaration comparing values cannot translate
-    #: its identifiers at all**, and membership runs regardless -- see
-    #: ``docs/introduction.md`` [0TN7FP9-Pa0004] § Known limits, where the reach
-    #: of one translation is measured and dispositioned.
     translate: Translation | None = None
+    #: Applied to the declared **identifiers**, in a run that also compares
+    #: values. Without it such a run has no way to spell an identifier hop, and
+    #: membership runs regardless -- so a declaration whose keys are spelled one
+    #: way and whose values are spelled another could be made to pass only by
+    #: having the **oracle** re-key its own output.
+    #:
+    #: ⚑ **That escape is why this exists rather than being a convenience.**
+    #: Measured on an adopter's real manifest: the oracle route turns the run
+    #: green and puts the hop somewhere no reader of the config can see it,
+    #: which is the exact visibility :class:`Translation` was built to buy.
+    #: A capability whose absence is routed around silently is not absent, it
+    #: is undeclared.
+    #:
+    #: Refused alongside a bare :attr:`translate` when :attr:`field` is empty:
+    #: there is one side to translate then, and two keys naming it is a
+    #: declaration saying the same thing twice.
+    translate_identifier: Translation | None = None
     #: What this declaration claims about the two sets, from :data:`RELATIONS`.
     #: ``equal`` is the default and is what every parity meant before the key
     #: existed, so no declaration written without it changes.
@@ -665,13 +683,15 @@ def compare(
     printed, why = produced(spec, root, timeout)
     entries = list(registry.entries())
     translate = spec.translate or Translation()
-    # The translation has one target, and which one depends on what is being
-    # compared: a membership declaration's own side is its identifiers, a value
-    # declaration's is its values. Applying it to both would be two
-    # translations wearing one name.
-    declared = {
-        entry.id if spec.field else translate.apply(entry.id) for entry in entries
-    }
+    # `translate` keeps its published target -- the identifiers of a membership
+    # declaration, the values of a value one -- and `translate_identifier` is
+    # the second hop, which only a value run can need: without a field there is
+    # one side and `translate` already reaches it. The config refuses the pair
+    # in that case rather than silently preferring one.
+    identify = spec.translate_identifier or (
+        Translation() if spec.field else translate
+    )
+    declared = {identify.apply(entry.id) for entry in entries}
     if printed is None:
         return Parity(
             registry=spec.registry,
@@ -718,12 +738,17 @@ def compare(
     divergent: list[Divergence] = []
     set_valued: list[str] = []
     for entry in entries:
-        if entry.id not in values:
+        # Paired on the identifier as *translated*, which is the vocabulary
+        # both sides were compared in above. A finding names that spelling for
+        # the same reason: it is the one the oracle printed, so a reader can
+        # find it in the run they are holding.
+        key = identify.apply(entry.id)
+        if key not in values:
             continue  # membership above has already said so
         side = _declared_values(entry, spec, translate)
         mine, absent, problem = side.values, side.absent, side.problem
         if side.listed:
-            set_valued.append(entry.id)
+            set_valued.append(key)
         if mine is None:
             # **Membership rides along**, and leaving it out was the defect an
             # adopter reported: 18 of their 66 rows hold a dict, so one
@@ -740,12 +765,12 @@ def compare(
                 relation=spec.relation,
                 **membership,
             )
-        theirs = values[entry.id]
+        theirs = values[key]
         if mine != theirs:
             divergent.append(
                 Divergence(
                     registry=spec.registry,
-                    identifier=entry.id,
+                    identifier=key,
                     field=spell_path(spec.field),
                     authority=spec.authority,
                     declared=tuple(sorted(mine)),

@@ -782,7 +782,7 @@ COUNT_KEYS = frozenset(
 PARITY_KEYS = frozenset(
     {
         "command", "run", "args", "directory", "registry", "extract", "field",
-        "authority", "translate", "relation",
+        "authority", "translate", "translate_identifier", "relation",
     }
 )
 SHAPE_KEYS = frozenset({"registry", "rule"})
@@ -2010,6 +2010,19 @@ def _build_parities(
                 "this relation is about. Declare one or the other."
             )
 
+        # Without a field there is one side to translate and `translate`
+        # already reaches it, so a second key naming that side is a declaration
+        # saying the same thing twice -- and refusing beats picking a winner,
+        # since either choice makes the other line inert.
+        if spec.get("translate_identifier") is not None and not value_field:
+            raise ConfigError(
+                f"{path}: [[parity]] {index} declares 'translate_identifier' "
+                "and compares no field, so it already translates its "
+                "identifiers through 'translate'. Use one key: "
+                "'translate_identifier' is for a parity that compares values "
+                "as well, where 'translate' is spent on those."
+            )
+
         argv += _argv(spec.get("args"), f"{path}: [[parity]] {index}", "args")
         built.append(
             Oracle(
@@ -2020,6 +2033,10 @@ def _build_parities(
                 field=value_field,
                 authority=authority,
                 translate=_build_translation(spec.get("translate"), path, index),
+                translate_identifier=_build_translation(
+                    spec.get("translate_identifier"), path, index,
+                    "translate_identifier",
+                ),
                 relation=relation,
             )
         )
@@ -2500,18 +2517,21 @@ def _shape_guard(declared: object, where: str) -> Condition | Predicate:
 
 
 def _build_translation(
-    declared: object, path: Path, index: int
+    declared: object, path: Path, index: int, key: str = "translate"
 ) -> Translation | None:
-    """The one translation a ``[[parity]]`` may declare, or a refusal.
+    """One translation a ``[[parity]]`` declares, or a refusal.
 
     Compiled here rather than at the comparison, unlike ``extract``: an
     unusable ``extract`` makes a run fail loudly as blocked, while an unusable
     translation would make every comparison in it wrong. A project's mistake
     belongs where a project's mistakes are refused.
+
+    ``key`` names the one being built, so a refusal about
+    ``translate_identifier`` does not point at the other key's spelling.
     """
     if declared is None:
         return None
-    where = f"{path}: [[parity]] {index}'s translate"
+    where = f"{path}: [[parity]] {index}'s {key}"
     if not isinstance(declared, dict):
         raise ConfigError(f"{where} must be a table, not a {type(declared).__name__}")
     table, pattern = declared.get("map"), declared.get("pattern")
