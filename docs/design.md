@@ -380,8 +380,10 @@ bibliography: a reference key is recognizable because the stamp's delimiters wer
 so, which is why that one registry can answer, and until a bibliography was declared `kinemata
 undeclared` run here refused rather than reporting a false clean.
 
-⚑ **Closability is a boundary for two of the three kinds, settled 2026-09-13** rather than left as
-an open gap. `code-patterns` and `substitutions` are **negative** registries — they declare what
+⚑ **Closability is a boundary for `code-patterns` and `substitutions`, and a deliberate gap for
+`python-constants`, settled 2026-09-13** rather than left as an open gap. ⚑ **Named rather than
+counted**: this read *"two of the three kinds"* until 2026-09-19, when a fourth kind existed and
+the phrase had quietly become a claim about the whole adapter set rather than about these three. `code-patterns` and `substitutions` are **negative** registries — they declare what
 must *not* appear, and the complement of "not a forbidden spelling" is every other string in the
 language, so there is no membership list to enumerate and no closed-world question to ask. They
 will never be closable, and that is a property of the data model. `python-constants` is a genuine
