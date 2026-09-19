@@ -29,6 +29,15 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   repository and, on the two corpus trees where it fires, most of what it recovers is a layout
   description whose paths were never claims about that tree. The reference sheet's § Known limits
   carries the disposition and what would change it.
+- Every command that reads the baseline says when a new finding is an **accepted record whose line
+  was edited**, naming the record and the text it used to hold. Repairing one finding by reflowing
+  a paragraph moves the words of a *neighboring* baselined line; the record stops matching, the run
+  reddens with what presents as a new finding, and the accepted count drops by one with nothing
+  said. Those are two different events and they were one piece of output. The verdict is
+  deliberately unchanged — a fingerprint holds the line's text so that a rewrite is a new finding,
+  and a match loose enough to forgive one would hold an exemption open across the edit that changed
+  what was exempted. Reported by a project that hit it, which asked for the naming rather than for
+  the looser match.
 
 **What an existing config will see change**
 
@@ -39,6 +48,9 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   line gains a ` -- "word" direction` suffix after the path, and a project whose documents hold
   markdown tables gains one indented line under `negated:`. A project with no tables sees no second
   line at all.
+- A run in which an accepted finding's line was edited gains the lines naming it. No exit status
+  moves: the same findings are new, the same records are stale, and both are still reported where
+  they were.
 
 - `[[parity]] translate_identifier`: a second declared translation, for the identifiers, in a run
   that also compares values. `translate` lands on whichever side the parity compares — the values

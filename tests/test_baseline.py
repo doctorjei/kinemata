@@ -108,6 +108,71 @@ def test_rewriting_the_line_reports_it_as_new(tmp_path):
     assert len(split.new) == 1
 
 
+# -- and saying so ------------------------------------------------------------
+#
+# The cost above is paid whether or not anyone can see it, and until 2026-09-19
+# nobody could: an accepted finding whose text changed and a genuinely new
+# finding were the same two lines of output. An adopter met the first while
+# reading the second -- repairing one finding meant reflowing a paragraph, which
+# moved the words of a NEIGHBORING baselined line -- and asked for the report to
+# name it rather than for a looser match. The verdict above is unchanged.
+
+
+def test_a_reworded_line_is_paired_with_the_record_it_came_from(tmp_path):
+    base = record(tmp_path / "b.json", one(hit(text='p = root / "box.yaml"')), until=LATER)
+    split = base.split(one(hit(text='p = root / "box.yaml" if flag else None')))
+    [(record_, (_, finding))] = split.reworded
+    assert record_.text == 'p = root / "box.yaml"'
+    assert finding.text == 'p = root / "box.yaml" if flag else None'
+
+
+def test_a_genuinely_new_finding_is_not_paired_with_anything(tmp_path):
+    """The negative control, and the one that decides whether this is worth
+    printing: a new site in a file with no stale record explains nothing."""
+    base = record(tmp_path / "b.json", one(hit()), until=LATER)
+    split = base.split(one(hit(), hit(path="src/other.py")))
+    assert len(split.new) == 1
+    assert split.reworded == ()
+
+
+def test_a_fixed_finding_alone_is_not_a_rewording(tmp_path):
+    """A stale record with no new finding beside it is work, not an edit. A
+    pair needs both halves, which is what keeps this from re-reading every
+    driven-down exemption as churn."""
+    base = record(tmp_path / "b.json", one(hit(), hit(path="src/other.py")), until=LATER)
+    split = base.split(one(hit()))
+    assert len(split.stale) == 1
+    assert split.reworded == ()
+
+
+def test_a_rewording_stays_in_new_and_in_stale(tmp_path):
+    """A view, never a fourth category. The gate reads `new` and must see the
+    finding there; `--prune` reads `stale` and must still drop the record."""
+    base = record(tmp_path / "b.json", one(hit(text="one")), until=LATER)
+    split = base.split(one(hit(text="two")))
+    assert len(split.new) == len(split.stale) == len(split.reworded) == 1
+
+
+def test_pairing_consumes_like_the_matching_it_shadows(tmp_path):
+    """One record and two new findings at a site: one is explained, one is not.
+    Pairing that did not consume would report both as reworded and tell a
+    reader that a finding they have never accepted is an old one."""
+    base = record(tmp_path / "b.json", one(hit(text="one")), until=LATER)
+    split = base.split(one(hit(line=1, text="two"), hit(line=2, text="three")))
+    assert len(split.new) == 2
+    assert len(split.reworded) == 1
+
+
+def test_a_move_to_another_file_is_not_a_rewording(tmp_path):
+    """The path is in the pairing key for the reason it is in the record's own:
+    a finding that moved to another file is a new site, and kanibako-cli's
+    tripwire failed by being scoped to one module."""
+    base = record(tmp_path / "b.json", one(hit(text="one")), until=LATER)
+    split = base.split(one(hit(path="src/other.py", text="two")))
+    assert len(split.new) == 1
+    assert split.reworded == ()
+
+
 # -- driving it down ----------------------------------------------------------
 
 
@@ -312,6 +377,41 @@ def test_a_narrowed_check_does_not_call_the_rest_of_the_baseline_stale(project, 
 
     assert main(["check", "-c", cfg(project), "src/consts.py"]) == 0
     assert "no longer present" not in capsys.readouterr().out
+
+
+def test_check_says_when_a_new_finding_is_an_edited_accepted_line(project, capsys):
+    """The adopter's event, end to end: the finding is theirs already and the
+    line moved under it. Still red -- the fingerprint holds the text on
+    purpose -- but no longer indistinguishable from a new site."""
+    main(["baseline", "-c", cfg(project), "--record", "--until", "2099-01-01"])
+    capsys.readouterr()
+
+    write(project, "src/app.py", 'p = (root / "box.yaml")\n')
+
+    assert main(["check", "-c", cfg(project)]) == 1
+    out = capsys.readouterr().out
+    assert "1 new finding is an accepted record whose line was edited" in out
+    assert "src/app.py" in out
+
+
+def test_a_registry_narrowed_scan_still_says_which_line_was_edited(project, capsys):
+    """The raw stale count is suppressed under a narrowing, because records
+    outside it are absent rather than fixed. A pairing is not: it needs a new
+    finding at the same site, so that site was scanned.
+
+    `--registry` and not a path argument, which was measured rather than
+    assumed: a path argument is the scan *root*, so findings come back relative
+    to it and no record written from the project root matches one.
+    """
+    main(["baseline", "-c", cfg(project), "--record", "--until", "2099-01-01"])
+    capsys.readouterr()
+
+    write(project, "src/app.py", 'p = (root / "box.yaml")\n')
+
+    assert main(["check", "-c", cfg(project), "-r", "constants"]) == 1
+    out = capsys.readouterr().out
+    assert "no longer present" not in out
+    assert "1 new finding is an accepted record whose line was edited" in out
 
 
 # -- the list lapses, like every other deferral here ---------------------------

@@ -743,6 +743,7 @@ def cmd_undeclared(args: argparse.Namespace) -> int:
         gone = sum(item.count for item in split.stale)
         print(f"{gone} accepted record(s) no longer present "
               "-- `kinemata baseline --prune` drops them.")
+    _report_reworded(split, quiet=args.quiet)
 
     if failed:
         print(
@@ -892,6 +893,7 @@ def cmd_parity(args: argparse.Namespace) -> int:
         gone = sum(item.count for item in split.stale)
         print(f"{gone} accepted record(s) no longer present "
               "-- `kinemata baseline --prune` drops them.")
+    _report_reworded(split, quiet=args.quiet)
 
     if failed:
         print(
@@ -1007,6 +1009,7 @@ def cmd_shape(args: argparse.Namespace) -> int:
         gone = sum(item.count for item in split.stale)
         print(f"{gone} accepted record(s) no longer present "
               "-- `kinemata baseline --prune` drops them.")
+    _report_reworded(split, quiet=args.quiet)
 
     if failed:
         print(
@@ -1111,6 +1114,7 @@ def cmd_probe(args: argparse.Namespace) -> int:
         gone = sum(item.count for item in split.stale)
         print(f"{gone} accepted record(s) no longer present "
               "-- `kinemata baseline --prune` drops them.")
+    _report_reworded(split, quiet=args.quiet)
 
     if mismatched or unanswered:
         said = []
@@ -1257,6 +1261,53 @@ def _verify(args: argparse.Namespace, settings: Settings) -> Verification:
         timeout=settings.external_timeout,
         oracle_timeout=settings.oracle_timeout,
     )
+
+
+def _report_reworded(split: Split, *, quiet: bool = False) -> None:
+    """Say which new findings are an accepted record with its line edited.
+
+    *An accepted finding's text changed* and *a new claim does not resolve* are
+    the same two lines of output today, and an adopter hit the first while
+    believing the second (2026-09-19): repairing one finding meant reflowing a
+    paragraph, which moved the words of a **neighboring** baselined line. Their
+    run reddened with what presented as new, and the accepted count dropped by
+    one with nothing said.
+
+    **The verdict is unchanged and the ask was not a looser match** -- they said
+    so, and a fingerprint that forgave a rewrite would hold an exemption open
+    across the edit that changed what was exempted. This names the event.
+
+    Printed under a ``--registry`` narrowing, where the raw stale count is
+    suppressed because records outside the narrowing are absent rather than
+    fixed. A pair is trustworthy anyway: it needs a **new finding at the same
+    site**, so that site was scanned.
+
+    **A path argument is a different case and this says nothing under one**,
+    which was measured rather than assumed -- the claim here first read "any
+    narrowed scan". :func:`_destination` makes the path the scan *root*, so
+    findings come back relative to it and no record written from the project
+    root can match one. That is a wider problem than this function: under a
+    path argument every accepted finding reads as new.
+    """
+    if quiet or not split.reworded:
+        return
+    pairs = split.reworded
+    # Self-contained rather than "N of them": this prints beside both the new
+    # findings and the stale records, and a sentence that needs its neighbor to
+    # say what it counts is one that reads wrong the first time it moves.
+    # Spelled out rather than "finding(s) is/are", which the agreement makes
+    # unreadable here in a way the other counts in this file do not have.
+    head = (
+        "1 new finding is an accepted record whose line was edited"
+        if len(pairs) == 1
+        else f"{len(pairs)} new findings are accepted records whose lines "
+             "were edited"
+    )
+    print(f"{head}, not a new site -- re-record, or put the text back:")
+    # Not `record`: that is the module-level function this file imports, and
+    # shadowing it here is how a later edit in this function calls the wrong one.
+    for accepted, _ in pairs:
+        print(f"  {accepted}")
 
 
 def _report_unscanned(split: Split) -> None:
@@ -1444,6 +1495,7 @@ def cmd_claims(args: argparse.Namespace) -> int:
             note += (f"; {gone} no longer present "
                      f"(`kinemata baseline --prune` drops them)")
         print(note)
+        _report_reworded(split)
         _report_unscanned(split)
 
     # A lapsed baseline fails here for the reason it fails `check`: the date is
@@ -2052,6 +2104,7 @@ def cmd_check(args: argparse.Namespace) -> int:
                 f"(`kinemata baseline --prune` drops them)"
             )
         print(note)
+        _report_reworded(split)
         _report_unscanned(split)
 
     # A lapsed baseline fails even with nothing new, because that is the whole

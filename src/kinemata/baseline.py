@@ -212,6 +212,47 @@ class Split:
     #: like a run that accounted for all of it.
     unscanned: tuple[Accepted, ...] = ()
 
+    @property
+    def reworded(self) -> tuple[tuple[Accepted, tuple[str, Bypass]], ...]:
+        """Pairs where a new finding is an accepted record with its line edited.
+
+        **A view over :attr:`new` and :attr:`stale`, never a fourth category.**
+        Both keep their members and the gate is unaffected: a fingerprint holds
+        the line's text on purpose, so a rewritten line *is* a new finding, and
+        this says nothing about whether it should be. What it says is which
+        event happened, because the two are indistinguishable from the output
+        and one of them is somebody's editing rather than somebody's defect.
+
+        Derived rather than stored beside them, so a reader who sees the same
+        finding under two headings cannot be shown two different answers.
+
+        **Reported because an adopter hit it and could not tell** (2026-09-19):
+        repairing one finding meant reflowing a paragraph, which moved the words
+        of a *neighboring* baselined line. The record stopped matching, the run
+        reddened with what presented as a new finding, and the accepted count
+        dropped by one with nothing said. They asked for the report to name it
+        rather than for a looser match, and they were right: a fingerprint that
+        forgave a rewrite would keep an exemption alive across the edit that
+        changed what was exempted.
+
+        Paired on everything but the text -- the registry, the entry, the
+        antipattern and the path -- which is the record's own key minus the one
+        field that moved. Consuming, like the matching in :meth:`Baseline.split`
+        it shadows: two records and three findings at one site pair twice, and
+        the third finding is new with nothing to explain it.
+        """
+        waiting: dict[tuple[str, str, str, str], list[Accepted]] = {}
+        for item in self.stale:
+            site = (item.registry, item.entry_id, item.antipattern, item.path)
+            waiting.setdefault(site, []).extend([item] * item.count)
+        pairs: list[tuple[Accepted, tuple[str, Bypass]]] = []
+        for registry, hit in self.new:
+            site = (registry, hit.entry_id, hit.antipattern, hit.path)
+            bucket = waiting.get(site)
+            if bucket:
+                pairs.append((bucket.pop(0), (registry, hit)))
+        return tuple(pairs)
+
 
 @dataclass
 class Baseline:
