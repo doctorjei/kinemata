@@ -21,9 +21,11 @@ rewarded (the edit that omits the flag is shorter).
 adopter's own suite calls these cases throughout, and it does not promise JSON
 Schema by increments. There is no expression syntax here, no coercion and no
 inference: two small tables of dull operators, and one escape to a predicate the
-project names. An expression language was refused rather than deferred -- it
-would re-derive a solved thing, the core takes no runtime dependency so none
-could be borrowed, and the result would be a second worse copy.
+project names. An expression language was declined **on its cost** -- it would
+re-derive a solved thing, the core takes no runtime dependency so none could be
+borrowed, and the result would be a second worse copy. Nothing in this design
+forecloses one: ``docs/introduction.md`` [0TN7FP9-Pa0004] § Known limits carries
+the disposition and what would revive it.
 
 **One form throughout: a rule is a guard and a claim.** A rule with no guard
 judges every entry; a guarded rule judges the group its guard selects. That

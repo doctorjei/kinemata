@@ -1735,6 +1735,23 @@ down, and the two shapes at the end are the findings that matter most.
   ⚑ **One residual is the rule language rather than the adapter, and it has its own entry below.**
   Recorded separately rather than quietly reclassified, because the adapter reaches exactly what the
   measurement said it would.
+- **accepted** · **There is no expression language in the config, in any mechanism.** A `[[shape]]`
+  guard and claim, a `[[probe]]` outcome and a `[[parity]]` comparison are each a table of fixed
+  operators, so a project wanting a relation none of them spells — an ordering between two values,
+  an arithmetic bound, a condition joining two fields — reaches the one escape there is: a
+  **predicate the project names**, which costs it a module to import and a function to maintain.
+  **What it would take:** a syntax, a parser, and a defined semantic for every type a declaration
+  can hold. The core takes no runtime dependency, so nothing could be borrowed and it would be
+  written here — a second, worse copy of a solved thing, inside the package whose subject is code
+  that re-derives what is already declared. That is the whole of the argument, and it is an
+  argument about **cost**: no part of the design forecloses one.
+  ⚑ **What would revive it: projects reaching for the predicate escape to express *relations
+  between declared values* rather than models of their own data.** The escape exists for the
+  second. A population using it for the first says the operator tables are the wrong **shape**
+  rather than merely short, which is the finding no single unusual claim can establish — so the
+  evidence is a count across projects, not one project's case.
+  ⚑ **Said explicitly because the phrasing here used to be *"refused rather than deferred"***, which
+  reads as a promise never to revisit, and a disposition has no standing to make one.
 - **accepted** · **A rule speaks about the selected set, not about each group within it.** With a
   flattened registry every cell of a matrix is an entry, so a rule can claim something about *all*
   cells. *"Every row's columns are exactly the relations axis"* is a claim about **each first-level
