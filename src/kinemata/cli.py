@@ -754,6 +754,30 @@ def cmd_undeclared(args: argparse.Namespace) -> int:
     return 0
 
 
+def _set_valued(result: Parity, args: argparse.Namespace) -> None:
+    """Say when a value comparison was a *set* comparison.
+
+    A list cell is compared as a set on purpose, so this is a disclosure and
+    never a finding -- but it was the one suppression here that printed
+    nothing, which is exactly what made a withdrawn path claim invisible in
+    ``claims`` until 0.2.0.
+
+    **A count and no identifiers**, deliberately, and the distinction is the
+    one that release already drew: a negation is a suppression the tool
+    *inferred* from prose nobody wrote for it, so the sites are the only way to
+    judge it, while a list cell is a suppression the project **declared** by
+    writing a list. Its author can see which rows those are; what they could
+    not see is that order went unchecked.
+    """
+    if not result.set_valued or args.quiet:
+        return
+    count = len(result.set_valued)
+    print(
+        f"  set-valued: {count} declared cell(s) hold a list, compared as "
+        "sets -- order is not part of the claim"
+    )
+
+
 def _parity(
     args: argparse.Namespace, settings: Settings, target: Path
 ) -> list[Parity]:
@@ -852,10 +876,12 @@ def cmd_parity(args: argparse.Namespace) -> int:
                     f"# {result.registry}: {result.declared} declared, "
                     f"{result.produced} produced, {held}{also}."
                 )
+                _set_valued(result, args)
             continue
         print(f"# {result.registry}")
         for item in shown:
             print(f"  {item}")
+        _set_valued(result, args)
         failed += len(shown)
 
     if split.accepted and not args.quiet:

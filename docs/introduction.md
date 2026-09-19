@@ -1586,6 +1586,22 @@ down, and the two shapes at the end are the findings that matter most.
   that is neither equality nor membership**: an **ordering** (a list is compared as a set, on
   purpose), an **inequality**, and a second declared **translation**. Three conformance rows in the
   measured population, one each.
+  ⚑ **All three were run against that project's real files on 2026-09-19 rather than reasoned
+  about, and two are reachable in a form worse than the gap.** An oracle can re-key its output to
+  the declaration's spelling, which carries the second translation — and spends the visibility
+  `translate` exists for. An oracle can print a **verdict** per row against a declared constant,
+  which carries the inequality — and then the comparison is the oracle's and nothing checks it.
+  **Neither is counted as reach**, on the rule that an oracle answers what the code *produces*
+  while a declaration answers what it *must be*: once the oracle answers whether it is **right**,
+  the declaration is a rubber stamp.
+  ⚑ **The ordering half is disclosed rather than silent** — `set-valued: N` on every run, clean or
+  failing, whose declared cell held a list. The set rule is deliberate and stays; what was wrong is
+  that a declaration pinning an enum's `choices` printed *agreeing on choices* while the oracle
+  listed the same three values in **reverse**, so the run read exactly like one that had checked
+  the order. **The count does not say the comparison was wrong. It says which question was
+  answered.** This was the last suppression here that reported nothing, after `negated:`.
+  **What the claim itself would take:** an opt-in ordered comparison — a form question rather than
+  a missing capability, since the rendering already knows the cell was a list.
   ⚑ **The other half — a declared entry's *field* against what the code prints for it — landed the
   same day**, with the translation and the authority marker the same project's worked rows asked
   for. **The entry stays open and `accepted`**, and what is left is of two different kinds. One is

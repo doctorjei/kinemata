@@ -392,6 +392,19 @@ class Parity:
     #: Read by :meth:`scopes` rather than inferred from :attr:`divergent`, which
     #: is empty both when nothing was compared and when everything agreed.
     compared: str = ""
+    #: Entries whose declared cell held a **list**, and whose comparison was
+    #: therefore a set comparison with the declaration's order discarded.
+    #:
+    #: **Reported because it is a suppression that reported nothing.** A
+    #: declaration pinning ``choices`` against the code's own tuple reads
+    #: ``in agreement, agreeing on choices`` while the code's *order* changes
+    #: underneath it -- measured against an adopter's real manifest, where an
+    #: oracle printing the three access tiers reversed still agreed. The
+    #: set rule itself is deliberate and argued in
+    #: ``test_a_list_valued_field_is_compared_as_a_set``; what was missing is
+    #: any way for a reader of the run to learn that the weaker question was
+    #: the one answered. Every other suppression in this package prints a line.
+    set_valued: tuple[str, ...] = ()
 
     @property
     def failed(self) -> bool:
@@ -534,9 +547,32 @@ def _rendered(value: object) -> str | None:
     return str(value) if isinstance(value, _SCALARS) else None
 
 
+@dataclass(frozen=True)
+class _DeclaredSide:
+    """One entry's declared side, rendered for comparison.
+
+    **A named field rather than a tuple**, on the same reasoning
+    :class:`kinemata.targets.Target` records: :attr:`listed` was added to a
+    three-tuple every caller unpacked positionally, and a fourth slot nobody
+    can read at the call site is how a fact gets carried and then ignored.
+    """
+
+    #: The values to compare, or ``None`` when the cell cannot be rendered.
+    values: frozenset[str] | None
+    #: The declaration records nothing here, which is a claim rather than a gap.
+    absent: bool
+    #: Why it could not be rendered, empty when it could.
+    problem: str
+    #: The cell held a **list**, so the comparison that follows is a set
+    #: comparison and its order was discarded. Carried out of here rather than
+    #: re-derived by the caller: the lookup is a path walk, and doing it twice
+    #: to learn one fact about the first walk is this package's own subject.
+    listed: bool
+
+
 def _declared_values(
     entry: Entry, spec: Oracle, translate: Translation
-) -> tuple[frozenset[str] | None, bool, str]:
+) -> _DeclaredSide:
     """One entry's declared side: the values, whether absent, and why not.
 
     A container that is not a flat list is **refused** rather than rendered. It
@@ -551,18 +587,21 @@ def _declared_values(
     # decides membership rather than a value.
     raw = None if found is MISSING else found
     if raw is None:
-        return frozenset(), True, ""
-    items = list(raw) if isinstance(raw, (list, tuple)) else [raw]
+        return _DeclaredSide(frozenset(), True, "", False)
+    listed = isinstance(raw, (list, tuple))
+    items = list(raw) if listed else [raw]
     rendered = [_rendered(item) for item in items]
     if any(item is None for item in rendered):
         kinds = ", ".join(sorted({type(item).__name__ for item in items}))
-        return None, False, (
+        return _DeclaredSide(None, False, (
             f"declares {entry.id} with a {spell_path(spec.field)!r} holding {kinds}, "
             "which "
             "is not a scalar or a list of them and has no spelling an oracle "
             "could be expected to print"
-        )
-    return frozenset(translate.apply(item) for item in rendered), False, ""
+        ), listed)
+    return _DeclaredSide(
+        frozenset(translate.apply(item) for item in rendered), False, "", listed
+    )
 
 
 def compare(
@@ -677,10 +716,14 @@ def compare(
 
     values = printed.values or {}
     divergent: list[Divergence] = []
+    set_valued: list[str] = []
     for entry in entries:
         if entry.id not in values:
             continue  # membership above has already said so
-        mine, absent, problem = _declared_values(entry, spec, translate)
+        side = _declared_values(entry, spec, translate)
+        mine, absent, problem = side.values, side.absent, side.problem
+        if side.listed:
+            set_valued.append(entry.id)
         if mine is None:
             # **Membership rides along**, and leaving it out was the defect an
             # adopter reported: 18 of their 66 rows hold a dict, so one
@@ -716,6 +759,7 @@ def compare(
         produced=len(printed.ids),
         divergent=tuple(divergent),
         compared=spell_path(spec.field),
+        set_valued=tuple(sorted(set_valued)),
         relation=spec.relation,
         **membership,
     )

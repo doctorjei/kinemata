@@ -11,7 +11,17 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 ## Unreleased
 
-Nothing yet.
+**Fixed**
+
+- `parity` now prints `set-valued: N` for declared cells that held a list, on every run, clean or
+  failing. A list is compared as a set on purpose — a reorder is not a finding, and that rule is
+  unchanged — but nothing said so, so a declaration pinning an enum's `choices` against the code's
+  own tuple reported `agreeing on choices` while an oracle listing the same three values in reverse
+  agreed with it. Measured against a real adopter manifest, not constructed. This was the last
+  suppression in the tool that reported nothing; the others each gained a line earlier, `negated:`
+  most recently. The count is deliberately not a list of sites: a list cell is a suppression the
+  project declared by writing a list and can see in its own file, where a negation is one the tool
+  inferred from prose nobody wrote for it.
 
 ## 0.2.0
 

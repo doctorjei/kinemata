@@ -360,6 +360,75 @@ def test_a_list_valued_field_is_compared_as_a_set(tmp_path):
     assert not result.failed
 
 
+def test_a_list_valued_field_says_it_was_compared_as_a_set(tmp_path):
+    """The rule above is deliberate; reporting nothing about it was not.
+
+    Measured against an adopter's real manifest, a declaration pinning an enum's
+    ``choices`` against the code's own tuple printed *in agreement, agreeing on
+    choices* while the oracle listed the three tiers in **reverse** -- and
+    nothing in the run said the order half had gone unchecked. Every other
+    suppression in this package prints a line; this was the one that did not,
+    which is the same defect ``claims`` carried until a withdrawn path claim
+    gained ``negated:``.
+    """
+    result = compare(
+        Registry("app.name", extra={"app.name": {"default": ["b", "a"]}}),
+        value_oracle(
+            command=("{python}", "-c",
+                     "print('app.name=a'); print('app.name=b')"),
+        ),
+        tmp_path,
+    )
+    assert not result.failed
+    assert result.set_valued == ("app.name",)
+
+
+def test_a_scalar_field_is_not_called_set_valued(tmp_path):
+    """The disclosure is about lists, not about every value comparison.
+
+    A line on every run is a line nobody reads, and the fact being disclosed --
+    that an order was discarded -- is not true of a scalar.
+    """
+    result = compare(
+        Registry("app.name", extra={"app.name": {"default": "truecolor"}}),
+        value_oracle(),
+        tmp_path,
+    )
+    assert not result.failed
+    assert result.set_valued == ()
+
+
+def test_the_command_discloses_a_set_comparison_on_a_CLEAN_run(tmp_path, capsys):
+    """The clean run is the whole point: a failing one is already being read."""
+    write(tmp_path, "keys.yaml",
+          'keys:\n  app.name:\n    spec: "§1"\n    default:\n      - a\n      - b\n')
+    write(tmp_path, "src/a.py", 'NAME = "app.name"\n')
+    write(tmp_path, "kinemata.toml", """
+        [project]
+        root = "."
+
+        [[registry]]
+        name = "keyspace"
+        kind = "yaml-mapping"
+        source = "keys.yaml"
+        section = "keys"
+        clause_field = "spec"
+        syntax = '\\bapp\\.[a-z_]+'
+
+        [[parity]]
+        registry = "keyspace"
+        command = ["{python}", "-c", "print('app.name=b'); print('app.name=a')"]
+        extract = '(?m)^(\\S+)=(.*)$'
+        field = "default"
+        authority = "declared"
+        """)
+    assert main(["parity", "-c", cfg(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert "in agreement, agreeing on default" in out
+    assert "set-valued: 1" in out
+    assert "order is not part of the claim" in out
+
+
 def test_a_set_valued_divergence_names_the_side_each_difference_is_on(tmp_path):
     result = compare(
         Registry("app.name", extra={"app.name": {"default": ["a", "gone"]}}),
