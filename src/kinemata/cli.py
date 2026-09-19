@@ -1366,6 +1366,14 @@ def cmd_claims(args: argparse.Namespace) -> int:
     if found.negated:
         print(f"negated: {found.negated} path claim(s) read as discussed rather "
               "than asserted, a negation being in the same clause")
+        # Listed under -v, where an illustration is only ever counted. An
+        # illustration is a suppression the author declared; this one the tool
+        # inferred, from prose nobody wrote for it, and the author may not know
+        # it happened. The count says how much came off the table; only the
+        # sites say whether it should have.
+        if args.verbose:
+            for claim in found.withdrawn:
+                print(f"  {claim.path}:{claim.line}: {claim.text}")
 
     # And again, for the suppression that is a declaration rather than a
     # marker: these citations were not checked here because the project said

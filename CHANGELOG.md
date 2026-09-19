@@ -21,6 +21,12 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   unrelated token on the same line changed which claims fell inside the window. The rule is
   unchanged and still right far more often than not; what changed is that you can see what it
   took.
+- `claims -v` lists the withdrawn sites. An illustration is a suppression you declared, so the
+  count is the whole reading; a negation is one the tool inferred from prose you did not write for
+  it, and you may not know it happened — so the sites are the only way to judge whether it was
+  right. Tuning the negation word list was considered and measured first: no word is reliably
+  wrong across trees, `had` withdrawing four claims in one tree that all named resolving paths and
+  four in another that named none. Listing is what makes that evidence gatherable at all.
 
 **New**
 

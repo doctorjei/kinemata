@@ -514,7 +514,31 @@ class Verification:
     #: wrong -- the rule is right far more often than not -- it says how much it
     #: took off the table, which is the thing a reader needs to decide whether
     #: to look.
-    negated: int = 0
+    #:
+    #: **Listed under ``-v``, where :attr:`shown` is only ever counted, and the
+    #: difference is the whole reason:** an illustration is a suppression the
+    #: author *declared*, so the number is the reading and the sites are theirs
+    #: already. A negation is one this tool **inferred** from prose nobody wrote
+    #: for it. The author never said "do not check this" and may not know it
+    #: happened, so the sites are the only way to judge whether it was right.
+    #:
+    #: Measured before it was built (2026-09-19): no negation word is reliably
+    #: wrong across trees -- ``had`` withdrew four claims here and every one
+    #: named a path that resolves, while on an adopter's tree it withdrew four
+    #: and none did. Tuning the word list on either sample alone would have been
+    #: wrong for the other. **Listing is what makes the evidence gatherable**,
+    #: and the adopter had 163 withdrawn claims with no way to see one.
+    withdrawn: list[Claim] = field(default_factory=list)
+
+    @property
+    def negated(self) -> int:
+        """How many claims the negation rule withdrew.
+
+        Derived rather than counted alongside :attr:`withdrawn`, so the summary
+        line and the ``-v`` listing cannot disagree about a number the reader
+        sees twice in one run.
+        """
+        return len(self.withdrawn)
 
     @property
     def declarations_failed(self) -> bool:
@@ -1511,10 +1535,13 @@ def verify(
         source, illustrations = _as_documentation(source, path.suffix)
         found.shown += illustrations
         before = len(pending)
-        muted: list[str] = []
 
         previous = ""
         for number, line in enumerate(source.splitlines(), start=1):
+            # Per line, not per file: a withdrawn claim without its line number
+            # is a count wearing a report's clothes, and the site is the whole
+            # reason for listing these at all.
+            muted: list[str] = []
             for kind in kinds:
                 if historic and kind.current_only:
                     continue
@@ -1524,8 +1551,10 @@ def verify(
                     pending.append(
                         (kind, text, Claim(kind.name, text, rel, number, line))
                     )
+            found.withdrawn.extend(
+                Claim("path", token, rel, number, line) for token in muted
+            )
             previous = line
-        found.negated += len(muted)
         yielded[path.suffix] += len(pending) - before
 
     _report_inert_suffixes(read, yielded, root, found)

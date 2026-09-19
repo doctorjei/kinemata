@@ -1387,16 +1387,23 @@ limit is closed, in the same commit that closes it.**
   essentially all of it is one: that project's count goes 371 to 340, adding 31 checked claims of
   which **16 fail** — against a base failure rate of 955 of 2039, so the newly checked claims are
   statistically ordinary rather than especially broken or especially fine.
-  ⚑ **What decided it was this tree's own audit, not the corpus count.** Of the 26 withdrawn here,
-  **10 name a path that resolves today** — live citations, silently unchecked, that would not fire
-  if the file moved. The negations doing it are `not` governing a *different noun*
-  (*"a reminder, not a catch, in the sense `docs/structure.md` uses"*) and past-tense markers
-  attached to a live destination (*"the design had moved to `docs/design.md`"*). **No em-dash is
-  involved in any of them.** The candidate addresses a shape this tree does not have.
+  ⚑ **What decided it was this tree's own withdrawn claims, not the corpus count.** Reading them,
+  the negations doing the damage are `not` governing a *different noun* — *"a reminder, not a
+  catch, in the sense `docs/structure.md` §1 uses"* — and past-tense markers attached to a live
+  destination — *"the design had moved to `docs/design.md`"*. **No em-dash is involved in any of
+  them.** The candidate addresses a shape this tree does not have.
+  ⚑ **No count of the wrong ones is given here, and an earlier version of this entry gave one.**
+  It said *"10 of 26 name a path that resolves today"* and offered that as the size of the
+  problem. **It is not**: a path claim resolves **by basename**, so a withdrawn token can resolve
+  against an unrelated file anywhere in the tree, and *resolves* is therefore a weak proxy for
+  *should have been checked*. The class is real and was confirmed by reading the sentences; the
+  number measured something else. ⚑ **The total moves with every edit to these documents** — it was
+  26 when first measured and 28 two edits later, one of them this paragraph.
   **What would revive it:** a second project measuring a large `negated:` count whose un-suppressed
   claims it can show are real. One tree moving is that project's prose style; two is the rule.
-  **The count shipped so this evidence could be gathered, and the first gathering said no** — which
-  is the convention working rather than failing.
+  ⚑ **`claims -v` lists the withdrawn sites**, which is what makes that evidence gatherable by
+  somebody other than us — it took a bespoke script here, and the adopter with 163 of them had no
+  way to see one.
 - **boundary** · **A negative claim about anything outside the tree rots silently, and nothing here
   will object.** Positive claims fail loudly — a path moves, a symbol vanishes, a link answers
   `404`, and a checker walks into it. A negative breaks nothing when it becomes false: *"X is not

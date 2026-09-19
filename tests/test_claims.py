@@ -1378,3 +1378,26 @@ def test_the_count_moves_when_an_unrelated_token_on_the_line_does(tmp_path):
     found = verify(tmp_path)
     assert found.broken == []
     assert found.negated == 2
+
+
+def test_a_withdrawn_claim_carries_its_site(tmp_path):
+    """The count says how much came off the table; only the site says whether
+    it should have. An illustration is a suppression the author declared, so a
+    number suffices; this one the tool inferred from prose nobody wrote for it.
+    """
+    write(
+        tmp_path,
+        "doc.md",
+        "Intro.\nThere is no `src/ssh_key.py` in this tree.\n",
+    )
+    [claim] = verify(tmp_path).withdrawn
+    assert (claim.path, claim.line, claim.text) == ("doc.md", 2, "src/ssh_key.py")
+
+
+def test_the_count_and_the_listing_cannot_disagree(tmp_path):
+    """`negated` is derived from the list rather than counted beside it: the
+    reader sees the number twice in one run and they must be one fact."""
+    write(tmp_path, "doc.md", "There is no `a/gone.py` and no `b/gone.py`.\n")
+    found = verify(tmp_path)
+    assert found.negated == len(found.withdrawn) == 2
+    assert [claim.text for claim in found.withdrawn] == ["a/gone.py", "b/gone.py"]
