@@ -1392,14 +1392,28 @@ def cmd_claims(args: argparse.Namespace) -> int:
     if found.negated:
         print(f"negated: {found.negated} path claim(s) read as discussed rather "
               "than asserted, a negation being in the same clause")
+        # The one part of it a reader cannot guess, and it is not a failure: a
+        # markdown `|` is not a clause boundary, so a `No` in one cell of a row
+        # withdraws a path named in another. Printed without -v because a table
+        # is where a project keeps its path inventory, and a project with none
+        # of this sees nothing.
+        if found.across_cells:
+            print(f"  {found.across_cells} of them across a table cell, where "
+                  "the negation is in another cell of the same row")
         # Listed under -v, where an illustration is only ever counted. An
         # illustration is a suppression the author declared; this one the tool
         # inferred, from prose nobody wrote for it, and the author may not know
         # it happened. The count says how much came off the table; only the
         # sites say whether it should have.
+        #
+        # With the cause, since 2026-09-19. The sites alone left an adopter
+        # reading 336 of them in their own files to find the seven that were
+        # real; the word and the direction are what let a reader skip the
+        # obvious ones without opening anything.
         if args.verbose:
-            for claim in found.withdrawn:
-                print(f"  {claim.path}:{claim.line}: {claim.text}")
+            for entry in found.withdrawn:
+                claim = entry.claim
+                print(f"  {claim.path}:{claim.line}: {claim.text} -- {entry.cause}")
 
     # And again, for the suppression that is a declaration rather than a
     # marker: these citations were not checked here because the project said

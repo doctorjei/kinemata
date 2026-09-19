@@ -290,6 +290,55 @@ class ClaimsError(Exception):
 
 
 @dataclass(frozen=True)
+class Negation:
+    """What withdrew a path claim, for a reader deciding whether it should have.
+
+    The count says how much came off the table and the site says where; neither
+    says *what did it*, and that is the question a reader actually has. An
+    adopter read 336 withdrawn claims at source to triage them (2026-09-19),
+    because the output gave them no way to tell a withdrawal that is obviously
+    right from one worth opening the file for.
+
+    Recorded rather than re-derived. The alternative is a second pass that finds
+    the claim's position again by searching the line for its text, which is both
+    this project's own subject and wrong where a line names one path twice.
+    """
+
+    #: The negation word itself, lowercased. Deliberately not classified into
+    #: reliable and unreliable: measured 2026-09-19, no word is reliably either
+    #: across trees -- ``had`` withdrew four claims here that all named a path
+    #: that resolves, and four on an adopter's tree where none did.
+    word: str
+    #: ``before`` and ``after`` are this line; ``above`` is the line before it,
+    #: which :func:`_negated` carries for wrapped prose. The three are worth
+    #: telling apart because their error rates are nothing alike: a negation
+    #: *above* reached across a line break to do this.
+    direction: str
+    #: A table cell boundary lies between the negation and the claim.
+    #:
+    #: **The sharpest triage signal there is, and the tool cannot act on it.**
+    #: ``CLAUSE_BOUNDARY`` holds ``;``, ``:``, a sentence end and the
+    #: contrastive conjunctions; a markdown ``|`` is not among them, so a
+    #: ``No`` in one cell withdraws a path named in another -- or, worse, in the
+    #: row above, a preceding row being carried in as though it were the first
+    #: half of this row's sentence.
+    #:
+    #: **Reported rather than fixed, and that is a measurement rather than a
+    #: shrug** (2026-09-19). Adding ``|`` to the boundary was simulated across
+    #: nine trees: inert on this one, and on the two where it fires most of what
+    #: comes back is a path inventory whose header says the paths are relative
+    #: to somewhere else -- so the findings would be wrong while the text is
+    #: right, on the adopter who reported the hazard and said it cost them
+    #: nothing. ``docs/introduction.md`` [0TN7FP9-Pa0004] § Known limits carries
+    #: the disposition and what would change it.
+    across_cell: bool
+
+    def __str__(self) -> str:
+        cell = ", across a table cell" if self.across_cell else ""
+        return f'"{self.word}" {self.direction}{cell}'
+
+
+@dataclass(frozen=True)
 class Claim:
     """One falsifiable assertion a document makes about the tree."""
 
@@ -348,6 +397,19 @@ class Claim:
             # file collide into one record.
             text=self.source or self.text,
         )
+
+
+@dataclass(frozen=True)
+class Withdrawal:
+    """A path claim the negation rule took off the table, and why.
+
+    Two objects rather than more fields on :class:`Claim`: a claim is what a
+    baseline record fingerprints, and it is the same assertion whether or not
+    anything withdrew it. Why it was withdrawn belongs to the reading.
+    """
+
+    claim: Claim
+    cause: Negation
 
 
 @dataclass
@@ -538,7 +600,11 @@ class Verification:
     #: and none did. Tuning the word list on either sample alone would have been
     #: wrong for the other. **Listing is what makes the evidence gatherable**,
     #: and the adopter had 163 withdrawn claims with no way to see one.
-    withdrawn: list[Claim] = field(default_factory=list)
+    #:
+    #: ⚑ **Each carries its cause since 2026-09-19**, that adopter having then
+    #: read 336 of them at source to sort the right ones from the wrong: a list
+    #: of sites says where to look and not which to look at.
+    withdrawn: list[Withdrawal] = field(default_factory=list)
 
     @property
     def negated(self) -> int:
@@ -549,6 +615,18 @@ class Verification:
         sees twice in one run.
         """
         return len(self.withdrawn)
+
+    @property
+    def across_cells(self) -> int:
+        """Withdrawals where the negation had to cross a table cell.
+
+        Surfaced in the summary rather than only under ``-v``, because it is the
+        one part of this a reader cannot guess: a table is where a project puts
+        its path inventory, so a row's own ``No`` column withdrawing the path
+        beside it is both the likeliest false suppression and the hardest to
+        notice. Zero is the common answer and prints nothing.
+        """
+        return sum(1 for entry in self.withdrawn if entry.cause.across_cell)
 
     @property
     def declarations_failed(self) -> bool:
@@ -711,7 +789,7 @@ def _known_commits(roots: Sequence[Path], shas: Iterable[str]) -> set[str] | Non
 # -- claim kinds, declared rather than spelled out in the loop ----------------
 
 
-def _negated(line: str, start: int, end: int, previous: str = "") -> bool:
+def _negated(line: str, start: int, end: int, previous: str = "") -> Negation | None:
     """Is the claim at ``start`` being discussed rather than asserted?
 
     Two bounds, because each alone has failed. The window keeps a negation
@@ -723,6 +801,12 @@ def _negated(line: str, start: int, end: int, previous: str = "") -> bool:
 
     The window is measured from the *claim*, and the line break is just another
     character in it.
+
+    Returns the :class:`Negation` that did it rather than a bare ``True``. The
+    verdict is unchanged; what is new is that the caller can say which word,
+    from which side, and whether it had to cross a table cell to get here --
+    the three things a reader triaging a withdrawal asks and could not ask
+    before.
     """
     # Wrapped prose puts the negation on the line above: "there is no\n``x.py``"
     # is one sentence and two lines, and looking only at this one reports it.
@@ -734,17 +818,39 @@ def _negated(line: str, start: int, end: int, previous: str = "") -> bool:
     if previous:
         preceding = f"{previous[-NEGATION_WINDOW:]} {preceding}"
     window = preceding[-NEGATION_WINDOW:]
+    # How much of the window is this line, so a negation before that point came
+    # from the line above. Both halves are truncated, so this is measured off
+    # the window rather than off either source line.
+    own = min(len(line[:start]), len(window))
     boundaries = list(CLAUSE_BOUNDARY.finditer(window))
-    clause = window[boundaries[-1].end():] if boundaries else window
-    if NEGATION.search(clause):
-        return True
+    opened = boundaries[-1].end() if boundaries else 0
+    clause = window[opened:]
+    found = NEGATION.search(clause)
+    if found:
+        at = opened + found.start()
+        return Negation(
+            word=found.group(0).lower(),
+            direction="above" if at < len(window) - own else "before",
+            # Everything between the word and the claim, the window ending at
+            # the claim. A carried line that ended a table row puts its final
+            # ``|`` in here, which is what makes the row-above case visible.
+            across_cell="|" in window[at + len(found.group(0)):],
+        )
     # And it may follow: "`src/gone.py` is missing" negates just as plainly as
     # "no `src/gone.py`". Bounded by the clause for the same reason.
     # From *after* the claim. Starting at it lets a path spell its own
     # negation: `src/gone.py` contains "gone", and reported itself exempt.
     ahead = line[end:end + NEGATION_WINDOW]
     boundary = CLAUSE_BOUNDARY.search(ahead)
-    return bool(NEGATION.search(ahead[:boundary.start()] if boundary else ahead))
+    clause = ahead[:boundary.start()] if boundary else ahead
+    found = NEGATION.search(clause)
+    if found:
+        return Negation(
+            word=found.group(0).lower(),
+            direction="after",
+            across_cell="|" in clause[:found.start()],
+        )
+    return None
 
 
 def _path_claims(
@@ -752,7 +858,7 @@ def _path_claims(
     previous: str = "",
     file_suffixes: frozenset[str] = FILE_SUFFIXES,
     *,
-    muted: list[str] | None = None,
+    muted: list[tuple[str, Negation]] | None = None,
 ) -> Iterator[str]:
     for match in _BACKTICKED.finditer(line):
         token = match.group(2)
@@ -786,14 +892,17 @@ def _path_claims(
             continue
         if PLACEHOLDER.search(token) or EXAMPLE_STEM.search(token):
             continue
-        if _negated(line, match.start(), match.end(), previous):
-            # Discussed, not asserted -- and recorded on the way past. This is
-            # the only filter here that drops a token the extractor had already
-            # decided was path-shaped, which is what makes it worth counting:
-            # every other `continue` above says "never was a claim", this one
-            # says "was a claim, and something in the prose withdrew it".
+        negation = _negated(line, match.start(), match.end(), previous)
+        if negation:
+            # Discussed, not asserted -- and recorded on the way past, cause and
+            # all. This is the only filter here that drops a token the extractor
+            # had already decided was path-shaped, which is what makes it worth
+            # counting: every other `continue` above says "never was a claim",
+            # this one says "was a claim, and something in the prose withdrew
+            # it". The cause rides along from here because this is the one place
+            # that still knows where in the line the claim sat.
             if muted is not None:
-                muted.append(token)
+                muted.append((token, negation))
             continue
         yield token
 
@@ -803,7 +912,7 @@ def _link_claims(
     previous: str = "",
     file_suffixes: frozenset[str] = FILE_SUFFIXES,
     *,
-    muted: list[str] | None = None,
+    muted: list[tuple[str, Negation]] | None = None,
 ) -> Iterator[str]:
     """Link targets, minus the one thing that is never link text.
 
@@ -830,7 +939,7 @@ def _commit_claims(
     previous: str = "",
     file_suffixes: frozenset[str] = FILE_SUFFIXES,
     *,
-    muted: list[str] | None = None,
+    muted: list[tuple[str, Negation]] | None = None,
 ) -> Iterator[str]:
     for match in _SHA.finditer(line):
         sha = match.group(2)
@@ -850,7 +959,7 @@ def _url_claims(
     previous: str = "",
     file_suffixes: frozenset[str] = FILE_SUFFIXES,
     *,
-    muted: list[str] | None = None,
+    muted: list[tuple[str, Negation]] | None = None,
 ) -> Iterator[str]:
     """Web addresses, wherever a document put them.
 
@@ -1551,7 +1660,7 @@ def verify(
             # Per line, not per file: a withdrawn claim without its line number
             # is a count wearing a report's clothes, and the site is the whole
             # reason for listing these at all.
-            muted: list[str] = []
+            muted: list[tuple[str, Negation]] = []
             for kind in kinds:
                 if historic and kind.current_only:
                     continue
@@ -1562,7 +1671,8 @@ def verify(
                         (kind, text, Claim(kind.name, text, rel, number, line))
                     )
             found.withdrawn.extend(
-                Claim("path", token, rel, number, line) for token in muted
+                Withdrawal(Claim("path", token, rel, number, line), cause)
+                for token, cause in muted
             )
             previous = line
         yielded[path.suffix] += len(pending) - before

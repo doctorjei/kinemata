@@ -1443,6 +1443,33 @@ limit is closed, in the same commit that closes it.**
   ⚑ **`claims -v` lists the withdrawn sites**, which is what makes that evidence gatherable by
   somebody other than us — it took a bespoke script here, and the adopter with 163 of them had no
   way to see one.
+  ⚑ **And names what withdrew each one since 2026-09-19** — the word, whether it sat before the
+  claim, after it, or on the line above, and whether it had to cross a table cell to reach it.
+  **The sites made the evidence gatherable and did not make it cheap:** that adopter then read
+  **336** of them in their own files to sort the right withdrawals from the wrong, finding 7 real
+  defects and 103 true assertions checked by nothing. A list of sites says where to look, not which
+  to look at. **No verdict changes** — this is reporting, and the rule above is unchanged.
+  ⚑ **The revival condition above is now MET, and the entry stays `accepted` anyway.** Their read
+  is the second project showing un-suppressed claims that are real. What it did not supply is a fix
+  that pays: see the next two notes.
+  ⚑ **A markdown `|` as a clause boundary was measured and is NOT the fix either** (2026-09-19),
+  reported by that adopter after ten withdrawals in one shipped table came from a
+  :shown:`Loaded at start by default? | No` column nowhere near the path. Simulated across nine
+  trees on `claims`' own population: **inert here** — the count is identical before and after,
+  whatever it currently is — so it cannot be dogfooded in this repository at all. It fires on two, and those two are **one table counted
+  twice** — a path inventory and the template it is generated from. Of the 23 claims it recovers,
+  **at least 11 would newly fail**, and reading them at source they are the rows of a table whose
+  header says the paths are relative to a **canon directory rather than to the repository**. So the
+  findings would be wrong while the text is right, on the project that reported the hazard and said
+  it cost them nothing.
+  ⚑ **The sharper half of that case is not the one reported, and it is also not fixed here:** 10 of
+  the 23 are withdrawn by a negation in a **different row**. The line-above lookback exists because
+  wrapped prose puts a negation above its target; a table row is never the first half of the next
+  row's sentence. The plainest instance is a row reading :shown:`| status.md | … | Yes |` withdrawn
+  because the row above it ended in `No`. **It is flagged rather than repaired** — `across a table
+  cell` covers both — on the same measurement, the recovered claims being the same table.
+  **What would change that:** a project whose table rows are assertions about its own tree, rather
+  than a layout description, measuring what the boundary recovers there.
 - **boundary** · **A negative claim about anything outside the tree rots silently, and nothing here
   will object.** Positive claims fail loudly — a path moves, a symbol vanishes, a link answers
   `404`, and a checker walks into it. A negative breaks nothing when it becomes false: *"X is not

@@ -1390,7 +1390,8 @@ def test_a_withdrawn_claim_carries_its_site(tmp_path):
         "doc.md",
         "Intro.\nThere is no `src/ssh_key.py` in this tree.\n",
     )
-    [claim] = verify(tmp_path).withdrawn
+    [entry] = verify(tmp_path).withdrawn
+    claim = entry.claim
     assert (claim.path, claim.line, claim.text) == ("doc.md", 2, "src/ssh_key.py")
 
 
@@ -1400,4 +1401,75 @@ def test_the_count_and_the_listing_cannot_disagree(tmp_path):
     write(tmp_path, "doc.md", "There is no `a/gone.py` and no `b/gone.py`.\n")
     found = verify(tmp_path)
     assert found.negated == len(found.withdrawn) == 2
-    assert [claim.text for claim in found.withdrawn] == ["a/gone.py", "b/gone.py"]
+    assert [e.claim.text for e in found.withdrawn] == ["a/gone.py", "b/gone.py"]
+
+
+# -- and what withdrew it ----------------------------------------------------
+#
+# The sites made the evidence gatherable; they did not make it cheap. The same
+# adopter then read 336 withdrawn claims in their own files to sort the right
+# ones from the wrong, and found seven real defects (2026-09-19). A list of
+# sites says where to look and not which to look at.
+
+
+def test_a_withdrawal_names_the_word_that_took_it(tmp_path):
+    write(tmp_path, "doc.md", "There is no `src/ssh_key.py` in this tree.\n")
+    [entry] = verify(tmp_path).withdrawn
+    assert (entry.cause.word, entry.cause.direction) == ("no", "before")
+    assert entry.cause.across_cell is False
+
+
+def test_a_negation_after_the_claim_says_so(tmp_path):
+    """Direction is not decoration: the two sides have nothing like the same
+    error rate, and a reader triaging a list needs to know which one ran."""
+    write(tmp_path, "doc.md", "The declaration for `src/gone.py` is missing.\n")
+    [entry] = verify(tmp_path).withdrawn
+    assert (entry.cause.word, entry.cause.direction) == ("missing", "after")
+
+
+def test_a_negation_carried_from_the_line_above_is_marked_above(tmp_path):
+    """`before` and `above` are different events. One is a clause this sentence
+    contains; the other reached across a line break to get here, which is the
+    lookback that exists for wrapped prose doing something else."""
+    write(tmp_path, "doc.md", "There is no\n`src/gone.py` here.\n")
+    [entry] = verify(tmp_path).withdrawn
+    assert (entry.cause.word, entry.cause.direction) == ("no", "above")
+
+
+def test_a_negation_in_another_table_cell_is_flagged(tmp_path):
+    """Reported by an adopter, 2026-09-19: ten withdrawals in one shipped table
+    came from a `Loaded at start? | No` column nowhere near the path.
+
+    Not a fix -- the verdict is unchanged and deliberately so, the boundary
+    change having measured as noise on the trees where it fires. This is the
+    flag that lets the reader see it happened, which they could not before.
+    """
+    write(tmp_path, "doc.md", "| `scripts/` | Reusable helper scripts | No |\n")
+    found = verify(tmp_path)
+    [entry] = found.withdrawn
+    assert entry.cause.across_cell is True
+    assert found.across_cells == 1
+
+
+def test_a_row_above_withdrawing_the_row_below_is_flagged_too(tmp_path):
+    """The sharper half, and it is not what was reported: the negation is not
+    in another cell of this row, it is in a different row entirely. `| Yes |`
+    is this row's own answer and the withdrawal came from the one above it."""
+    write(
+        tmp_path,
+        "doc.md",
+        "| `archives/` | Completed plans | No |\n"
+        "| `status.md` | Current status | Yes |\n",
+    )
+    found = verify(tmp_path)
+    assert found.across_cells == 2
+    assert [e.cause.direction for e in found.withdrawn] == ["after", "above"]
+
+
+def test_ordinary_prose_is_not_reported_as_crossing_a_cell(tmp_path):
+    """The negative control. `across_cells` is printed without `-v`, so a
+    project whose documents hold no tables must see nothing at all."""
+    write(tmp_path, "doc.md", "There is no `src/gone.py` in this tree.\n")
+    found = verify(tmp_path)
+    assert found.negated == 1
+    assert found.across_cells == 0

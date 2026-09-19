@@ -13,6 +13,33 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 **New**
 
+- `claims -v` names what withdrew each path claim, not only where it happened: the negation word,
+  whether it sat before the claim, after it, or on the line above, and whether it had to cross a
+  markdown table cell to reach it. The sites alone made this evidence gatherable and did not make
+  it cheap — a project with a large `negated:` count had to open every one of 336 sites in its own
+  files to sort the right withdrawals from the wrong, and found 7 real defects and 103 assertions
+  that were true and checked by nothing. No verdict changes; the negation rule is exactly as it
+  was.
+- A `negated:` summary carries a second line counting the withdrawals where the negation was in
+  **another cell of the same table row**, or in the row above. `CLAUSE_BOUNDARY` holds `;`, `:`, a
+  sentence end and the contrastive conjunctions, and a `|` is not among them, so a
+  `Loaded at start? | No` column withdraws the path named beside it. This is the likeliest false
+  suppression there is, because a table is where a project puts its path inventory — and it is
+  **reported rather than repaired**, on measurement: adding `|` to the boundary is inert on this
+  repository and, on the two corpus trees where it fires, most of what it recovers is a layout
+  description whose paths were never claims about that tree. The reference sheet's § Known limits
+  carries the disposition and what would change it.
+
+**What an existing config will see change**
+
+- Nothing about any verdict, and no new findings: the negation rule, the window and the boundary
+  set are untouched, so the same claims are withdrawn as before and the gate's exit status cannot
+  move because of this.
+- Two lines of output do change, which matters only to something parsing them. Each `-v` withdrawal
+  line gains a ` -- "word" direction` suffix after the path, and a project whose documents hold
+  markdown tables gains one indented line under `negated:`. A project with no tables sees no second
+  line at all.
+
 - `[[parity]] translate_identifier`: a second declared translation, for the identifiers, in a run
   that also compares values. `translate` lands on whichever side the parity compares — the values
   when a `field` is named — so a declaration whose keys are spelled one way and whose values
