@@ -1380,12 +1380,23 @@ limit is closed, in the same commit that closes it.**
   summary or under `-v`, so a run that lost claims to it was indistinguishable from a clean one.
   **The count does not say the rule was wrong. It says how much came off the table.**
   **What it would take:** grammar instead of proximity, which is parsing, and the core takes no
-  runtime dependency. ⚑ **A cheaper partial exists and is untested: treating an em-dash as a clause
-  boundary**, which would have fixed the reported case exactly — the aside closes before the
-  negation begins. It is not done because it **un-suppresses**, and a change in that direction
-  creates findings rather than hiding them; it needs measuring across the corpus first.
-  **What would revive it:** a project whose `negated:` count is large and contains claims it needed
-  checked. The count exists so that evidence can now be gathered, which it could not be before.
+  runtime dependency.
+  ⚑ **The cheap partial — an em-dash as a clause boundary — was measured and is NOT the fix**
+  (2026-09-19). It would have fixed the reported case, and it is **inert on this tree**: 26 before
+  and 26 after, so it cannot be dogfooded here at all. Across every corpus tree it moves two, and
+  essentially all of it is one: that project's count goes 371 to 340, adding 31 checked claims of
+  which **16 fail** — against a base failure rate of 955 of 2039, so the newly checked claims are
+  statistically ordinary rather than especially broken or especially fine.
+  ⚑ **What decided it was this tree's own audit, not the corpus count.** Of the 26 withdrawn here,
+  **10 name a path that resolves today** — live citations, silently unchecked, that would not fire
+  if the file moved. The negations doing it are `not` governing a *different noun*
+  (*"a reminder, not a catch, in the sense `docs/structure.md` uses"*) and past-tense markers
+  attached to a live destination (*"the design had moved to `docs/design.md`"*). **No em-dash is
+  involved in any of them.** The candidate addresses a shape this tree does not have.
+  **What would revive it:** a second project measuring a large `negated:` count whose un-suppressed
+  claims it can show are real. One tree moving is that project's prose style; two is the rule.
+  **The count shipped so this evidence could be gathered, and the first gathering said no** — which
+  is the convention working rather than failing.
 - **boundary** · **A negative claim about anything outside the tree rots silently, and nothing here
   will object.** Positive claims fail loudly — a path moves, a symbol vanishes, a link answers
   `404`, and a checker walks into it. A negative breaks nothing when it becomes false: *"X is not
