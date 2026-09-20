@@ -1065,7 +1065,10 @@ non-zero exit **blocks**. An oracle that legitimately exits non-zero has to abso
 command.
 
 Negation is parsed: a claim inside a negated clause is a mention, not an assertion. Clause
-boundaries are `;:`, `but`, `however`, `whereas`, `while` — commas deliberately excluded.
+boundaries are `;`, `:`, a **sentence end** — `.`, `!` or `?` before whitespace, guarding the
+dotted initialisms and short abbreviations that are not one — and `but`, `however`, `whereas`,
+`while`. Commas are deliberately excluded, and so is a markdown table's `|`; § Known limits carries
+what each costs. `claims -v` names the word that withdrew each claim and which side it sat on.
 
 **Documentation inside code is scannable.** `suffixes` accepts `.py`, and a Python file declared
 there is reduced to its docstrings and comments before any extractor reads it — a path in a

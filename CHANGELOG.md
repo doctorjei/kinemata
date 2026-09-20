@@ -11,7 +11,13 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 ## Unreleased
 
-Nothing yet.
+**Fixed**
+
+- The reference sheet's list of clause boundaries was short by one. A **sentence end** has bounded a
+  negation since before `0.1.0` and the list never said so, which understates how narrowly a
+  negation reaches — the difference between *"there is no `a.py`. The loader is `b.py`"* withdrawing
+  one claim and withdrawing two. It also now says that a markdown table's `|` is deliberately not a
+  boundary, which is a documented decision rather than an omission.
 
 ## 0.3.0
 
