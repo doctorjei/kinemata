@@ -13,6 +13,13 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 **Fixed**
 
+- A flag in `kinemata.toml` that is not a boolean is refused rather than coerced. A registry
+  declaring `closed = "false"` loaded as **closed** — every non-empty string is true — so a project
+  could arm the closed-world gate while reading the opposite off its own line, and with `syntax`
+  declared nothing would have said so. `allow_empty`, `case_sensitive`, `include_private`,
+  `[claims] external` and `[[probe]] exact` all coerced the same way; `[citations] provenance`
+  already refused, and its refusal is now the one every flag shares. **A config spelling its flags
+  as TOML booleans is unaffected**; what breaks is a line that never meant what it said.
 - The reference sheet's list of clause boundaries was short by one. A **sentence end** has bounded a
   negation since before `0.1.0` and the list never said so, which understates how narrowly a
   negation reaches — the difference between *"there is no `a.py`. The loader is `b.py`"* withdrawing

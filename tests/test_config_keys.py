@@ -329,6 +329,142 @@ def test_a_rule_may_spell_any_claim_the_evaluator_knows(tmp_path):
     assert not RULE_KEYS & frozenset(SHAPE_CLAIMS)
 
 
+# -- a key whose value cannot mean what it says ------------------------------
+
+
+def test_a_quoted_closed_is_read_as_on_and_is_refused(tmp_path):
+    """The measured incident: `closed = "false"` used to load as **closed**.
+
+    Every non-empty string is true, so the registry armed the closed-world gate
+    while its author read the opposite off the line they had written. The same
+    coercion sat under ``exact`` and ``external``, one narrowing a refusal match
+    and the other reaching the network.
+    """
+    with pytest.raises(ConfigError) as caught:
+        load_with(
+            tmp_path,
+            """
+            [[registry]]
+            name = "more"
+            kind = "python-constants"
+            modules = ["values.py"]
+            closed = "false"
+            """,
+        )
+    message = str(caught.value)
+    assert "closed is on or off" in message
+    assert "read as ON" in message
+
+
+FLAGS = [
+    (
+        "closed",
+        """
+        [[registry]]
+        name = "more"
+        kind = "python-constants"
+        modules = ["values.py"]
+        closed = "false"
+        """,
+    ),
+    (
+        "include_private",
+        """
+        [[registry]]
+        name = "more"
+        kind = "python-constants"
+        modules = ["values.py"]
+        include_private = "yes"
+        """,
+    ),
+    (
+        "allow_empty",
+        """
+        [[registry]]
+        name = "more"
+        kind = "python-constants"
+        modules = ["values.py"]
+        allow_empty = 1
+        """,
+    ),
+    (
+        "case_sensitive",
+        """
+        [[registry]]
+        name = "spelling"
+        kind = "substitutions"
+        case_sensitive = "off"
+
+          [registry.words]
+          colour = "color"
+        """,
+    ),
+    (
+        "external",
+        """
+        [claims]
+        suffixes = [".md"]
+        external = "true"
+        """,
+    ),
+    (
+        "exact",
+        """
+        [[probe]]
+        name = "scopes"
+        target = "subject:check"
+        cases = "corpus:both"
+        outcome = "raises"
+        refusal = "subject:Refused"
+        exact = "true"
+        """,
+    ),
+    (
+        "provenance",
+        """
+        [citations]
+        provenance = "yes"
+        """,
+    ),
+]
+
+
+@pytest.mark.parametrize("key, body", FLAGS, ids=[key for key, _ in FLAGS])
+def test_every_flag_this_loader_reads_refuses_a_non_boolean(tmp_path, key, body):
+    """The set, not the member that prompted the fix.
+
+    ``closed`` is what was measured; the others coerce the same way, and fixing
+    only the one that was reported is the mistake an adopter named in a letter
+    about our own findings. The list here is the flags **this file reads** --
+    an ``import`` registry's unknown keys go to the project's class, which
+    checks its own vocabulary.
+    """
+    with pytest.raises(ConfigError) as caught:
+        load_with(tmp_path, body)
+    assert f"{key} is on or off" in str(caught.value)
+
+
+def test_a_flag_spelled_as_a_boolean_still_loads(tmp_path):
+    """The refusal is about the type, and TOML spells the type one way."""
+    config = load_with(
+        tmp_path,
+        """
+        [[registry]]
+        name = "spelling"
+        kind = "substitutions"
+        case_sensitive = true
+
+          [registry.words]
+          colour = "color"
+
+        [claims]
+        suffixes = [".md"]
+        external = false
+        """,
+    )
+    assert not config.external
+
+
 # -- what must keep loading --------------------------------------------------
 
 

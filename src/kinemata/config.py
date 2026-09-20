@@ -47,7 +47,7 @@ import importlib
 import inspect
 import re
 import tomllib
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path, PurePosixPath
@@ -317,12 +317,13 @@ def _build_constants(spec: dict[str, Any], root: Path, path: Path) -> BaseRegist
         raise ConfigError(
             f"registry {spec.get('name', '?')!r}: module(s) not found: {missing}"
         )
+    where = f"registry {spec.get('name', '?')!r}"
     registry = PythonConstants(
         paths,
         root=root,
         min_length=spec.get("min_length", 4),
-        include_private=spec.get("include_private", False),
-        closed=spec.get("closed", False),
+        include_private=_flag(spec, "include_private", where),
+        closed=_flag(spec, "closed", where),
     )
     registry.name = spec.get("name", "constants")
     return registry
@@ -564,7 +565,7 @@ def _build_yaml_mapping(spec: dict[str, Any], root: Path, path: Path) -> BaseReg
         name=spec.get("name", "keys"),
         clause_field=spec.get("clause_field"),
         syntax=spec.get("syntax"),
-        closed=spec.get("closed", False),
+        closed=_flag(spec, "closed", f"registry {name!r}"),
         budget=spec.get("budget"),
         line_budget=spec.get("line_budget"),
     )
@@ -651,7 +652,7 @@ def _build_toml_value(spec: dict[str, Any], root: Path, path: Path) -> BaseRegis
         values,
         name=spec.get("name", "values"),
         syntax=spec.get("syntax"),
-        closed=spec.get("closed", False),
+        closed=_flag(spec, "closed", f"registry {name!r}"),
         budget=spec.get("budget"),
         line_budget=spec.get("line_budget"),
     )
@@ -665,8 +666,11 @@ def _build_code_patterns(spec: dict[str, Any], root: Path, path: Path) -> BaseRe
             "one [[registry.entry]] table"
         )
     try:
-        return CodePatterns(declarations, name=spec.get("name", "patterns"),
-                            closed=spec.get("closed", False))
+        return CodePatterns(
+            declarations,
+            name=spec.get("name", "patterns"),
+            closed=_flag(spec, "closed", f"registry {spec.get('name', '?')!r}"),
+        )
     except ValueError as exc:
         raise ConfigError(f"registry {spec.get('name', '?')!r}: {exc}") from exc
 
@@ -702,12 +706,13 @@ def _build_substitutions(spec: dict[str, Any], root: Path, path: Path) -> BaseRe
             f"registry {spec.get('name', '?')!r}: substitutions needs 'words' "
             "or a 'source' file holding them"
         )
+    at = f"registry {spec.get('name', '?')!r}"
     try:
         return Substitutions(
             words,
             name=spec.get("name", "substitutions"),
-            closed=spec.get("closed", False),
-            case_sensitive=spec.get("case_sensitive", False),
+            closed=_flag(spec, "closed", at),
+            case_sensitive=_flag(spec, "case_sensitive", at),
             boundary=spec.get("boundary", "prose"),
         )
     except ValueError as exc:
@@ -756,6 +761,44 @@ def _reject_unknown(
         f"here (known: {', '.join(sorted(known))})."
         + (ABSORBED if absorbs else "")
     )
+
+
+def _flag(
+    spec: Mapping[str, Any],
+    key: str,
+    where: str,
+    *,
+    default: bool = False,
+    because: str = "",
+) -> bool:
+    """One on-or-off key, refused when it is not a boolean.
+
+    **A quoted flag is the config-file form of a normalization that passes.**
+    Measured on this loader: a registry declaring ``closed = "false"`` loaded as
+    **closed**, because every non-empty string is true -- so a project reads the
+    opposite of what its own line says, and with ``syntax`` declared it arms the
+    closed-world gate while doing it. ``exact`` and ``external`` coerced the same
+    way, each of them narrowing or widening a check silently.
+
+    One reader rather than a check per flag, on the rule
+    :func:`_reject_unknown` is written under. It is *not* folded into that
+    function: which keys are flags is a property of the table, not of the
+    vocabulary -- ``[claims] external`` is a boolean and ``[context] external``
+    is a list of patterns -- so the caller that knows what it is reading says so.
+
+    ``because`` is appended for a key whose *being* a flag is the thing a reader
+    doubts, rather than its spelling.
+    """
+    if key not in spec:
+        return default
+    value = spec[key]
+    if not isinstance(value, bool):
+        raise ConfigError(
+            f"{where}: {key} is on or off and {value!r} is neither. TOML spells "
+            f"a boolean as true or false without quotes, and a quoted one is a "
+            f"string -- which is read as ON however it is spelled." + because
+        )
+    return value
 
 
 #: What each table may declare. ⚑ ``[claims] promised`` is listed as **known**
@@ -887,7 +930,7 @@ def _build_bibliography(spec: dict[str, Any], root: Path, path: Path) -> BaseReg
             types=document.get("types"),
             interpreted=spec.get("interpreted"),
             standardized=spec.get("standardized"),
-            closed=spec.get("closed", False),
+            closed=_flag(spec, "closed", f"registry {name!r}"),
         )
     except ValueError as exc:
         raise ConfigError(str(exc)) from exc
@@ -1246,7 +1289,10 @@ def load(path: str | Path) -> Settings:
         # three of its own modules for six commits. It has no module-level
         # string constants at all, so the projection was empty and `check`
         # exited 0 the whole time. The wrong adapter, not a clean tree.
-        if not spec.get("allow_empty", False) and not any(True for _ in registry.entries()):
+        empty_is_declared = _flag(
+            spec, "allow_empty", f"registry {spec.get('name', '?')!r}"
+        )
+        if not empty_is_declared and not any(True for _ in registry.entries()):
             unfitted.append(
                 f"registry {spec.get('name', '?')!r}: kind {kind!r} produced no "
                 "entries, so it would scan for nothing and pass. Point it at a "
@@ -1314,7 +1360,7 @@ def load(path: str | Path) -> Settings:
         historical=tuple(claims.get("historical", ())),
         resolve_in=tuple(claims.get("resolve_in", ())),
         commits_in=tuple(claims.get("commits_in", ())),
-        external=bool(claims.get("external", False)),
+        external=_flag(claims, "external", f"{path}: [claims]"),
         external_timeout=float(claims.get("external_timeout", EXTERNAL_TIMEOUT)),
         oracle_timeout=float(claims.get("oracle_timeout", ORACLE_TIMEOUT)),
         promised=_promised(raw.get("promise"), claims, path),
@@ -1463,14 +1509,15 @@ def _provenance(spec: dict[str, Any] | None, path: Path) -> bool:
     is content identity, history gets rewritten, and without a stamp *true when
     written* and *wrong when written* are the same text.
     """
-    declared = _citations(spec, path).get("provenance", False)
-    if not isinstance(declared, bool):
-        raise ConfigError(
-            f"{path}: [citations] provenance is on or off and {declared!r} is "
-            "neither. There is no list of exempt citation kinds to name here: "
-            "section 6 of docs/citations.md admits none."
-        )
-    return declared
+    return _flag(
+        _citations(spec, path),
+        "provenance",
+        f"{path}: [citations]",
+        because=(
+            " There is no list of exempt citation kinds to name here: section 6 "
+            "of docs/citations.md admits none."
+        ),
+    )
 
 
 def _citation_suffixes(
@@ -2308,7 +2355,7 @@ def _build_probes(
 
         refusal = str(spec.get("refusal", "")).strip()
         accepted = str(spec.get("accepted", "")).strip()
-        exact = bool(spec.get("exact", False))
+        exact = _flag(spec, "exact", where)
         if exact and mode != "raises":
             raise ConfigError(
                 f'{where} declares exact beside outcome "{mode}", which has no '
@@ -2441,7 +2488,7 @@ def _selected(registry: BaseRegistry, spec: dict[str, Any], path: Path) -> BaseR
     """
     name = spec.get("name", "?")
     at = f"{path}: [[registry]] {name!r} where"
-    if spec.get("closed", False):
+    if _flag(spec, "closed", f"registry {name!r}"):
         raise ConfigError(
             f"registry {name!r} declares both 'closed' and 'where'. A closed "
             "registry answers 'nothing declares this identifier', and over a "
