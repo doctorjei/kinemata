@@ -253,6 +253,30 @@ extract = '(?m)^(\S+)=(.*)$'
 field = ["default", "primary"]
 authority = "declared"
 
+# A list cell is compared as a SET by default: the declarations this checks are
+# read order-independently by the code that reads them, so a harmless reorder
+# should not be a finding, and every run says so -- `set-valued: N declared
+# cell(s) hold a list, compared as sets`. `ordered` asks the other question, for
+# a cell whose order IS the meaning: an authority cascade, a containment chain,
+# a tier list. Opt-in, and the default is untouched.
+#
+# Refused without a `field`: membership compares identifiers, which are a set on
+# both sides by construction, so there is no cell to order. An ordered run over
+# a registry of scalar cells prints `ordered: 0`, because a key that quietly
+# does nothing is what this tool exists to report.
+#
+# **IT PINS THE ORDER THE ORACLE PRINTS IN**, which nothing here can verify is
+# the code's own order rather than an accident of how the command iterates --
+# positional rather than semantic, like `[[count]] occurrence`. An oracle that
+# sorts its output makes a correct declaration red.
+[[parity]]
+registry = "tiers"
+command = ["{python}", "-c", "import pkg; [print(f'access={t}') for t in pkg.TIERS]"]
+extract = '(?m)^(\S+)=(.*)$'
+field = "choices"
+authority = "declared"
+ordered = true
+
 # A translation, on the declared side, so a reader of the config can see that a
 # comparison is not literal. `map` or `pattern`/`replacement`, never both.
 # `translate` lands on whichever side this parity compares: the values when a
@@ -1651,15 +1675,26 @@ down, and the two shapes at the end are the findings that matter most.
   ⚑ **The translation half was then closed properly**, the same day, by `translate_identifier` —
   the entry above carries it. **Finding the silent workaround is what justified building it**, not
   the row: a capability an adopter can route around without saying so is undeclared rather than
-  absent. The inequality stands, and so does the ordering.
-  ⚑ **The ordering half is disclosed rather than silent** — `set-valued: N` on every run, clean or
-  failing, whose declared cell held a list. The set rule is deliberate and stays; what was wrong is
-  that a declaration pinning an enum's `choices` printed *agreeing on choices* while the oracle
-  listed the same three values in **reverse**, so the run read exactly like one that had checked
-  the order. **The count does not say the comparison was wrong. It says which question was
-  answered.** This was the last suppression here that reported nothing, after `negated:`.
-  **What the claim itself would take:** an opt-in ordered comparison — a form question rather than
-  a missing capability, since the rendering already knows the cell was a list.
+  absent. The inequality stands.
+  ⚑ **The ordering half was disclosed before it was closed** — `set-valued: N` on every run, clean
+  or failing, whose declared cell held a list. The set rule is deliberate and **remains the
+  default**; what was wrong is that a declaration pinning an enum's `choices` printed *agreeing on
+  choices* while the oracle listed the same three values in **reverse**, so the run read exactly
+  like one that had checked the order. **The count does not say the comparison was wrong. It says
+  which question was answered.**
+  ⚑ **Closed 2026-09-20 by `[[parity]] ordered`**, and on a plainer argument than the translation's:
+  the stronger claim could not be spelled **at all**. Not by printing the container, whose declared
+  side renders sorted, and not by addressing a list by index, which `at_path` does not do — so
+  unlike the second translation there was no workaround to find, silent or otherwise. The
+  measurement that decided it is the declaration surface rather than the row count: the same
+  project's manifest holds 46 flat list cells, of which an authority cascade, a containment chain,
+  a scope list and two tier lists name the order as the meaning in their own comments. An ordered
+  run over a registry of scalar cells prints `ordered: 0`, because a key that quietly does nothing
+  is this tool's own subject.
+  ⚑ **It pins the order the oracle prints in**, which nothing here verifies is the code's own order
+  rather than an accident of how the command iterates — positional rather than semantic, the same
+  caveat `[[count]] occurrence` carries. An oracle that sorts its output makes a correct
+  declaration red, and that is the cost of the key being opt-in rather than inferred.
   ⚑ **The other half — a declared entry's *field* against what the code prints for it — landed the
   same day**, with the translation and the authority marker the same project's worked rows asked
   for. **The entry stays open and `accepted`**, and what is left is of two different kinds. One is

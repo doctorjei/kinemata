@@ -794,7 +794,12 @@ def cmd_undeclared(args: argparse.Namespace) -> int:
 
 
 def _set_valued(result: Parity, args: argparse.Namespace) -> None:
-    """Say when a value comparison was a *set* comparison.
+    """Say which question a list-valued cell was asked.
+
+    Two lines, never both: a cell is compared as a set or in order, and the
+    declaration decides which. The ordered one prints its count **at zero**
+    because that is the inert case -- see below for why the set one exists at
+    all.
 
     A list cell is compared as a set on purpose, so this is a disclosure and
     never a finding -- but it was the one suppression here that printed
@@ -808,7 +813,19 @@ def _set_valued(result: Parity, args: argparse.Namespace) -> None:
     writing a list. Its author can see which rows those are; what they could
     not see is that order went unchecked.
     """
-    if not result.set_valued or args.quiet:
+    if args.quiet:
+        return
+    if result.ordered:
+        # Printed at zero as well, which is the case the count exists for: over
+        # a registry of scalar cells the key is inert, and a run that says
+        # nothing about it reads exactly like one that compared an order.
+        count = len(result.ordered_cells)
+        held = "hold a list, compared in order" if count else (
+            "hold a list, so nothing was compared in order"
+        )
+        print(f"  ordered: {count} declared cell(s) {held}")
+        return
+    if not result.set_valued:
         return
     count = len(result.set_valued)
     print(

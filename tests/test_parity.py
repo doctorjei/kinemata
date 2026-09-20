@@ -360,6 +360,112 @@ def test_a_list_valued_field_is_compared_as_a_set(tmp_path):
     assert not result.failed
 
 
+# -- the order, when a declaration says it is the claim -----------------------
+
+
+def reordered(tmp_path, *, ordered):
+    """The test above's data, read by whichever of the two questions."""
+    return compare(
+        Registry("app.name", extra={"app.name": {"default": ["b", "a"]}}),
+        value_oracle(
+            command=("{python}", "-c",
+                     "print('app.name=a'); print('app.name=b')"),
+            ordered=ordered,
+        ),
+        tmp_path,
+    )
+
+
+def test_an_ordered_declaration_reports_a_reorder_the_set_rule_allows(tmp_path):
+    """One cell, two questions, and the weaker one was the only one askable.
+
+    Measured on an adopter's real manifest before this existed: an oracle
+    printing the three access tiers *reversed* reported `agreeing on choices`,
+    and their own comments name the order as the meaning -- an authority
+    cascade, a containment chain.
+    """
+    assert not reordered(tmp_path, ordered=False).failed
+    result = reordered(tmp_path, ordered=True)
+    (found,) = result.divergent
+    assert "declared 'b', 'a' in this order" in str(found)
+    assert "code produces 'a', 'b'" in str(found)
+    assert "the same values, reordered" in str(found)
+
+
+def test_an_ordered_declaration_agrees_when_the_sequences_match(tmp_path):
+    """Narrower, not different: what the set rule passes it can still pass."""
+    result = compare(
+        Registry("app.name", extra={"app.name": {"default": ["a", "b"]}}),
+        value_oracle(
+            command=("{python}", "-c",
+                     "print('app.name=a'); print('app.name=b')"),
+            ordered=True,
+        ),
+        tmp_path,
+    )
+    assert not result.failed
+
+
+def test_an_ordered_cell_is_not_counted_as_a_suppression(tmp_path):
+    """`set-valued` says order went unchecked, which is untrue here."""
+    result = reordered(tmp_path, ordered=True)
+    assert result.ordered_cells == ("app.name",)
+    assert result.set_valued == ()
+    assert reordered(tmp_path, ordered=False).set_valued == ("app.name",)
+
+
+def test_an_ordered_run_over_scalar_cells_counts_nothing(tmp_path):
+    """The inert case, which the run has to be able to say out loud.
+
+    A registry legitimately mixes scalar and list rows -- `at_path` exists to
+    read exactly that -- so this is disclosed rather than failed, on the rule
+    `set_valued` was built under. What must not happen is silence: the key did
+    nothing, and a reader of the run cannot otherwise tell.
+    """
+    result = compare(
+        Registry("app.name", extra={"app.name": {"default": "truecolor"}}),
+        value_oracle(ordered=True),
+        tmp_path,
+    )
+    assert not result.failed
+    assert result.ordered and result.ordered_cells == ()
+
+
+def test_a_value_the_oracle_prints_twice_is_a_finding_when_ordered(tmp_path):
+    """A duplicate is a sequence of two, and the set rule cannot see it."""
+    twice = value_oracle(
+        command=("{python}", "-c",
+                 "print('app.name=a'); print('app.name=a')"),
+    )
+    declared = Registry("app.name", extra={"app.name": {"default": ["a"]}})
+    assert not compare(declared, twice, tmp_path).failed
+    ordered = compare(
+        declared,
+        value_oracle(command=twice.command, ordered=True),
+        tmp_path,
+    )
+    (found,) = ordered.divergent
+    assert "code produces 'a', 'a'" in str(found)
+
+
+def test_an_ordered_finding_fingerprints_the_sequence(tmp_path):
+    """The ratchet has to tell a reorder from the reorder back.
+
+    The record's text holds both sides as they stand, so swapping the order
+    again is a *different* record rather than the same one resting under an
+    accepted exemption.
+    """
+    (found,) = reordered(tmp_path, ordered=True).divergent
+    assert found.finding().text == "'b', 'a' != 'a', 'b'"
+    assert found.scope == parity_scope("keyspace", VALUE_DIRECTION)
+
+
+def test_ordering_a_membership_run_is_refused(tmp_path):
+    """There is no cell to order: both sides are sets by construction."""
+    with pytest.raises(ValueError, match="names no field"):
+        compare(Registry("app.name"), oracle(ordered=True), tmp_path)
+
+
 def test_a_value_parity_can_translate_its_identifiers_as_well(tmp_path):
     """The second hop, and the reason it is a capability rather than a nicety.
 
@@ -485,6 +591,79 @@ def test_the_command_discloses_a_set_comparison_on_a_CLEAN_run(tmp_path, capsys)
     assert "in agreement, agreeing on default" in out
     assert "set-valued: 1" in out
     assert "order is not part of the claim" in out
+
+
+def ordered_config(tmp_path, *, prints, cell="      - a\n      - b\n", key="ordered = true"):
+    """A config whose one parity compares a list cell, ordered or not."""
+    write(tmp_path, "keys.yaml",
+          f'keys:\n  app.name:\n    spec: "§1"\n    default:\n{cell}')
+    write(tmp_path, "src/a.py", 'NAME = "app.name"\n')
+    write(tmp_path, "kinemata.toml", f"""
+        [project]
+        root = "."
+
+        [[registry]]
+        name = "keyspace"
+        kind = "yaml-mapping"
+        source = "keys.yaml"
+        section = "keys"
+        clause_field = "spec"
+        syntax = '\\bapp\\.[a-z_]+'
+
+        [[parity]]
+        registry = "keyspace"
+        command = ["{{python}}", "-c", "{prints}"]
+        extract = '(?m)^(\\S+)=(.*)$'
+        field = "default"
+        authority = "declared"
+        {key}
+        """)
+    return tmp_path
+
+
+def test_the_command_discloses_an_ORDERED_comparison_on_a_clean_run(
+    tmp_path, capsys
+):
+    """The same disclosure from the other side: which question was asked."""
+    ordered_config(
+        tmp_path, prints="print('app.name=a'); print('app.name=b')"
+    )
+    assert main(["parity", "-c", cfg(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert "ordered: 1 declared cell(s) hold a list, compared in order" in out
+    assert "set-valued" not in out
+
+
+def test_the_command_says_when_an_ordered_declaration_ordered_nothing(
+    tmp_path, capsys
+):
+    """Printed at zero, because that is the case nothing else reveals."""
+    ordered_config(
+        tmp_path,
+        prints="print('app.name=truecolor')",
+        cell='    default: "truecolor"\n',
+    )
+    assert main(["parity", "-c", cfg(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert "ordered: 0" in out and "nothing was compared in order" in out
+
+
+def test_a_reordered_oracle_fails_the_command_when_the_order_is_declared(
+    tmp_path, capsys
+):
+    """End to end, and the exit code is the answer -- not the last line."""
+    ordered_config(
+        tmp_path, prints="print('app.name=b'); print('app.name=a')"
+    )
+    assert main(["parity", "-c", cfg(tmp_path)]) == 1
+    assert "the same values, reordered" in capsys.readouterr().out
+
+
+def test_ordered_without_a_field_is_refused_at_load(tmp_path):
+    """A membership run has no cell whose order could be the claim."""
+    declare(tmp_path, extra="ordered = true")
+    with pytest.raises(ConfigError, match="compares no field"):
+        load(Path(cfg(tmp_path)))
 
 
 def test_a_set_valued_divergence_names_the_side_each_difference_is_on(tmp_path):

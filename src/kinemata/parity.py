@@ -255,6 +255,28 @@ class Oracle:
     #: ``equal`` is the default and is what every parity meant before the key
     #: existed, so no declaration written without it changes.
     relation: str = "equal"
+    #: Compare a list-valued cell **in order** rather than as a set. Opt-in, and
+    #: refused without :attr:`field`: membership compares identifiers, where
+    #: there is no cell to order.
+    #:
+    #: The set rule is deliberate and stays the default --
+    #: ``test_a_list_valued_field_is_compared_as_a_set`` argues it, and a
+    #: declaration matched order-independently by the code that reads it should
+    #: not file a finding on a harmless reorder. What was missing is any way to
+    #: state the **other** claim: measured on an adopter's real manifest, an
+    #: oracle printing the three access tiers reversed reported *agreeing on
+    #: choices*, and the stronger claim could not be spelled at all -- not by
+    #: printing the container, whose declared side renders sorted, and not by
+    #: addressing a list by index, which :func:`kinemata.contract.at_path` does
+    #: not do. That manifest states the order as the meaning in its own
+    #: comments: an authority cascade, a containment chain, a tier list.
+    #:
+    #: ⚑ **It pins the order the ORACLE prints in**, which nothing here can
+    #: verify is the code's own order rather than an accident of how the command
+    #: iterates. Positional rather than semantic, like
+    #: :attr:`kinemata.claims.Counted.occurrence` -- an oracle that sorts its
+    #: output makes a correct declaration red.
+    ordered: bool = False
 
 
 def _listed(values: Iterable[str]) -> str:
@@ -328,8 +350,16 @@ class Divergence:
     #: **message** names only what differs, but the record fingerprints all of
     #: it, so a disagreement that changes into a different disagreement re-fires
     #: instead of resting under a record written for the old one.
+    #:
+    #: **Sorted except under** :attr:`ordered`, where the sequence *is* the
+    #: claim and sorting it would throw away the thing that disagreed.
     declared: tuple[str, ...] = ()
     produced: tuple[str, ...] = ()
+    #: The declaration compared this cell in order, so both sides are reported
+    #: in full. A pure reorder has no set difference at all, and the message
+    #: below would otherwise say *declared by nothing* about values both sides
+    #: carry.
+    ordered: bool = False
     #: The declaration carries no such field at all. Kept apart from *declared
     #: nothing* because they read differently to whoever has to fix it: one is a
     #: value that disagrees, the other is a fact the registry does not record.
@@ -352,6 +382,15 @@ class Divergence:
         if self.absent:
             head = (f"{self.identifier}: the declaration records no "
                     f"{self.field}, and the code produces {_listed(theirs)}")
+        elif self.ordered:
+            # Both sides in full, and the reorder named when that is all it is:
+            # a set difference is empty there, so naming only what differs would
+            # print two empty lists about a real disagreement.
+            same = sorted(self.declared) == sorted(self.produced)
+            head = (f"{self.identifier}: {self.field} declared "
+                    f"{_listed(self.declared)} in this order, code produces "
+                    f"{_listed(self.produced)}"
+                    + (" (the same values, reordered)" if same else ""))
         elif mine and theirs:
             head = (f"{self.identifier}: {self.field} declared {_listed(mine)}, "
                     f"code produces {_listed(theirs)}")
@@ -422,7 +461,19 @@ class Parity:
     #: ``test_a_list_valued_field_is_compared_as_a_set``; what was missing is
     #: any way for a reader of the run to learn that the weaker question was
     #: the one answered. Every other suppression in this package prints a line.
+    #:
+    #: **Only the cells compared as sets**: one compared in order is not a
+    #: suppression, and is counted in :attr:`ordered_cells` instead.
     set_valued: tuple[str, ...] = ()
+    #: The declaration asked for an ordered comparison, whether or not any cell
+    #: held a list. Carried so a run can say that the key did **nothing** --
+    #: over a registry of scalars it is inert, and an inert key that prints
+    #: nothing is this mechanism's own subject.
+    ordered: bool = False
+    #: Entries whose declared cell held a list and whose order was therefore
+    #: part of the claim. The other half of :attr:`set_valued`, so the two
+    #: counts together say which question every list cell was asked.
+    ordered_cells: tuple[str, ...] = ()
 
     @property
     def failed(self) -> bool:
@@ -495,11 +546,15 @@ class Printed:
 
     ids: frozenset[str]
     #: Identifier to the value or values printed for it, empty when the
-    #: declaration named no field. A set per identifier: an oracle printing one
-    #: identifier twice is stating a set, and the alternative is picking a match
-    #: and discarding the rest, which is the mistake ``finditer`` is here to
-    #: avoid in the first place.
-    values: Mapping[str, frozenset[str]] | None = None
+    #: declaration named no field. Every match rather than the first: an oracle
+    #: printing one identifier twice is stating two values, and picking one is
+    #: the mistake ``finditer`` is here to avoid in the first place.
+    #:
+    #: **In the order the oracle printed them**, duplicates kept, for the reason
+    #: :class:`_DeclaredSide` keeps its own: an ordered comparison cannot be
+    #: recovered from a set, and the unordered one -- still the default -- takes
+    #: ``set()`` of this and is unchanged by the sequence underneath it.
+    values: Mapping[str, tuple[str, ...]] | None = None
 
 
 def produced(
@@ -542,14 +597,14 @@ def produced(
     ids = frozenset(match.group(1).strip() for match in matches)
     if not spec.field:
         return Printed(ids=ids), ""
-    values: dict[str, set[str]] = {}
+    values: dict[str, list[str]] = {}
     for match in matches:
-        values.setdefault(match.group(1).strip(), set()).add(
+        values.setdefault(match.group(1).strip(), []).append(
             (match.group(2) or "").strip()
         )
     return Printed(
         ids=ids,
-        values={key: frozenset(seen) for key, seen in values.items()},
+        values={key: tuple(seen) for key, seen in values.items()},
     ), ""
 
 
@@ -576,7 +631,11 @@ class _DeclaredSide:
     """
 
     #: The values to compare, or ``None`` when the cell cannot be rendered.
-    values: frozenset[str] | None
+    #: **In the order the cell declares them, duplicates kept**, because a set is
+    #: derivable from a sequence and a sequence is not derivable from a set --
+    #: the unordered comparison, which is still the default, takes ``set()`` of
+    #: this and reads exactly as it did when this was a ``frozenset``.
+    values: tuple[str, ...] | None
     #: The declaration records nothing here, which is a claim rather than a gap.
     absent: bool
     #: Why it could not be rendered, empty when it could.
@@ -605,7 +664,7 @@ def _declared_values(
     # decides membership rather than a value.
     raw = None if found is MISSING else found
     if raw is None:
-        return _DeclaredSide(frozenset(), True, "", False)
+        return _DeclaredSide((), True, "", False)
     listed = isinstance(raw, (list, tuple))
     items = list(raw) if listed else [raw]
     rendered = [_rendered(item) for item in items]
@@ -618,7 +677,7 @@ def _declared_values(
             "could be expected to print"
         ), listed)
     return _DeclaredSide(
-        frozenset(translate.apply(item) for item in rendered), False, "", listed
+        tuple(translate.apply(item) for item in rendered), False, "", listed
     )
 
 
@@ -636,11 +695,13 @@ def compare(
     match, because a normalization that is wrong does not fail -- it passes. The
     one exception is declared and visible: see :class:`Translation`.
 
-    **Order is not part of the claim.** Sets, deliberately: the declarations this
-    checks are matched order-independently by the code that reads them, so
-    pinning a sequence would file a finding on a harmless reorder. Adopters
-    writing this assertion by hand reached the same rule and put it in their own
-    words -- assert the rule, not the inventory.
+    **Order is not part of the claim by default.** Sets, deliberately: the
+    declarations this checks are matched order-independently by the code that
+    reads them, so pinning a sequence would file a finding on a harmless
+    reorder. Adopters writing this assertion by hand reached the same rule and
+    put it in their own words -- assert the rule, not the inventory. A
+    declaration whose order *is* the claim says :attr:`Oracle.ordered`, which
+    leaves that default untouched and is refused without a field to compare.
 
     **Membership is the "and there is nothing else" half**, which is why it was
     built before per-entry values. A declaration that pins only the members it
@@ -670,6 +731,15 @@ def compare(
             f"a parity claiming {spec.relation!r} cannot also compare "
             f"{spell_path(spec.field)!r}: a value comparison needs identifiers "
             "on both sides, which is the thing this relation is about"
+        )
+    if spec.ordered and not spec.field:
+        # The config refuses this first; this is the second answer, for a caller
+        # assembling specs itself. Membership compares identifiers, which are a
+        # set on both sides by construction -- there is no cell to put in order.
+        raise ValueError(
+            "a parity comparing membership alone cannot be ordered: order is a "
+            "property of a declared cell, and this declaration names no field "
+            "to compare"
         )
     if spec.field and spec.authority not in AUTHORITIES:
         # The config layer refuses this first; this is the second answer, for a
@@ -737,6 +807,7 @@ def compare(
     values = printed.values or {}
     divergent: list[Divergence] = []
     set_valued: list[str] = []
+    ordered_cells: list[str] = []
     for entry in entries:
         # Paired on the identifier as *translated*, which is the vocabulary
         # both sides were compared in above. A finding names that spelling for
@@ -748,7 +819,7 @@ def compare(
         side = _declared_values(entry, spec, translate)
         mine, absent, problem = side.values, side.absent, side.problem
         if side.listed:
-            set_valued.append(key)
+            (ordered_cells if spec.ordered else set_valued).append(key)
         if mine is None:
             # **Membership rides along**, and leaving it out was the defect an
             # adopter reported: 18 of their 66 rows hold a dict, so one
@@ -766,16 +837,22 @@ def compare(
                 **membership,
             )
         theirs = values[key]
-        if mine != theirs:
+        # The default asks whether the two sides hold the same values; an
+        # ordered declaration asks whether they hold them in the same sequence.
+        # Strictly narrower rather than different: everything the set
+        # comparison calls a disagreement is one here too.
+        agrees = mine == theirs if spec.ordered else set(mine) == set(theirs)
+        if not agrees:
             divergent.append(
                 Divergence(
                     registry=spec.registry,
                     identifier=key,
                     field=spell_path(spec.field),
                     authority=spec.authority,
-                    declared=tuple(sorted(mine)),
-                    produced=tuple(sorted(theirs)),
+                    declared=mine if spec.ordered else tuple(sorted(mine)),
+                    produced=theirs if spec.ordered else tuple(sorted(theirs)),
                     absent=absent,
+                    ordered=spec.ordered,
                 )
             )
     return Parity(
@@ -785,6 +862,8 @@ def compare(
         divergent=tuple(divergent),
         compared=spell_path(spec.field),
         set_valued=tuple(sorted(set_valued)),
+        ordered=spec.ordered,
+        ordered_cells=tuple(sorted(ordered_cells)),
         relation=spec.relation,
         **membership,
     )

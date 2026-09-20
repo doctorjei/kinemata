@@ -825,7 +825,7 @@ COUNT_KEYS = frozenset(
 PARITY_KEYS = frozenset(
     {
         "command", "run", "args", "directory", "registry", "extract", "field",
-        "authority", "translate", "translate_identifier", "relation",
+        "authority", "translate", "translate_identifier", "relation", "ordered",
     }
 )
 SHAPE_KEYS = frozenset({"registry", "rule"})
@@ -2070,6 +2070,19 @@ def _build_parities(
                 "as well, where 'translate' is spent on those."
             )
 
+        # Refused rather than ignored where there is nothing to order:
+        # membership compares identifiers, which are a set on both sides by
+        # construction. A key that quietly means nothing is a check its author
+        # believes is running.
+        ordered = _flag(spec, "ordered", f"{path}: [[parity]] {index}")
+        if ordered and not value_field:
+            raise ConfigError(
+                f"{path}: [[parity]] {index} declares 'ordered' and compares no "
+                "field. Order is a property of a declared cell, and membership "
+                "is a set on both sides -- name the 'field' whose order is the "
+                "claim, or drop the key."
+            )
+
         argv += _argv(spec.get("args"), f"{path}: [[parity]] {index}", "args")
         built.append(
             Oracle(
@@ -2085,6 +2098,7 @@ def _build_parities(
                     "translate_identifier",
                 ),
                 relation=relation,
+                ordered=ordered,
             )
         )
     return tuple(built)

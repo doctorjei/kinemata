@@ -11,6 +11,19 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 ## Unreleased
 
+**New**
+
+- `[[parity]] ordered` compares a list-valued cell **in order** instead of as a set, for a
+  declaration whose sequence is the meaning — an authority cascade, a containment chain, a tier
+  list. The set rule is unchanged and is still the default; what did not exist before was any way
+  to state the other claim. Measured on an adopter's real manifest: an oracle printing the three
+  access tiers reversed reported *agreeing on choices*, and neither printing the container nor
+  addressing the list by index could say otherwise. Refused without a `field`, since membership
+  compares identifiers and those are a set on both sides. A run whose cells are all scalars prints
+  `ordered: 0`, because a key that quietly does nothing is what this tool reports about everyone
+  else. It pins the order the **oracle** prints in, which nothing here can verify is the code's own
+  order — positional rather than semantic, the caveat `[[count]] occurrence` already carries.
+
 **Fixed**
 
 - A flag in `kinemata.toml` that is not a boolean is refused rather than coerced. A registry
