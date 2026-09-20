@@ -1687,8 +1687,10 @@ down, and the two shapes at the end are the findings that matter most.
   side renders sorted, and not by addressing a list by index, which `at_path` does not do — so
   unlike the second translation there was no workaround to find, silent or otherwise. The
   measurement that decided it is the declaration surface rather than the row count: the same
-  project's manifest holds 46 flat list cells, of which an authority cascade, a containment chain,
-  a scope list and two tier lists name the order as the meaning in their own comments. An ordered
+  project's manifest holds 46 flat list cells, three of which state the order as the meaning in
+  their own comments — an authority cascade *"in precedence order"*, its full bracket, and a
+  containment chain written `system ⊃ agent ⊃ workset ⊃ box` — while the two tier rows this was
+  measured on are pinned by that project's own test rather than by a comment. An ordered
   run over a registry of scalar cells prints `ordered: 0`, because a key that quietly does nothing
   is this tool's own subject.
   ⚑ **It pins the order the oracle prints in**, which nothing here verifies is the code's own order
