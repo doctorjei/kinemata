@@ -781,11 +781,7 @@ def cmd_undeclared(args: argparse.Namespace) -> int:
         until = f", until {baseline.until}" if baseline.until else ""
         print(f"\nbaseline: {len(split.accepted)} undeclared identifier(s) "
               f"accepted as pre-existing in {settings.baseline.name}{until}")
-    if split.stale and not args.quiet:
-        gone = sum(item.count for item in split.stale)
-        print(f"{gone} accepted record(s) no longer present "
-              "-- `kinemata baseline --prune` drops them.")
-    _report_reworded(split, quiet=args.quiet)
+    _report_stale(split, quiet=args.quiet)
 
     if failed:
         print(
@@ -931,11 +927,7 @@ def cmd_parity(args: argparse.Namespace) -> int:
         until = f", until {baseline.until}" if baseline.until else ""
         print(f"\nbaseline: {len(split.accepted)} disagreement(s) accepted as "
               f"pre-existing in {settings.baseline.name}{until}")
-    if split.stale and not args.quiet:
-        gone = sum(item.count for item in split.stale)
-        print(f"{gone} accepted record(s) no longer present "
-              "-- `kinemata baseline --prune` drops them.")
-    _report_reworded(split, quiet=args.quiet)
+    _report_stale(split, quiet=args.quiet)
 
     if failed:
         print(
@@ -1047,11 +1039,7 @@ def cmd_shape(args: argparse.Namespace) -> int:
         until = f", until {baseline.until}" if baseline.until else ""
         print(f"\nbaseline: {len(split.accepted)} violation(s) accepted as "
               f"pre-existing in {settings.baseline.name}{until}")
-    if split.stale and not args.quiet:
-        gone = sum(item.count for item in split.stale)
-        print(f"{gone} accepted record(s) no longer present "
-              "-- `kinemata baseline --prune` drops them.")
-    _report_reworded(split, quiet=args.quiet)
+    _report_stale(split, quiet=args.quiet)
 
     if failed:
         print(
@@ -1152,11 +1140,7 @@ def cmd_probe(args: argparse.Namespace) -> int:
         until = f", until {baseline.until}" if baseline.until else ""
         print(f"\nbaseline: {len(split.accepted)} case(s) accepted as "
               f"pre-existing in {settings.baseline.name}{until}")
-    if split.stale and not args.quiet:
-        gone = sum(item.count for item in split.stale)
-        print(f"{gone} accepted record(s) no longer present "
-              "-- `kinemata baseline --prune` drops them.")
-    _report_reworded(split, quiet=args.quiet)
+    _report_stale(split, quiet=args.quiet)
 
     if mismatched or unanswered:
         said = []
@@ -1305,6 +1289,29 @@ def _verify(args: argparse.Namespace, settings: Settings) -> Verification:
         timeout=settings.external_timeout,
         oracle_timeout=settings.oracle_timeout,
     )
+
+
+def _report_stale(split: Split, *, quiet: bool = False) -> None:
+    """Say how many accepted records nothing matched, and why one is a rewrite.
+
+    **One carrier for what four commands spelled identically.** ``undeclared``,
+    ``parity``, ``shape`` and ``probe`` each held the same three lines, and the
+    fifth and sixth renderings of the same fact -- ``check``'s and ``claims``'
+    -- had already drifted to different punctuation and a different suppression
+    rule, which is how a spelling repeated six times announces what it is going
+    to do next. Found while :func:`_report_reworded` had to be called from six
+    places for the same reason.
+
+    The ``note`` forms are deliberately **not** folded in here. They embed this
+    into a line they are already building, and unifying them would change what
+    two commands print to no reader's benefit -- a cleanup that edits output is
+    no longer a cleanup.
+    """
+    if split.stale and not quiet:
+        gone = sum(item.count for item in split.stale)
+        print(f"{gone} accepted record(s) no longer present "
+              "-- `kinemata baseline --prune` drops them.")
+    _report_reworded(split, quiet=quiet)
 
 
 def _report_reworded(split: Split, *, quiet: bool = False) -> None:
