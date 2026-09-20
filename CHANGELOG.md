@@ -38,6 +38,14 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   and a match loose enough to forgive one would hold an exemption open across the edit that changed
   what was exempted. Reported by a project that hit it, which asked for the naming rather than for
   the looser match.
+- `[[parity]] translate_identifier`: a second declared translation, for the identifiers, in a run
+  that also compares values. `translate` lands on whichever side the parity compares — the values
+  when a `field` is named — so a declaration whose keys are spelled one way and whose values
+  another had no form for the first, and membership runs in every parity, so both spellings came
+  back as findings. The only way to make such a run green was to have the *oracle* re-key its own
+  output, which puts the hop where no reader of the config can see it: the thing `translate` exists
+  to prevent. Refused alongside a bare `translate` when no `field` is named, where there is one
+  side and two keys naming it would be a declaration saying the same thing twice.
 
 **What an existing config will see change**
 
@@ -51,15 +59,15 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 - A run in which an accepted finding's line was edited gains the lines naming it. No exit status
   moves: the same findings are new, the same records are stale, and both are still reported where
   they were.
-
-- `[[parity]] translate_identifier`: a second declared translation, for the identifiers, in a run
-  that also compares values. `translate` lands on whichever side the parity compares — the values
-  when a `field` is named — so a declaration whose keys are spelled one way and whose values
-  another had no form for the first, and membership runs in every parity, so both spellings came
-  back as findings. The only way to make such a run green was to have the *oracle* re-key its own
-  output, which puts the hop where no reader of the config can see it: the thing `translate` exists
-  to prevent. Refused alongside a bare `translate` when no `field` is named, where there is one
-  side and two keys naming it would be a declaration saying the same thing twice.
+- 🛑 **A command given a path inside the project now reports different things, and this is the half
+  an upgrader cannot discover any other way.** If any step runs `kinemata check <subdir>` or the
+  like, its result changes: findings are spelled relative to the project root rather than to the
+  argument, so accepted baseline records match where they could not before — a step that was red
+  for that reason goes green — and the project's `exclude` applies where it had silently stopped,
+  so a step that was reporting vendored or generated code stops. A step naming a single **file**
+  scanned nothing at all before and scans it now, which can turn a green step red on a finding that
+  was always there. **A step that scans from the project root is unaffected**, and so is one
+  pointed at a tree outside the project. See *Fixed* for why each of those was wrong.
 
 **Fixed**
 
