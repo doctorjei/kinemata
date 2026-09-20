@@ -74,6 +74,10 @@ def found(tmp_path):
 
     class Args:
         registry = None
+        #: What argparse supplies for every command that reaches this, and the
+        #: double did not until the scan learned to narrow to part of a tree.
+        #: `None` is an unnarrowed run, which is what these tests are about.
+        path = None
 
     settings = load(tmp_path / "kinemata.toml")
     return _gating_strays(_strays(Args(), settings, tmp_path))

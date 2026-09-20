@@ -1496,6 +1496,7 @@ def verify(
     *,
     suffixes: Sequence[str] = (".md",),
     exclude: Iterable[str] = (),
+    within: str | Path | None = None,
     historical: Iterable[str] = (),
     kinds: Sequence[ClaimKind] = CLAIM_KINDS,
     counts: Sequence[Counted] = (),
@@ -1636,7 +1637,13 @@ def verify(
     read: dict[str, int] = dict.fromkeys((str(s) for s in suffixes), 0)
     yielded: dict[str, int] = dict.fromkeys(read, 0)
 
-    for path in _walk(root, suffixes):
+    # Narrowed here and deliberately not at the count walk below: a claim is
+    # about the document holding it, so reading fewer documents asks a smaller
+    # question honestly. A ``[[count]]`` is a claim about the *project*, and a
+    # count that matched no line fails -- so narrowing that walk would turn
+    # every count whose document sits outside the narrowing into a failure for
+    # the crime of not having been read.
+    for path in _walk(root, suffixes, Path(within) if within else None):
         rel = path.relative_to(root).as_posix()
         if _excluded(rel, exclusions):
             continue

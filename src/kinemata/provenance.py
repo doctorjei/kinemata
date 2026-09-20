@@ -456,6 +456,7 @@ def survey(
     *,
     suffixes: Sequence[str] = (".md",),
     exclude: Iterable[str] = (),
+    within: str | Path | None = None,
     historical: Iterable[str] = (),
     file_suffixes: Iterable[str] = (),
     kinds: Sequence[ClaimKind] = CLAIM_KINDS,
@@ -511,7 +512,7 @@ def survey(
     archived: list[str] = []
     scanned = 0
 
-    for path in sorted(_walk(root, tuple(suffixes))):
+    for path in sorted(_walk(root, tuple(suffixes), Path(within) if within else None)):
         rel = path.relative_to(root).as_posix()
         if _excluded(rel, exclusions):
             continue

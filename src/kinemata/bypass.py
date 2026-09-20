@@ -246,8 +246,32 @@ def crossings(root: str | Path) -> list[Crossing]:
     return [found for _, _, found in _tree(Path(root)) if found is not None]
 
 
-def _walk(root: Path, suffixes: Sequence[str]) -> Iterator[Path]:
-    for here, filenames, _ in _tree(root):
+def _walk(
+    root: Path, suffixes: Sequence[str], within: Path | None = None
+) -> Iterator[Path]:
+    """Files under ``root``, or under ``within`` when a run is narrowed to part
+    of the tree.
+
+    **Two arguments because they answer different questions, and one of them
+    used to answer both.** ``root`` is what every path is reported *relative
+    to*; ``within`` is what gets *read*. Passing a subdirectory as the root
+    collapses them, and a caller that did so was wrong twice over, measured on
+    a scratch tree (2026-09-19):
+
+    * every accepted baseline record stopped matching, because a record written
+      from the project root says :shown:`src/app.py` and a scan rooted at
+      ``src`` reports :shown:`app.py`. A tree green from the root went red under
+      ``kinemata check src``, reporting its own exemptions as new findings --
+      which is the churn a ratchet exists to prevent, arrived at from inside.
+    * the project's ``exclude`` stopped applying, for the same reason: a
+      fragment reading :shown:`src/vendor/` cannot match :shown:`vendor/lib.py`,
+      so narrowing quietly *widened* what was reported.
+
+    ``within`` must be inside ``root``; the caller decides that, because a path
+    outside it is not a narrowing at all but another tree, which is a real thing
+    to ask for and keeps the old meaning.
+    """
+    for here, filenames, _ in _tree(within or root):
         for name in filenames:
             path = here / name
             if path.suffix not in suffixes:
@@ -263,6 +287,7 @@ def scan(
     *,
     suffixes: Sequence[str] = (".py",),
     exclude: Iterable[str] = (),
+    within: str | Path | None = None,
     code_only: bool | None = None,
     strings_only: bool | None = None,
 ) -> list[Bypass]:
@@ -270,6 +295,9 @@ def scan(
 
     :param exclude: path fragments to skip -- tests that deliberately spell a
         literal, generated files, vendored code.
+    :param within: read only this part of the tree, reporting paths relative to
+        ``root`` all the same. :func:`_walk` carries why the two are separate
+        and what collapsing them cost.
     :param code_only: strip comments and docstrings before matching. On by
         default: the same literal in prose is documentation, and reporting it is
         how the mechanism gets ignored. Measured on kanibako-cli, this is the
@@ -307,7 +335,7 @@ def scan(
         return []
 
     found: list[Bypass] = []
-    for path in _walk(root, suffixes):
+    for path in _walk(root, suffixes, Path(within) if within else None):
         rel = str(path.relative_to(root))
         if excluded(rel, exclusions):
             continue
@@ -435,6 +463,7 @@ def strays(
     *,
     suffixes: Sequence[str] = (".py",),
     exclude: Iterable[str] = (),
+    within: str | Path | None = None,
 ) -> list[Stray]:
     """Identifiers used under ``root`` that ``registry`` does not declare.
 
@@ -470,7 +499,7 @@ def strays(
     strings_only = mode == "strings"
 
     found: list[Stray] = []
-    for path in _walk(root, tuple(suffixes)):
+    for path in _walk(root, tuple(suffixes), Path(within) if within else None):
         rel = str(path.relative_to(root))
         if excluded(rel, exclusions):
             continue
@@ -503,6 +532,7 @@ def unused(
     *,
     suffixes: Sequence[str] = (".py",),
     exclude: Iterable[str] = (),
+    within: str | Path | None = None,
     machinery: Iterable[str] = (),
 ) -> list[str]:
     """Declared entries nothing *mentions*. **A review list, never a cut list.**
@@ -588,7 +618,7 @@ def unused(
         else {}
     )
 
-    for path in _walk(Path(root), suffixes):
+    for path in _walk(Path(root), suffixes, Path(within) if within else None):
         rel = str(path.relative_to(root))
         if excluded(rel, exclusions):
             continue

@@ -379,6 +379,70 @@ def test_a_narrowed_check_does_not_call_the_rest_of_the_baseline_stale(project, 
     assert "no longer present" not in capsys.readouterr().out
 
 
+# -- a narrowing narrows, and changes nothing else -----------------------------
+#
+# A path argument is advertised as "limit the scan to this path" and was
+# implemented as "make this the scan root", which is a different thing and was
+# wrong twice: every path the run reported or matched was spelled relative to
+# the argument rather than to the project. Measured on a scratch tree
+# (2026-09-19), both directions below.
+
+
+def test_a_subtree_scan_still_matches_the_baseline(project, capsys):
+    """The sharp one: a tree green from its root went RED under `check src`,
+    reporting its own accepted finding as new. A ratchet producing churn from
+    the inside is the thing a ratchet exists to prevent."""
+    main(["baseline", "-c", cfg(project), "--record", "--until", "2099-01-01"])
+    capsys.readouterr()
+
+    assert main(["check", "-c", cfg(project)]) == 0
+    assert main(["check", "-c", cfg(project), "src"]) == 0
+
+
+def test_a_subtree_scan_reports_paths_the_way_the_project_spells_them(project, capsys):
+    """Why the above works, and the thing to keep: the root a path is reported
+    against is the project's, never the narrowing."""
+    write(project, "src/app.py", 'p = root / "box.yaml"\n')
+    assert main(["check", "-c", cfg(project), "src"]) == 1
+    assert "src/app.py:1" in capsys.readouterr().out
+
+
+def test_a_subtree_scan_still_honors_the_project_exclude(project, capsys):
+    """The quiet one, and it fails in the widening direction: an `exclude`
+    fragment reading `src/vendor/` cannot match `vendor/lib.py`, so narrowing
+    reported code the project had excluded."""
+    write(
+        project,
+        "kinemata.toml",
+        """
+        [project]
+        root = "."
+        exclude = ["src/vendor/"]
+
+        [[registry]]
+        name = "constants"
+        kind = "python-constants"
+        modules = ["src/consts.py"]
+        """,
+    )
+    write(project, "src/vendor/lib.py", 'p = root / "box.yaml"\n')
+    (project / "src" / "app.py").unlink()
+
+    assert main(["check", "-c", cfg(project)]) == 0
+    assert main(["check", "-c", cfg(project), "src"]) == 0
+
+
+def test_a_path_outside_the_project_is_still_another_tree(tmp_path, project, capsys):
+    """Containment decides, and the outside case keeps the meaning it has always
+    had: pointing a config's registries at a tree somewhere else is a real thing
+    to ask for, and its paths have nothing to be relative to here."""
+    other = tmp_path / "elsewhere"
+    write(other, "mod.py", 'p = root / "box.yaml"\n')
+
+    assert main(["check", "-c", cfg(project), str(other)]) == 1
+    assert "mod.py:1" in capsys.readouterr().out
+
+
 def test_check_says_when_a_new_finding_is_an_edited_accepted_line(project, capsys):
     """The adopter's event, end to end: the finding is theirs already and the
     line moved under it. Still red -- the fingerprint holds the text on
@@ -394,21 +458,22 @@ def test_check_says_when_a_new_finding_is_an_edited_accepted_line(project, capsy
     assert "src/app.py" in out
 
 
-def test_a_registry_narrowed_scan_still_says_which_line_was_edited(project, capsys):
+@pytest.mark.parametrize("narrowing", [["-r", "constants"], ["src"]])
+def test_a_narrowed_scan_still_says_which_line_was_edited(project, capsys, narrowing):
     """The raw stale count is suppressed under a narrowing, because records
     outside it are absent rather than fixed. A pairing is not: it needs a new
     finding at the same site, so that site was scanned.
 
-    `--registry` and not a path argument, which was measured rather than
-    assumed: a path argument is the scan *root*, so findings come back relative
-    to it and no record written from the project root matches one.
+    Both narrowings, because for one commit only the first worked: a path
+    argument was the scan *root* then, so findings came back relative to the
+    subdirectory and no record written from the project root could match one.
     """
     main(["baseline", "-c", cfg(project), "--record", "--until", "2099-01-01"])
     capsys.readouterr()
 
     write(project, "src/app.py", 'p = (root / "box.yaml")\n')
 
-    assert main(["check", "-c", cfg(project), "-r", "constants"]) == 1
+    assert main(["check", "-c", cfg(project), *narrowing]) == 1
     out = capsys.readouterr().out
     assert "no longer present" not in out
     assert "1 new finding is an accepted record whose line was edited" in out

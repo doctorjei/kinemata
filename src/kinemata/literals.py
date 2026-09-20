@@ -154,9 +154,10 @@ def _collect(
     suffixes: Sequence[str],
     exclusions: Sequence[str],
     min_length: int,
+    within: Path | None = None,
 ) -> dict[str, list[Site]]:
     by_value: dict[str, list[Site]] = defaultdict(list)
-    for path in _walk(root, suffixes):
+    for path in _walk(root, suffixes, within):
         rel = str(path.relative_to(root))
         if excluded(rel, exclusions):
             continue
@@ -312,6 +313,7 @@ def clusters(
     *,
     suffixes: Sequence[str] = (".py",),
     exclude: Iterable[str] = (),
+    within: str | Path | None = None,
     declared: Iterable[str] = (),
     min_length: int = MIN_LITERAL_LENGTH,
     min_files: int = 2,
@@ -329,7 +331,10 @@ def clusters(
     """
     root = Path(root)
     known = set(declared)
-    by_value = _collect(root, suffixes, tuple(exclude), min_length)
+    by_value = _collect(
+        root, suffixes, tuple(exclude), min_length,
+        Path(within) if within else None,
+    )
 
     found = Duplication()
     singles: dict[str, list[Site]] = {}

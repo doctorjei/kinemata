@@ -63,6 +63,18 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 **Fixed**
 
+- A path argument now narrows a scan instead of re-rooting it. `kinemata check src` is advertised
+  as *limit the scan to this path* and was implemented as *make this the scan root*, which is a
+  different thing and was wrong twice over. Every path the run reported was spelled relative to the
+  argument, so **no accepted baseline record could match one**: a tree green from its root went red
+  under a subtree scan, reporting its own exemptions as new findings — a ratchet producing the
+  churn it exists to prevent, from the inside. And the project's **`exclude` stopped applying**, for
+  the same reason: a fragment naming a vendored directory under the project root cannot match the
+  same file spelled from inside it, so narrowing quietly *widened* what was reported. Both measured on a scratch tree, both fixed by keeping the
+  project root as the root and reading only the named subtree. A path **outside** the project is
+  unchanged and still means another tree, which is a real thing to ask for; containment decides,
+  the way `[context]` already splits a contained `include` from a declared `external`. Affects
+  every command that takes a path.
 - `parity` now prints `set-valued: N` for declared cells that held a list, on every run, clean or
   failing. A list is compared as a set on purpose — a reorder is not a finding, and that rule is
   unchanged — but nothing said so, so a declaration pinning an enum's `choices` against the code's

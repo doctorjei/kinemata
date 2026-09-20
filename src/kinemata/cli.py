@@ -142,25 +142,63 @@ def _announce(target: Path) -> None:
               file=sys.stderr)
 
 
-def _target(args: argparse.Namespace, settings: Settings) -> Path:
-    """Where to scan, announcing anything the scan reaches outside it.
+def _scope(args: argparse.Namespace, settings: Settings) -> tuple[Path, Path | None]:
+    """The tree paths are reported against, and the part of it to read.
 
     A relative path resolves against the **project root**, not the working
     directory. Otherwise ``kinemata check src`` run from a parent directory
     silently scans a different tree and reports a clean or bogus result -- which
     it did, on the first run of this command.
 
+    **Containment decides which of two things a path argument means**, the way
+    ``[context]`` splits a contained ``include`` from a declared ``external``:
+
+    * **inside the project** -- a narrowing. The root stays the project's, and
+      only that subtree is read. It has to stay the project's, because every
+      path a run reports or matches is spelled relative to it.
+    * **outside it** -- another tree, which is a real thing to ask for, and
+      keeps the meaning a path argument has always had.
+
+    🛑 **The subtree case used to collapse the two and was wrong twice**,
+    measured on a scratch tree (2026-09-19) rather than reasoned about: a tree
+    green from its root went red under ``kinemata check src``, reporting its own
+    accepted findings as new, and the project's ``exclude`` stopped applying
+    because :shown:`src/vendor/` cannot match :shown:`vendor/lib.py` -- so a
+    narrowing quietly *widened* what was reported. :func:`kinemata.bypass._walk` carries
+    the mechanism; the help text promising *limit the scan to this path* is what
+    made it a defect rather than a second feature.
+
     The announcement is wired here rather than into each command because this is
     the one place every scanning command passes through; a command added later
-    inherits it instead of having to remember it.
+    inherits it instead of having to remember it. It announces what is **read**,
+    a narrowing being the thing a symlink would lead out of.
     """
     if not args.path:
-        target = settings.root
-    else:
-        given = Path(args.path)
-        target = given if given.is_absolute() else settings.root / given
+        _announce(settings.root)
+        return settings.root, None
+    given = Path(args.path)
+    target = given if given.is_absolute() else settings.root / given
+    try:
+        inside = bool(target.resolve().relative_to(settings.root.resolve()).parts)
+    except ValueError:
+        inside = False
     _announce(target)
-    return target
+    return (settings.root, target) if inside else (target, None)
+
+
+def _target(args: argparse.Namespace, settings: Settings) -> Path:
+    """What every path this run reports is relative to."""
+    return _scope(args, settings)[0]
+
+
+def _within(args: argparse.Namespace, settings: Settings) -> Path | None:
+    """The part of the tree to read, when a run is narrowed to one.
+
+    Derived from :func:`_scope` beside :func:`_target` rather than worked out
+    again here: two readings of one argument is how the root and the narrowing
+    came to disagree in the first place.
+    """
+    return _scope(args, settings)[1]
 
 
 def _note_unfitted(settings: Settings) -> None:
@@ -286,6 +324,7 @@ def _run_review(
                 _target(args, settings),
                 suffixes=registry.suffixes or settings.suffixes,
                 exclude=settings.exclude,
+                within=_within(args, settings),
                 max_sites=_max_sites(args, settings),
             ),
         ))
@@ -318,6 +357,7 @@ def _survey(args: argparse.Namespace, settings: Settings) -> Survey:
         suffixes=settings.citation_suffixes,
         file_suffixes=settings.claim_file_suffixes,
         exclude=settings.exclude,
+        within=_within(args, settings),
         historical=settings.historical,
         recorded=_entries_carrying(settings, "confirmed"),
         covered=coverage(settings.resources),
@@ -448,6 +488,7 @@ def _strays(
                 # citations anywhere and report a clean closed world.
                 suffixes=registry.suffixes or settings.suffixes,
                 exclude=settings.exclude,
+                within=_within(args, settings),
             )
         except NotImplementedError:
             continue  # cannot recognize an identifier; reported by the caller
@@ -633,6 +674,7 @@ def cmd_clusters(args: argparse.Namespace) -> int:
         _target(args, settings),
         suffixes=settings.suffixes,
         exclude=settings.exclude,
+        within=_within(args, settings),
         declared=known,
     )
     body = found.text(verbose=args.verbose)
@@ -1157,6 +1199,7 @@ def cmd_unused(args: argparse.Namespace) -> int:
                 target,
                 suffixes=registry.suffixes or settings.suffixes,
                 exclude=settings.exclude,
+                within=_within(args, settings),
             )
         except ValueError as exc:
             refused.append(str(exc))
@@ -1251,6 +1294,7 @@ def _verify(args: argparse.Namespace, settings: Settings) -> Verification:
         suffixes=settings.claim_suffixes,
         file_suffixes=settings.claim_file_suffixes,
         exclude=settings.exclude,
+        within=_within(args, settings),
         historical=settings.historical,
         counts=settings.counts,
         resolve_in=settings.resolve_in,
@@ -1277,17 +1321,15 @@ def _report_reworded(split: Split, *, quiet: bool = False) -> None:
     so, and a fingerprint that forgave a rewrite would hold an exemption open
     across the edit that changed what was exempted. This names the event.
 
-    Printed under a ``--registry`` narrowing, where the raw stale count is
-    suppressed because records outside the narrowing are absent rather than
-    fixed. A pair is trustworthy anyway: it needs a **new finding at the same
-    site**, so that site was scanned.
+    Printed under either narrowing -- ``--registry`` or a path -- where the raw
+    stale count is suppressed because records outside the narrowing are absent
+    rather than fixed. A pair is trustworthy anyway: it needs a **new finding at
+    the same site**, so that site was scanned.
 
-    **A path argument is a different case and this says nothing under one**,
-    which was measured rather than assumed -- the claim here first read "any
-    narrowed scan". :func:`_destination` makes the path the scan *root*, so
-    findings come back relative to it and no record written from the project
-    root can match one. That is a wider problem than this function: under a
-    path argument every accepted finding reads as new.
+    ⚑ **It said nothing under a path argument for one commit**, because a path
+    was the scan *root* then and no record written from the project root could
+    match a finding reported relative to a subdirectory. :func:`_scope` is where
+    that was fixed and carries what it cost.
     """
     if quiet or not split.reworded:
         return

@@ -125,6 +125,7 @@ def review(
     *,
     suffixes: Sequence[str] = (".py",),
     exclude: Sequence[str] = (),
+    within: str | Path | None = None,
     strings_only: bool | None = None,
     max_sites: int | None = DEFAULT_MAX_SITES,
 ) -> Report:
@@ -137,6 +138,7 @@ def review(
         root,
         suffixes=suffixes,
         exclude=exclude,
+        within=within,
         strings_only=strings_only,
     )
 
