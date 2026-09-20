@@ -371,12 +371,30 @@ def test_a_partial_scan_may_not_rewrite_the_baseline(project, capsys):
 
 
 def test_a_narrowed_check_does_not_call_the_rest_of_the_baseline_stale(project, capsys):
-    """Findings the scan never looked for are absent, not fixed."""
+    """Findings the scan never looked for are absent, not fixed.
+
+    ⚑ This held for the wrong reason until 2026-09-19: a file named as the
+    path was walked as a directory and yielded nothing, so the assertion passed
+    over a scan that had read no file at all. The narrowing is real now, and
+    `src/app.py`'s record is the one deliberately left unscanned.
+    """
     main(["baseline", "-c", cfg(project), "--record", "--until", "2099-01-01"])
     capsys.readouterr()
 
     assert main(["check", "-c", cfg(project), "src/consts.py"]) == 0
     assert "no longer present" not in capsys.readouterr().out
+
+
+def test_naming_one_file_reads_that_file(project, capsys):
+    """Nothing is the answer that looks like success. Walking a file as a
+    directory yields no paths, so a narrowed run over a file holding an
+    unaccepted finding reported a clean tree -- a check quietly not
+    checking, which is the failure this package is about."""
+    write(project, "src/app.py", 'p = root / "box.yaml"\nq = other / "box.yaml"\n')
+
+    assert main(["check", "-c", cfg(project), "src/app.py"]) == 1
+    out = capsys.readouterr().out
+    assert "src/app.py:2" in out
 
 
 # -- a narrowing narrows, and changes nothing else -----------------------------

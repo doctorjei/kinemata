@@ -270,8 +270,20 @@ def _walk(
     ``within`` must be inside ``root``; the caller decides that, because a path
     outside it is not a narrowing at all but another tree, which is a real thing
     to ask for and keeps the old meaning.
+
+    **A ``within`` naming one file reads that file**, which is worth spelling
+    out because walking it as a directory yields nothing and nothing is the
+    answer that looks like success: ``kinemata check src/app.py`` reported a
+    clean run over a file holding a finding nobody had accepted (2026-09-19).
+    A check that quietly stops checking is the failure this package exists to
+    report.
     """
-    for here, filenames, _ in _tree(within or root):
+    target = within or root
+    if target.is_file():
+        if target.suffix in suffixes:
+            yield target
+        return
+    for here, filenames, _ in _tree(target):
         for name in filenames:
             path = here / name
             if path.suffix not in suffixes:

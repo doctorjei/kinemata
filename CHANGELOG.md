@@ -75,6 +75,11 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   unchanged and still means another tree, which is a real thing to ask for; containment decides,
   the way `[context]` already splits a contained `include` from a declared `external`. Affects
   every command that takes a path.
+- Naming a single **file** as the path reads that file. It was walked as a directory, which yields
+  nothing — so a narrowed run over a file holding a finding nobody had accepted printed a clean
+  result and exited 0. Nothing is the answer that looks like success, and a check quietly not
+  checking is the failure this package exists to report. One test had been passing off that
+  behavior without saying so, and now asserts what its own docstring claims.
 - `parity` now prints `set-valued: N` for declared cells that held a list, on every run, clean or
   failing. A list is compared as a set on purpose — a reorder is not a finding, and that rule is
   unchanged — but nothing said so, so a declaration pinning an enum's `choices` against the code's
