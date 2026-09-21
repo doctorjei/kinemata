@@ -2109,3 +2109,56 @@ down, and the two shapes at the end are the findings that matter most.
   this reason. **The report says how many bytes came from outside and deliberately does not say
   which key declared them** — it claimed `[context] external` and was wrong the first time a
   symlink was pointed at it.
+- **boundary** · **No mechanism settles a prose sentence false about behavior.** Six such
+  sentences passed every gate on an adopting project's tree 2026-09-20: a signature given as
+  `-> str | None` beside code saying `-> str`, a rationale paragraph inverted by its own diff,
+  a *"maps X → Y"* already false when written, a version-annotated example of output that
+  version never produced, a *"nothing reads those"* false before the diff touched it, and an
+  *"every one is retypable"* that retyping disproves. Every one resolves; every one says the
+  wrong thing. The difference from everything else on this list is the predicate, not the
+  corpus: `claims` asks *does this resolve*, and a sentence can resolve perfectly while
+  asserting falsely. Per sub-shape, measured rather than read:
+  - **A static signature sentence is undiscoverable without guessing, and inexact without a
+    type checker.** Identifying *this span states a signature about that symbol* is semantic
+    plus proximity — the `->` shape also finds shorthand, illustration and non-code arrows,
+    and attaching the span to its symbol is the window machinery the negation entry above
+    measures rotting. And exact comparison is wrong while the text is right: the three
+    signature-like spans in this repository's own contract table read `declared(id) ->
+    bool`, `detect(text) -> [id]`, `resolve(id) -> [ClauseID]` against code saying
+    `identifier: str`, `list[str]`, `tuple[str, ...]` — 0 for 3, every one a deliberate
+    shorthand (`docs/design.md:109-111` vs `contract.py:213-215`, at every commit holding
+    both). Semantic equivalence of type spellings is a type checker, which is a different
+    instrument.
+  - **A per-sentence re-check is declarable today and is not the class.** One `[[count]]`
+    block compares every value its pattern captures against one oracle value, so N sentences
+    with N signatures need N blocks, each with a pattern tuned to one sentence and an oracle
+    printing one symbol's annotation. Each block checks a sentence somebody already found;
+    nothing finds them — and a reword matches no line, which fails the run rather than the
+    sentence, so every prose edit demands a config edit alongside it.
+  - **A value-mapping sentence needs an executor that reads output, and that instrument is
+    the project's own suite.** Item 3 above (`maps "" → None`) is settled only by calling
+    the function and judging what it returned. `[[probe]]` stops at polarity on purpose:
+    `raises`/`returns` is read from the call mechanism, never from output content, and no
+    outcome predicate escapes it — a classifier that is wrong reports agreement. kinemata
+    never classifies an outcome by reading output, and never runs the project's suite. **No
+    revival within this architecture**; if that rule ever falls, this reopens with it.
+  - **An in-tree negative is countable but not identifiable; date it instead.** Counting
+    readers is trivial — identifying *this sentence asserts nothing reads X* is
+    open-verb-class semantics, and our own documents hold dozens of nothing/never sentences
+    of which essentially none is a reader-claim. What ships today is `[[promise]]` `what`
+    with `until`: age, not truth — and an *"and that stays true"* is already
+    promise-shaped prose. The asymmetry entry above is the argument for bothering, and
+    config/prose drift fails safe because the date lapses anyway.
+  - **Purpose, history and round-trips are agreed not expressible.** A rationale inverted by
+    its diff needs knowing what an argument is for; a version-annotated example needs
+    knowing what a version printed, outside every tree; retypability needs round-trip
+    semantics. The seventh reported shape — a documented symbol with zero hits anywhere —
+    is the identification problem again: `CLAIM_KINDS` settles paths, links, commits and
+    URLs, and a backticked identifier is mostly not a symbol claim (commands, values,
+    placeholders), so *every backticked identifier resolves* is a guesser with an opt-out.
+    Agreed with the reporter on all of them, who prefers *"not expressible"* over a guesser
+    throughout.
+  **What would revive the static half:** a tree whose prose spells signatures exactly as the
+  code does, measured — ours argues 0 for 3 the other way, so one tree each makes it a
+  property of prose style and two such trees make it worth spelling an assertion form.
+  Nothing revives the executor half short of the architecture rule above falling.
