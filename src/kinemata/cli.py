@@ -623,6 +623,9 @@ def _report_exclusions(settings: Settings) -> None:
     removed nothing at all -- both invisible, because a config saying something
     confidently while doing nothing looks exactly like a config that works. This
     repository shipped the same defect: ``deliverables/`` has never existed here.
+    The first is fixed at the matcher, which reads whole segments since
+    2026-09-24; what is left to report is a fragment that removed nothing, which
+    is also what one written for part of a name now does.
 
     Not suppressed by ``--quiet``, on the rule the silent, exemption, gate and
     promise counts already follow: a count the reader did not ask for is the
