@@ -49,6 +49,9 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 - `undeclared`'s refusal said it needed *"kind = yaml-mapping with `syntax`"* while a bibliography,
   a `toml-value` given a `syntax` and a project's own `import` class all answered. It now names the
   method — a registry that implements `candidates()`, which every closed registry must.
+- A registry refused for being empty or for not being closable was named `'?'` when the config
+  gave no `name`, even where the registry had one — an `import` class carrying its own, or a
+  kind's default. Those refusals come after the registry is built, and now use its name.
 
 ## 0.3.0
 

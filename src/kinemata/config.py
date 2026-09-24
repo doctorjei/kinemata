@@ -1290,11 +1290,11 @@ def load(path: str | Path) -> Settings:
         # string constants at all, so the projection was empty and `check`
         # exited 0 the whole time. The wrong adapter, not a clean tree.
         empty_is_declared = _flag(
-            spec, "allow_empty", f"registry {spec.get('name', '?')!r}"
+            spec, "allow_empty", f"registry {registry.name!r}"
         )
         if not empty_is_declared and not any(True for _ in registry.entries()):
             unfitted.append(
-                f"registry {spec.get('name', '?')!r}: kind {kind!r} produced no "
+                f"registry {registry.name!r}: kind {kind!r} produced no "
                 "entries, so it would scan for nothing and pass. Point it at a "
                 "source it can read, or set allow_empty = true if it is "
                 "deliberately empty while being bootstrapped."
@@ -1315,7 +1315,7 @@ def load(path: str | Path) -> Settings:
             closure_guard(registry)
         except NotImplementedError as exc:
             raise ConfigError(
-                f"registry {spec.get('name', '?')!r}: kind {kind!r} cannot be "
+                f"registry {registry.name!r}: kind {kind!r} cannot be "
                 f"closed. {exc}"
             ) from exc
 

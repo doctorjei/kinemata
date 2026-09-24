@@ -538,6 +538,43 @@ def test_a_project_class_that_cannot_recognize_identifiers_cannot_be_closed(
         load(path)
 
 
+@pytest.mark.parametrize(
+    ("body", "refusal"),
+    [
+        ("closed = True\n    def entries(self):\n        return [Entry(id='a')]",
+         "cannot be closed"),
+        ("def entries(self):\n        return []", "produced no entries"),
+    ],
+)
+def test_a_refusal_after_building_names_the_class_own_name(
+    tmp_path, monkeypatch, body, refusal
+):
+    """Not ``'?'``, which is what the spec says when the config gives no name.
+
+    Only this kind has a name to fall back to, and the refusals made after the
+    registry exists were reading the spec anyway.
+    """
+    source = (
+        "from kinemata.contract import BaseRegistry, Entry\n\n\n"
+        "class Own(BaseRegistry):\n"
+        '    name = "keyspace"\n'
+        f"    {body}\n"
+    )
+    name = module(tmp_path, monkeypatch, source)
+    path = config(
+        tmp_path, f'[[registry]]\nkind = "import"\ntarget = "{name}:Own"\n'
+    )
+    # An empty registry is set aside rather than raised, so a config holding
+    # others still loads; either way the message is what a reader is shown.
+    try:
+        messages = load(path).unfitted
+    except ConfigError as exc:
+        messages = [str(exc)]
+    (message,) = messages
+    assert refusal in message
+    assert "registry 'keyspace'" in message
+
+
 # -- the two helpers the kind leans on ----------------------------------------
 
 
