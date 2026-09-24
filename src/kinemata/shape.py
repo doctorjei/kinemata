@@ -126,6 +126,18 @@ def _listed(value: Any) -> list[Any]:
 
 
 def _matches(value: Any, pattern: Any) -> bool:
+    """Whether ``value`` has ``pattern``'s shape. **Nothing has no shape.**
+
+    A field the entry does not carry reads as ``None`` (:func:`_value`), and so
+    does a null in the declaration. Both used to be matched as the text
+    ``"None"``, so ``matches = "^N"`` or any pattern that fits that word was
+    satisfied by an entry missing the field entirely -- measured 2026-09-24
+    while scoping an adopter's report, with no test arguing for it. Whether a
+    field must be present is ``present``'s claim, and a pattern making it
+    silently in the permissive direction was the wrong way round.
+    """
+    if value is None:
+        return False
     return bool(re.search(str(pattern), str(value)))
 
 

@@ -158,6 +158,14 @@ def test_each_matches_holds_every_item_of_a_list_field():
     assert [hit.name for hit in got.violations] == ["b"]
 
 
+@pytest.mark.parametrize("operator", ["matches", "each_matches"])
+def test_a_pattern_is_not_satisfied_by_a_field_that_is_missing_or_null(operator):
+    """Both read as ``None``, which was matched as the text ``"None"``."""
+    rows = (entry("has", v="Nope"), entry("missing"), entry("null", v=None))
+    got = judge(rule(claim=Condition(operator, "^N", "v")), *rows)
+    assert [hit.name for hit in got.violations] == ["missing", "null"]
+
+
 def test_contains_asks_for_one_member_of_a_list_field():
     rows = (entry("a", filters=["valid_key", "tiers"]), entry("b", filters=["tiers"]))
     got = judge(rule(claim=Condition("contains", "valid_key", "filters")), *rows)

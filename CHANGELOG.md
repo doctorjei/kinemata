@@ -52,6 +52,11 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 - A registry refused for being empty or for not being closable was named `'?'` when the config
   gave no `name`, even where the registry had one — an `import` class carrying its own, or a
   kind's default. Those refusals come after the registry is built, and now use its name.
+- A `[[shape]]` pattern rule (`matches`, `each_matches`) was satisfied by an entry that did not
+  carry the field at all, or carried a null there, whenever the pattern happened to fit the word
+  `None` — which is what a missing value was matched as. `matches = "^N"` passed every entry
+  without the field. A missing or null value now matches no pattern; whether a field must be there
+  is still `present`'s claim to make.
 
 ## 0.3.0
 
