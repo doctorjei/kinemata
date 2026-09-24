@@ -82,6 +82,7 @@ from .contract import (
     member,
     missing_members,
     spell_path,
+    strings,
     usable_boundary,
 )
 from .gates import Gate
@@ -312,7 +313,10 @@ def _build_constants(spec: dict[str, Any], root: Path, path: Path) -> BaseRegist
         raise ConfigError(
             f"registry {spec.get('name', '?')!r}: python-constants needs 'modules'"
         )
-    paths = [root / m for m in modules]
+    paths = [
+        root / m
+        for m in _strings(modules, f"registry {spec.get('name', '?')!r}: modules")
+    ]
     missing = [str(p) for p in paths if not p.is_file()]
     if missing:
         raise ConfigError(
@@ -1261,9 +1265,13 @@ def load(path: str | Path) -> Settings:
         # be pointed at a different file set, and three copies of one line is
         # the thing this package exists to report.
         if "suffixes" in spec:
-            registry.suffixes = tuple(spec["suffixes"])
+            registry.suffixes = _strings(
+                spec["suffixes"], f"{path}: registry {registry.name!r} suffixes"
+            )
         if "machinery" in spec:
-            registry.machinery = tuple(spec["machinery"])
+            registry.machinery = _strings(
+                spec["machinery"], f"{path}: registry {registry.name!r} machinery"
+            )
         if "defer_to" in spec:
             registry.defer_to = _deferral(spec["defer_to"], f"{path}: registry {registry.name!r}")
         # Matching behavior, same place and for the same reason. An adapter's
@@ -1342,9 +1350,11 @@ def load(path: str | Path) -> Settings:
     _reject_unknown(claims, CLAIMS_KEYS, f"{path}: [claims]")
     # What git ignores is not this project's material, and every check here asks
     # that same question. Answered once, in the one place settings come from.
-    declared_exclude = tuple(project.get("exclude", ()))
+    declared_exclude = _strings(project.get("exclude", ()), f"{path}: [project] exclude")
     exclude = declared_exclude + git_ignored(root)
-    claim_suffixes = tuple(claims.get("suffixes", DEFAULT_CLAIM_SUFFIXES))
+    claim_suffixes = _strings(
+        claims.get("suffixes", DEFAULT_CLAIM_SUFFIXES), f"{path}: [claims] suffixes"
+    )
     citation_suffixes = _citation_suffixes(
         raw.get("citations"), claim_suffixes, path
     )
@@ -1357,14 +1367,14 @@ def load(path: str | Path) -> Settings:
         exclude=exclude,
         declared_exclude=declared_exclude,
         claims_declared=raw.get("claims") is not None,
-        suffixes=tuple(project.get("suffixes", (".py",))),
+        suffixes=_strings(project.get("suffixes", (".py",)), f"{path}: [project] suffixes"),
         max_sites=_max_sites(project, path),
         claim_suffixes=claim_suffixes,
         citation_suffixes=citation_suffixes,
         claim_file_suffixes=_claim_file_suffixes(claims, path),
-        historical=tuple(claims.get("historical", ())),
-        resolve_in=tuple(claims.get("resolve_in", ())),
-        commits_in=tuple(claims.get("commits_in", ())),
+        historical=_strings(claims.get("historical", ()), f"{path}: [claims] historical"),
+        resolve_in=_strings(claims.get("resolve_in", ()), f"{path}: [claims] resolve_in"),
+        commits_in=_strings(claims.get("commits_in", ()), f"{path}: [claims] commits_in"),
         external=_flag(claims, "external", f"{path}: [claims]"),
         external_timeout=float(claims.get("external_timeout", EXTERNAL_TIMEOUT)),
         oracle_timeout=float(claims.get("oracle_timeout", ORACLE_TIMEOUT)),
@@ -1633,13 +1643,7 @@ def _claim_file_suffixes(claims: dict[str, Any], path: Path) -> tuple[str, ...]:
     exists is a check that was blind and looked green, and accepting a spelling
     that matches nothing would reproduce that inside the fix for it.
     """
-    declared = claims.get("file_suffixes", ())
-    if isinstance(declared, str) or not isinstance(declared, (list, tuple)):
-        raise ConfigError(
-            f"{path}: [claims] file_suffixes is a list of extensions, not "
-            f"{type(declared).__name__}."
-        )
-    suffixes = tuple(str(item) for item in declared)
+    suffixes = _strings(claims.get("file_suffixes", ()), f"{path}: [claims] file_suffixes")
     wrong = [item for item in suffixes if not item.startswith(".") or item == "."]
     if wrong:
         raise ConfigError(
@@ -1761,7 +1765,7 @@ def _build_context(spec: dict[str, Any] | None, path: Path) -> ContextBudget | N
             f"{path}: [context] is missing {', '.join(missing)}. A budget with "
             "nothing to weigh, or a set with no ceiling, checks nothing."
         )
-    strip = tuple(str(name) for name in spec.get("strip", ()))
+    strip = _strings(spec.get("strip", ()), f"{path}: [context] strip")
     unknown = [name for name in strip if name not in STRIPPERS]
     if unknown:
         raise ConfigError(
@@ -1779,8 +1783,8 @@ def _build_context(spec: dict[str, Any] | None, path: Path) -> ContextBudget | N
     #
     # Symmetrically refused, because a one-way rule would leave `external`
     # accepting contained patterns and quietly labeling in-tree bytes "outside".
-    include = tuple(str(pattern) for pattern in include)
-    external = tuple(str(pattern) for pattern in spec.get("external", ()))
+    include = _strings(include, f"{path}: [context] include")
+    external = _strings(spec.get("external", ()), f"{path}: [context] external")
     leaving = [pattern for pattern in include if escapes(pattern)]
     if leaving:
         raise ConfigError(
@@ -1819,7 +1823,7 @@ def _build_gates(declarations: list[dict[str, Any]], path: Path) -> tuple[Gate, 
         built.append(
             Gate(
                 command=str(command),
-                where=tuple(str(item) for item in spec.get("where", ())),
+                where=_strings(spec.get("where", ()), f"{path}: [[gate]] {index} where"),
                 note=str(spec.get("note", "")),
             )
         )
@@ -1854,23 +1858,27 @@ def _commands(raw: Any, path: Path) -> dict[str, tuple[str, ...]]:
     return declared
 
 
+def _strings(value: Any, what: str) -> tuple[str, ...]:
+    """:func:`kinemata.contract.strings`, refused as a config error."""
+    try:
+        return strings(value, what)
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from None
+
+
 def _deferral(raw: Any, where: str) -> tuple[str, ...]:
     """A ``defer_to`` list: registry names, refused when it is anything else.
 
-    A string is refused rather than iterated, on :func:`_argv`'s evidence, and an
-    empty list because a deferral to nobody is a key that does nothing.
+    Read through :func:`_strings`, and an empty list refused on top, because a
+    deferral to nobody is a key that does nothing.
     """
-    if (
-        isinstance(raw, str)
-        or not isinstance(raw, (list, tuple))
-        or not raw
-        or not all(isinstance(name, str) and name for name in raw)
-    ):
+    names = _strings(raw, f"{where} defer_to")
+    if not names or not all(names):
         raise ConfigError(
             f"{where}: defer_to must be a non-empty list of registry names, "
             f"not {raw!r}."
         )
-    return tuple(raw)
+    return names
 
 
 def _check_deferrals(registries: Sequence[Registry], path: Path) -> None:
@@ -2338,6 +2346,11 @@ def _shape_condition(
         # asks for an arm of a map. Checked by the same builder so one rule
         # governs both slots.
         argument = _field_spelling(argument, where)
+    if spelling == "choices":
+        # Refused when it is not a list, but its items keep their type: a
+        # declared `choices = [1, 2]` compares integers, and text would not.
+        _strings(argument, f"{where} choices")
+        argument = tuple(argument)
     if spelling == "keys_of":
         # The two entry ids ride in the same two slots every other operator
         # uses, so `shape` needs no third field: `keys_of` names the entry whose

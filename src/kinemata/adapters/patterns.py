@@ -21,7 +21,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
-from ..contract import _NAME_BOUNDARY, BaseRegistry, Entry
+from ..contract import _NAME_BOUNDARY, BaseRegistry, Entry, strings
 
 
 class CodePatterns(BaseRegistry):
@@ -81,9 +81,9 @@ class CodePatterns(BaseRegistry):
             self._entries.append(
                 Entry(
                     id=str(identifier),
-                    antipatterns=tuple(str(p) for p in antipatterns),
-                    home=tuple(str(h) for h in spec.get("home", ())),
-                    clauses=tuple(str(c) for c in spec.get("clauses", ())),
+                    antipatterns=strings(antipatterns, f"entry {identifier!r}: antipatterns"),
+                    home=strings(spec.get("home", ()), f"entry {identifier!r}: home"),
+                    clauses=strings(spec.get("clauses", ()), f"entry {identifier!r}: clauses"),
                     extra={
                         k: v
                         for k, v in spec.items()

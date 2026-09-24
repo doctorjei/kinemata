@@ -143,7 +143,7 @@ def test_a_narrowed_registry_keeps_its_deferral(tmp_path, capsys):
 @pytest.mark.parametrize(
     ("defer", "refusal"),
     [
-        ('defer_to = "filenames"', "non-empty list of registry names"),
+        ('defer_to = "filenames"', "would be read one character at a time"),
         ("defer_to = []", "non-empty list of registry names"),
         ('defer_to = ["nobody"]', "no loaded registry is called"),
         ('defer_to = ["keyspace"]', "defers to itself"),

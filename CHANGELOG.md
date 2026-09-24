@@ -73,6 +73,14 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   `None` — which is what a missing value was matched as. `matches = "^N"` passed every entry
   without the field. A missing or null value now matches no pattern; whether a field must be there
   is still `present`'s claim to make.
+- A list-typed key in `kinemata.toml` given as a string is refused instead of being read one
+  character at a time. `suffixes = ".py"` on a registry meant the suffixes `.`, `p` and `y`, and
+  its `check` went from one bypass to exiting 0 having reported nothing; a code-patterns
+  `home = "pkg/_run.py"` became one-letter fragments every path contains, so every bypass read as
+  canonical use; `[[shape]] choices = "str"` accepted `"s"` and refused `"str"`. `command` was
+  fixed for this in `0.1.0` and the rest were not — every list key now goes through one reader,
+  including the ones read inside the code-patterns adapter. **A config spelling its lists as
+  lists is unaffected.**
 
 ## 0.3.0
 

@@ -874,6 +874,9 @@ outside, so the following are `ConfigError`, not silent skips:
 - a `defer_to` that would hand nothing over — given as a string or an empty list, naming no loaded
   registry or the registry itself, naming one none of whose entries declares a value, or declared
   on a registry with no candidates of its own to hand
+- **a list-typed key given as a string**, or as anything else that is not a list — a string would
+  be read one character at a time, so `suffixes = ".py"` meant the suffixes `.`, `p` and `y` and a
+  `home` of one path became fragments every path contains. The refusal spells the fix
 - a config declaring **no check at all** — every command it configures would pass by doing nothing
 - a `[[promise]]` with no `until`, an unparseable date, or a `note` with no `by`
 - a `[[count]]` naming a `run` no `[command]` declares, or giving both `command` and `run`

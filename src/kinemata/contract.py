@@ -401,6 +401,32 @@ class BaseRegistry(ABC):
             self.candidates("")
 
 
+def strings(value: Any, what: str) -> tuple[str, ...]:
+    """A declared list, refused rather than iterated when it is anything else.
+
+    **A string is iterable, and every list-typed key read with** ``tuple(...)``
+    **took one apart a character at a time.** Measured 2026-09-24: a registry
+    declaring ``suffixes = ".py"`` read as ``('.', 'p', 'y')`` and its ``check``
+    went from one bypass to exiting 0 having reported nothing, and a
+    code-patterns ``home = "pkg/_run.py"`` becomes one-letter fragments every
+    path contains -- so every bypass reads as canonical use. ``[[shape]]
+    choices = "str"`` accepted the value ``"s"`` and refused ``"str"``. The
+    ``command`` key was fixed for this on 2026-09-15 and the rest were not;
+    this is the one reader so the next list key does not have to be found.
+
+    A mapping is refused too: it iterates as its keys, the same silent
+    reinterpretation. Items are taken as text, as they always were.
+    """
+    if isinstance(value, str):
+        raise ValueError(
+            f"{what} is a list, and {value!r} is a string -- which would be read "
+            f"one character at a time. Write [{value!r}]."
+        )
+    if not isinstance(value, (list, tuple)):
+        raise ValueError(f"{what} is a list, not {type(value).__name__}: {value!r}")
+    return tuple(str(item) for item in value)
+
+
 def member(registry: object, attribute: str) -> Any:
     """``registry``'s own ``attribute``, or :class:`BaseRegistry`'s default.
 
