@@ -23,6 +23,13 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   `ordered: 0`, because a key that quietly does nothing is what this tool reports about everyone
   else. It pins the order the **oracle** prints in, which nothing here can verify is the code's own
   order — positional rather than semantic, the caveat `[[count]] occurrence` already carries.
+- `[[shape]] each_value_matches` claims a pattern of every **value** a field holds — a map's
+  values, a list's items, or a scalar itself — so a field written as a scalar on some rows and as a
+  mode-keyed map on others is one rule. `each_matches` reads a map as its **keys** and still does;
+  changing it would silently re-read rules already written. Asked for by an adopter whose absence
+  rule is legal only where every arm of a default is a whole-value `$VAR`: the scalar rows were
+  expressible with `each_matches`, the mode-keyed ones with nothing. **An empty container fails**,
+  because the same manifest declares `default: {}` on rows a vacuous pass would have certified.
 
 **Fixed**
 

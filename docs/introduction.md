@@ -361,11 +361,22 @@ extract = '(?m)^(\S+)$'
 registry = "keyspace"
 
   # No guard: every entry. `present`/`absent` take the field's name; the value
-  # operators (`equals`, `choices`, `matches`, `each_matches`, `contains`) take
-  # `field` as well, and `id_matches` claims something about the identifier.
+  # operators (`equals`, `choices`, `matches`, `each_matches`,
+  # `each_value_matches`, `contains`) take `field` as well, and `id_matches`
+  # claims something about the identifier. A missing or null value matches no
+  # pattern.
   [[shape.rule]]
   name    = "every row declares a type"
   present = "type"
+
+  # `each_matches` reads a map as its KEYS; `each_value_matches` reads its
+  # VALUES (a list's items, a scalar itself), so a field that is a scalar on
+  # some rows and a mode-keyed map on others is one rule. Empty fails.
+  [[shape.rule]]
+  name               = "absence only over a whole-value $VAR default"
+  when               = { field = "may_answer_absent", equals = true }
+  field              = "default"
+  each_value_matches = '^\$[A-Za-z_][A-Za-z0-9_]*$'
 
   [[shape.rule]]
   name    = "a type is one of the declared vocabulary"

@@ -166,6 +166,44 @@ def test_a_pattern_is_not_satisfied_by_a_field_that_is_missing_or_null(operator)
     assert [hit.name for hit in got.violations] == ["missing", "null"]
 
 
+WHOLE_VAR = r"^\$[A-Za-z_][A-Za-z0-9_]*$"
+
+
+def test_each_value_matches_reads_a_maps_values_a_lists_items_and_a_scalar():
+    rows = (
+        entry("scalar", default="$HOME"),
+        entry("map", default={"primary": "$XDG_DATA", "named": "$HOME"}),
+        entry("list", default=["$A", "$B"]),
+        entry("bad.scalar", default="pre-$HOME"),
+        entry("bad.map", default={"primary": "$XDG_DATA", "named": "$HOME/x"}),
+        entry("null.arm", default={"primary": None, "named": "$HOME"}),
+    )
+    got = judge(
+        rule(claim=Condition("each_value_matches", WHOLE_VAR, "default")), *rows
+    )
+    assert [hit.name for hit in got.violations] == ["bad.scalar", "bad.map", "null.arm"]
+
+
+@pytest.mark.parametrize("empty", [{}, []])
+def test_each_value_matches_is_not_satisfied_by_an_empty_container(empty):
+    """The adopter's manifest declares ``default: {}``; a vacuous pass would
+    certify it as a whole-value ``$VAR`` default."""
+    got = judge(
+        rule(claim=Condition("each_value_matches", WHOLE_VAR, "default")),
+        entry("empty", default=empty),
+    )
+    assert [hit.name for hit in got.violations] == ["empty"]
+
+
+def test_each_matches_still_reads_a_map_as_its_keys():
+    """Published behavior, and the reason the new operator is a new spelling."""
+    row = entry("map", default={"primary": "$X"})
+    keys = judge(rule(claim=Condition("each_matches", "^primary$", "default")), row)
+    values = judge(rule(claim=Condition("each_value_matches", "^primary$", "default")), row)
+    assert not keys.violations
+    assert [hit.name for hit in values.violations] == ["map"]
+
+
 def test_contains_asks_for_one_member_of_a_list_field():
     rows = (entry("a", filters=["valid_key", "tiers"]), entry("b", filters=["tiers"]))
     got = judge(rule(claim=Condition("contains", "valid_key", "filters")), *rows)
@@ -501,6 +539,45 @@ def declare(tmp_path, rules, *, registry="keys", rows=None, extra=""):
         {extra}
         """)
     return tmp_path
+
+
+def test_a_whole_value_var_default_is_declarable_over_scalar_and_mode_keyed_rows(
+    tmp_path, capsys
+):
+    """The adopter's rule end to end, on both shapes their manifest writes."""
+    project = declare(
+        tmp_path,
+        r"""
+        [[shape.rule]]
+        name               = "absence only over a whole-value $VAR default"
+        when               = { field = "may_answer_absent", equals = true }
+        field              = "default"
+        each_value_matches = '^\$[A-Za-z_][A-Za-z0-9_]*$'
+        """,
+        rows="""
+        keys:
+          ok.scalar:  {default: "$HOME", may_answer_absent: true}
+          ok.map:     {default: {primary: "$XDG_DATA", named: "$HOME"}, may_answer_absent: true}
+          bad.prefix: {default: "pre-$HOME", may_answer_absent: true}
+          bad.map:    {default: {primary: "$XDG_DATA", named: "$HOME/x"}, may_answer_absent: true}
+          unguarded:  {default: "/etc/x"}
+        """,
+    )
+    assert main(["shape", "--config", str(project / "kinemata.toml")]) == 1
+    out = capsys.readouterr().out
+    assert "bad.prefix:" in out and "bad.map:" in out
+    assert "ok.scalar:" not in out and "ok.map:" not in out and "unguarded:" not in out
+
+
+def test_an_unusable_each_value_matches_pattern_is_refused_at_load(tmp_path):
+    project = declare(tmp_path, """
+        [[shape.rule]]
+        name = "an unusable pattern"
+        field = "type"
+        each_value_matches = "([unclosed"
+        """)
+    with pytest.raises(ConfigError, match="not a usable pattern"):
+        load(project / "kinemata.toml")
 
 
 def test_a_declared_rule_loads_into_the_settings(tmp_path):

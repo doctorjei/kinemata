@@ -2201,6 +2201,7 @@ SHAPE_CLAIMS: dict[str, _Claim] = {
     "choices": _Claim(needs_field=True),
     "matches": _Claim(needs_field=True),
     "each_matches": _Claim(needs_field=True),
+    "each_value_matches": _Claim(needs_field=True),
     "contains": _Claim(needs_field=True),
     "id_matches": _Claim(operator="matches"),
     "exists": _Claim(),
@@ -2212,7 +2213,7 @@ SHAPE_CLAIMS: dict[str, _Claim] = {
 #: Which spellings compile a pattern at load. An unusable one would otherwise
 #: make every entry in a group violate a rule that is itself broken -- the
 #: reasoning :func:`_build_translation` states for the same decision.
-SHAPE_PATTERNS = ("matches", "each_matches", "id_matches")
+SHAPE_PATTERNS = ("matches", "each_matches", "each_value_matches", "id_matches")
 
 
 def _shape_condition(

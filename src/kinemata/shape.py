@@ -141,6 +141,34 @@ def _matches(value: Any, pattern: Any) -> bool:
     return bool(re.search(str(pattern), str(value)))
 
 
+def _each_value_matches(value: Any, pattern: Any) -> bool:
+    """Every *value* a field holds has ``pattern``'s shape.
+
+    A mapping is its values, a list its items, and anything else is one value
+    -- so a field declared as a scalar on some rows and as a mode-keyed map on
+    others is one rule. ``each_matches`` cannot say this, because it reads a
+    mapping as its **keys**, and it keeps doing so: that is published behavior,
+    and silently re-reading it would flip rules somebody already wrote.
+
+    Asked for by an adopting project on 2026-09-22 -- *"every arm of the default
+    is a whole-value host ``$VAR``"* -- whose manifest writes a default either
+    as a scalar or as ``{primary: ..., named: ..., standalone: ...}``.
+
+    **An empty container fails.** It has no value that could be the thing
+    claimed, and the same manifest declares ``default: {}`` on rows a vacuous
+    pass would have certified as whole-value ``$VAR`` defaults. A value that is
+    itself a container is matched as its text, which a pattern anchored for a
+    scalar rejects; this reads one level, not a tree.
+    """
+    if isinstance(value, dict):
+        values = list(value.values())
+    elif isinstance(value, (list, tuple, set, frozenset)):
+        values = list(value)
+    else:
+        values = [value]
+    return bool(values) and all(_matches(item, pattern) for item in values)
+
+
 #: What a rule may claim about ONE entry. Each takes the entry, the field named
 #: (empty meaning the entry's id) and the declared argument, and answers whether
 #: it holds. A table rather than a chain of branches, the way
@@ -161,6 +189,9 @@ ENTRY_OPERATORS: dict[str, Callable[[Entry, str, Any], bool]] = {
     ),
     "each_matches": lambda entry, field_name, want: all(
         _matches(item, want) for item in _listed(_value(entry, field_name))
+    ),
+    "each_value_matches": lambda entry, field_name, want: _each_value_matches(
+        _value(entry, field_name), want
     ),
     "contains": lambda entry, field_name, want: want
     in _listed(_value(entry, field_name)),
