@@ -39,6 +39,15 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   declared value would have silenced a mistyped key constant. Narrow a mixed registry with `where`.
   Refused when it would do nothing — a string, an empty list, a name no registry answers to, the
   registry itself, a target declaring no values, or a registry with no candidates to hand over.
+- `[[parity]] format = "json"` compares a field's values **as data**. The oracle prints each value
+  as JSON and both sides are compared as values — a map equal whatever its key order, a list in
+  order, and `1`, `"1"` and `true` three different things. The `text` form refuses any cell holding
+  a map and stands the whole registry's value comparison down with it; an adopter measured 18 of
+  their 66 `default` rows as mode-keyed maps, reachable before only one arm at a time. Under JSON a
+  column of scalars and maps is one comparison, and a declared `null` is a value that must meet a
+  printed `null` rather than reading the same as a field the declaration does not carry. Output
+  that is not JSON diverges on its own row. Refused without a `field`, beside `translate`, and
+  beside `ordered`. **The `text` form, and so every parity written before the key, is unchanged.**
 
 **What an existing config will see change**
 

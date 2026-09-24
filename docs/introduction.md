@@ -293,6 +293,23 @@ field = "choices"
 authority = "declared"
 ordered = true
 
+# The values as DATA rather than text. `format = "json"` says the oracle prints
+# each value as JSON; both sides are then compared as values -- a map equal
+# whatever its key order, a list in order, `1` / `"1"` / `true` three different
+# things -- so a column holding scalars on some rows and mode-keyed maps on
+# others is one comparison, where the text form refuses any map and stands the
+# whole registry down with it. A declared `null` must meet a printed `null`; a
+# field the declaration does not carry is still "records nothing". Output that
+# is not JSON diverges on its own row. Refused without a `field`, beside the
+# text-rewriting `translate`, and beside `ordered`, a JSON list being ordered.
+[[parity]]
+registry = "defaults"
+command = ["{python}", "-m", "pkg.print_defaults"]   # prints: key <json>
+extract = '(?m)^(\S+) (.*)$'
+field = "default"
+authority = "declared"
+format = "json"
+
 # A translation, on the declared side, so a reader of the config can see that a
 # comparison is not literal. `map` or `pattern`/`replacement`, never both.
 # `translate` lands on whichever side this parity compares: the values when a
@@ -1383,18 +1400,17 @@ limit is closed, in the same commit that closes it.**
   finding go away.** That is a *reminder* in the sense `docs/structure.md` §1 uses, with the same
   answer the baseline has — it is a visible change to a committed file, and a form that lets either
   side be quietly fixed to match the other has lost what the check existed for.
-- **accepted** · **A cell holding a container blocks the value comparison for the whole registry,
-  not for its row.** A dict or a nested list has an internal order and a spelling no two sides agree
-  on by accident, so it is refused rather than rendered — and refusing only the row would leave a
-  run reporting divergences for everything else while silently not checking that one, which is the
-  failure this package is about. **Measured cost, from an adopter: 18 of their 66 rows hold a
-  dict**, so a single one of them stands the whole value half down.
-  ⚑ **What it no longer costs is the membership answer.** Until 2026-09-14 the blocked return threw
-  that away too, contradicting this project's own rule that a value comparison runs *on top of*
-  membership and never instead of it. Membership now rides along with the block.
-  **What it would take:** a declared rendering for containers — an order and a separator the
-  declaration states rather than the tool guessing — which is a form question, not a missing
-  capability.
+- **accepted** · **~~A cell holding a container blocks the value comparison for the whole registry,
+  not for its row.~~** **Closed 2026-09-24 by `[[parity]] format = "json"`**, which compares the two
+  sides as data rather than as two renderings: the oracle prints each value as JSON, and a map is
+  equal whatever its key order. **The declared rendering this entry asked for turned out to be the
+  wrong shape** — any rendering is a spelling both sides must agree on by construction, where JSON
+  is one an oracle already has and parsing it back leaves nothing to agree on. The measured cost
+  was an adopter's 18 of 66 `default` rows holding a mode-keyed map, one of which stood the whole
+  value half down; a path into one arm reached them a view at a time, and the column is now one
+  comparison. **The `text` form is unchanged and still refuses a container for the registry**,
+  deliberately: refusing only the row would leave a run reporting everything else while silently
+  not checking that one. Membership still rides along with the block, as it has since 2026-09-14.
 - **accepted** · **~~`field` is a single-key lookup, so a nested cell cannot be named.~~**
   **Closed 2026-09-15**, in the form this entry specified: `field = ["default", "primary"]` is a
   path, and a bare string stays exactly one key however many dots it holds. The same spelling reaches
@@ -1407,11 +1423,15 @@ limit is closed, in the same commit that closes it.**
   cell still reports every identifier as declaring no value rather than refusing. **That is
   deliberate, not an oversight** — the two spellings are kept independent so a declaration written
   before paths existed cannot change meaning under one.
-- **accepted** · **An absent field and a field declared null are indistinguishable**, so *"this is
-  an absence on both sides"* cannot be stated. Both read as the entry declaring no value, and an
-  adopter whose manifest uses an explicit `null` to mean *this arm is deliberately nothing* has no
-  way to say it. **What it would take:** reading presence rather than value on the declared side,
-  and a spelling for *the oracle printed nothing here* on the other.
+- **accepted** · **An absent field and a field declared null are indistinguishable in the `text`
+  form**, so *"this is an absence on both sides"* cannot be stated there. Both read as the entry
+  declaring no value. ⚑ **Narrowed 2026-09-24:** under `format = "json"` a declared `null` is the
+  value `null` and must meet a printed `null`, while a field the declaration does not carry stays
+  *records nothing* — so an adopter whose manifest writes an explicit `null` to mean *this arm is
+  deliberately nothing* can say it: declare `null` and have the oracle print `null`. **What is left
+  is the `text` form alone**, which has no spelling for *nothing* on either side and so still
+  collapses the two. **What it would take:** nothing new — a declaration that needs the distinction
+  uses the JSON form.
 - **accepted** · **One registry, one `[[parity]]`**, so a project comparing three fields of one
   declaration needs three registry views of it. Refused rather than allowed because two oracles on
   one registry share a baseline scope and their records could not be told apart. **Measured cost,

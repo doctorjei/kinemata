@@ -42,6 +42,7 @@ worked rows from that project rather than guessed at -- which is where
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -109,6 +110,14 @@ RELATION_SAYS = {
 #: Which side of a value comparison is the claim. Required of a declaration
 #: that compares values and meaningless without one: see :class:`Divergence`.
 AUTHORITIES = ("declared", "produced")
+
+#: How an oracle spells the values it prints, and so how they are compared.
+#:
+#: ``text``, the default and what every parity meant before the key existed:
+#: the printed text against the declared cell rendered with ``str``, a scalar or
+#: a flat list of them. ``json``: each printed value is JSON, and both sides are
+#: compared **as data** -- see :attr:`Oracle.format`.
+FORMATS = ("text", "json")
 
 #: What each authority makes a divergence *mean*. The declared wording is an
 #: adopting project's own, from the class docstring of the conformance test this
@@ -277,6 +286,53 @@ class Oracle:
     #: :attr:`kinemata.claims.Counted.occurrence` -- an oracle that sorts its
     #: output makes a correct declaration red.
     ordered: bool = False
+    #: How the oracle spells each printed value, from :data:`FORMATS`.
+    #:
+    #: ``json`` compares **data rather than text**: each printed value is parsed
+    #: as JSON, the declared cell is taken as the value the declaration holds,
+    #: and they must be equal -- a mapping whatever its key order, a list in
+    #: order, and ``1``, ``"1"`` and ``true`` three different things. Written
+    #: because the ``text`` form refuses any cell holding a mapping, and one such
+    #: cell stands the whole registry's value comparison down: an adopter
+    #: measured 18 of their 66 ``default`` rows as mode-keyed maps. A path into
+    #: one arm reaches each map a view at a time; comparing the column whole,
+    #: scalars and maps together, needed a spelling for a map, and **JSON is one
+    #: the declaration does not have to invent** -- any oracle can print it, and
+    #: parsing it back leaves nothing to agree on by accident.
+    #:
+    #: It also tells a declared ``null`` from a field the declaration does not
+    #: carry, which the ``text`` form collapses: ``null`` must meet a printed
+    #: ``null``, while an absent field stays *the declaration records nothing*.
+    #:
+    #: Refused without :attr:`field`, beside :attr:`translate` (a rewrite of
+    #: text) and beside :attr:`ordered` (a JSON list is already ordered).
+    format: str = "text"
+
+
+def _canonical(value: object) -> str:
+    """One spelling per value, so equal data compares equal as text.
+
+    Keys sorted and separators fixed, so a mapping's order cannot make two equal
+    values differ; ``allow_nan`` off, because ``NaN`` is not JSON and is not
+    equal to itself.
+    """
+    return json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+        allow_nan=False,
+    )
+
+
+def _printed_json(text: str) -> str:
+    """A printed value, parsed and respelled -- or marked as not JSON at all.
+
+    The mark cannot equal a declared value, which is always valid JSON once
+    spelled, so an oracle printing something unparseable diverges on that row
+    and says what it printed, rather than blocking every other row with it.
+    """
+    try:
+        return _canonical(json.loads(text))
+    except ValueError:
+        return f"<not JSON: {text}>"
 
 
 def _listed(values: Iterable[str]) -> str:
@@ -681,6 +737,27 @@ def _declared_values(
     )
 
 
+def _declared_json(entry: Entry, spec: Oracle) -> _DeclaredSide:
+    """One entry's declared side under :attr:`Oracle.format` ``json``.
+
+    **A field the declaration does not carry is absent; a declared ``null`` is
+    the value** ``null``. The text form collapses the two, and has to: it has no
+    spelling for nothing. A value JSON cannot spell -- a YAML date, say -- is
+    refused for the registry as a container is in the text form, since
+    rendering it some other way would be the guess this form exists to avoid.
+    """
+    found = at_path(entry.extra, field_path(spec.field))
+    if found is MISSING:
+        return _DeclaredSide((), True, "", False)
+    try:
+        return _DeclaredSide((_canonical(found),), False, "", False)
+    except (TypeError, ValueError):
+        return _DeclaredSide(None, False, (
+            f"declares {entry.id} with a {spell_path(spec.field)!r} holding "
+            f"{type(found).__name__}, which JSON cannot spell"
+        ), False)
+
+
 def compare(
     registry: Registry,
     spec: Oracle,
@@ -740,6 +817,17 @@ def compare(
             "a parity comparing membership alone cannot be ordered: order is a "
             "property of a declared cell, and this declaration names no field "
             "to compare"
+        )
+    if spec.format not in FORMATS:
+        raise ValueError(
+            f"unknown parity format: {spec.format!r} (known: {', '.join(FORMATS)})"
+        )
+    if spec.format == "json" and (not spec.field or spec.translate or spec.ordered):
+        # The config refuses each of these first, naming which; this is the
+        # second answer, for a caller assembling specs itself.
+        raise ValueError(
+            "a json parity compares one field's values as data: it needs a "
+            "field, and cannot take a text translate or ordered"
         )
     if spec.field and spec.authority not in AUTHORITIES:
         # The config layer refuses this first; this is the second answer, for a
@@ -816,7 +904,11 @@ def compare(
         key = identify.apply(entry.id)
         if key not in values:
             continue  # membership above has already said so
-        side = _declared_values(entry, spec, translate)
+        as_data = spec.format == "json"
+        side = (
+            _declared_json(entry, spec) if as_data
+            else _declared_values(entry, spec, translate)
+        )
         mine, absent, problem = side.values, side.absent, side.problem
         if side.listed:
             (ordered_cells if spec.ordered else set_valued).append(key)
@@ -836,12 +928,17 @@ def compare(
                 relation=spec.relation,
                 **membership,
             )
-        theirs = values[key]
+        theirs = (
+            tuple(_printed_json(text) for text in values[key]) if as_data
+            else values[key]
+        )
         # The default asks whether the two sides hold the same values; an
         # ordered declaration asks whether they hold them in the same sequence.
         # Strictly narrower rather than different: everything the set
-        # comparison calls a disagreement is one here too.
-        agrees = mine == theirs if spec.ordered else set(mine) == set(theirs)
+        # comparison calls a disagreement is one here too. As data, each side is
+        # one value -- an oracle printing two for one identifier diverges.
+        exact = spec.ordered or as_data
+        agrees = mine == theirs if exact else set(mine) == set(theirs)
         if not agrees:
             divergent.append(
                 Divergence(
@@ -849,8 +946,8 @@ def compare(
                     identifier=key,
                     field=spell_path(spec.field),
                     authority=spec.authority,
-                    declared=mine if spec.ordered else tuple(sorted(mine)),
-                    produced=theirs if spec.ordered else tuple(sorted(theirs)),
+                    declared=mine if exact else tuple(sorted(mine)),
+                    produced=theirs if exact else tuple(sorted(theirs)),
                     absent=absent,
                     ordered=spec.ordered,
                 )

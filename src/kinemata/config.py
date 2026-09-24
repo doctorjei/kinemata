@@ -87,7 +87,7 @@ from .contract import (
 )
 from .gates import Gate
 from .interpose import Funnel
-from .parity import AUTHORITIES, RELATIONS, Oracle, Translation
+from .parity import AUTHORITIES, FORMATS, RELATIONS, Oracle, Translation
 from .probe import ACCEPTED_SPELLINGS, OUTCOME_MODES, Outcome, Probe
 from .provenance import DEFAULT_STALE_AFTER, PROVENANCE_REGISTRY
 from .resources import (
@@ -831,6 +831,7 @@ PARITY_KEYS = frozenset(
     {
         "command", "run", "args", "directory", "registry", "extract", "field",
         "authority", "translate", "translate_identifier", "relation", "ordered",
+        "format",
     }
 )
 SHAPE_KEYS = frozenset({"registry", "rule"})
@@ -2156,6 +2157,29 @@ def _build_parities(
                 "claim, or drop the key."
             )
 
+        fmt = str(spec.get("format", "text"))
+        if fmt not in FORMATS:
+            raise ConfigError(
+                f"{path}: [[parity]] {index} declares format {fmt!r}; it must be "
+                f"one of {', '.join(FORMATS)}."
+            )
+        # Each refused rather than ignored: a key that quietly means nothing is
+        # a check its author believes is running.
+        if fmt == "json":
+            clash = (
+                "compares no field, and json is how a field's values are spelled"
+                if not value_field
+                else "declares 'translate', a rewrite of text, which data does "
+                "not have" if spec.get("translate") is not None
+                else "declares 'ordered', and a JSON list is already compared "
+                "in order" if ordered
+                else ""
+            )
+            if clash:
+                raise ConfigError(
+                    f"{path}: [[parity]] {index} declares format 'json' and {clash}."
+                )
+
         argv += _argv(spec.get("args"), f"{path}: [[parity]] {index}", "args")
         built.append(
             Oracle(
@@ -2172,6 +2196,7 @@ def _build_parities(
                 ),
                 relation=relation,
                 ordered=ordered,
+                format=fmt,
             )
         )
     return tuple(built)
