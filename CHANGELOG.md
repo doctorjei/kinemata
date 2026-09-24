@@ -96,6 +96,13 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   `None` — which is what a missing value was matched as. `matches = "^N"` passed every entry
   without the field. A missing or null value now matches no pattern; whether a field must be there
   is still `present`'s claim to make.
+- `kinemata ids` no longer prints a registry's projection again when every line of it is already
+  listed under another registry. It prints that registry's header with a pointer instead. A project
+  comparing several fields of one declaration declares a `where` view per field, and every view
+  used to project the same identifiers again. On an adopter's 99-row manifest, three views printed
+  243 lines and now print 102. `ids -r NAME` still prints a view in full, and each registry's
+  budget is still checked whether or not its lines were printed. A registry that only partly
+  overlaps another is printed in full as before.
 
 **Fixed**
 

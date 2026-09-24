@@ -102,3 +102,37 @@ def project(registry: Registry) -> Projection:
         count=len(entries),
         violations=tuple(violations),
     )
+
+
+def listed_elsewhere(projections: list[Projection]) -> dict[str, str]:
+    """Which projections are wholly inside another, and the one to point at.
+
+    A project comparing several fields of one declaration declares a view per
+    field, each ``where`` stating which rows carry that field, and every view
+    then projected the same identifiers again: measured on an adopter's 99-row
+    manifest, three views printed 240 lines. **The views are right and the copy
+    is not** -- ``tests/test_projection_views.py`` carries the measurement.
+
+    Compared by **rendered line**, not identifier, so a pointer never hides a
+    line that reads differently under the other header. A projection is replaced
+    only when every line is elsewhere; of two identical ones the first declared
+    prints; and the one pointed at is always printed, which holds because a
+    superset that is itself covered has a printed superset of its own. An empty
+    projection is not covered by anything: it has no lines to be elsewhere.
+    """
+    lines = [frozenset(p.text.splitlines()) for p in projections]
+
+    def covers(outer: int, inner: int) -> bool:
+        return outer != inner and lines[inner] <= lines[outer] and (
+            lines[inner] != lines[outer] or outer < inner
+        )
+
+    printed = [
+        i for i in range(len(projections))
+        if not lines[i] or not any(covers(o, i) for o in range(len(projections)))
+    ]
+    return {
+        projections[i].name: projections[next(o for o in printed if covers(o, i))].name
+        for i in range(len(projections))
+        if i not in printed
+    }

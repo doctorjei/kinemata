@@ -1457,13 +1457,20 @@ limit is closed, in the same commit that closes it.**
   uses the JSON form.
 - **accepted** · **One registry, one `[[parity]]`**, so a project comparing three fields of one
   declaration needs three registry views of it. Refused rather than allowed because two oracles on
-  one registry share a baseline scope and their records could not be told apart. **Measured cost,
-  from an adopter: one extra view added 101 lines to `ids`.** **What it would take:** a scope that
-  names the field as well as the registry and the direction, which the value direction already
-  half-does.
-  ⚑ **`where` makes a view cheap to *declare* and does not make it cheap to *carry*** (2026-09-15).
-  The projection cost above is unchanged, and this limit is not closed by it — a project comparing
-  three fields still declares three views, it just no longer has to hand-build each one.
+  one registry share a baseline scope and their records could not be told apart.
+  ⚑ **The views are the right shape, not a workaround, and their cost is closed** (2026-09-24).
+  Each field is carried by a different subset of rows. On an adopter's 99-row manifest `default`
+  is absent from 34 and `type` from 23, so each field's comparison needs its own population. That
+  is what a view's `where` states, and a filter on `[[parity]]` itself is refused in the entry
+  below. Three `where` views over that manifest compare all three fields, and a mutated cell or a
+  missing row is named in its own view. **What the views cost was the projection**: the adopter
+  measured one extra view at +101 lines of `ids`. `ids` now prints a registry whose every line is
+  already listed under another as a one-line pointer, which took that manifest from 243 lines to
+  102. `ids -r NAME` still prints a view in full.
+  ⚑ **What is left, and it is correct:** a row no oracle produces is reported once per view,
+  because each view's parity states its own membership. That is three claims failing, not one
+  claim reported three times. The earlier proposal, a baseline scope naming the field, would not
+  have removed it either.
 - **accepted** · **~~Membership cannot be filtered.~~** **Closed 2026-09-15** with `[[registry]]
   where`, in the form this entry named: the `[[shape]]` guard vocabulary, `Condition` or project
   predicate, selecting which entries a view carries. Measured on an adopter's 99-row manifest

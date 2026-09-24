@@ -71,7 +71,7 @@ from .parity import RELATION_SAYS, Disagreement, Divergence, Parity
 from .parity import survey as parity_survey
 from .probe import Mismatch, Probed
 from .probe import survey as probe_survey
-from .projection import project
+from .projection import listed_elsewhere, project
 from .prose import ILLUSTRATION_ROLE, python_unreadable_literals
 from .provenance import (
     PROVENANCE_REGISTRY,
@@ -258,13 +258,23 @@ def cmd_ids(args: argparse.Namespace) -> int:
     settings = _settings(args)
     _needs_registries(settings, "project")
     over_budget = False
-    for registry in settings.registries:
-        if args.registry and registry.name != args.registry:
-            continue
-        rendered = project(registry)
+    projections = [
+        project(registry) for registry in settings.registries
+        if not args.registry or registry.name == args.registry
+    ]
+    elsewhere = listed_elsewhere(projections)
+    for rendered in projections:
+        home = elsewhere.get(rendered.name)
         if len(settings.registries) > 1 and not args.quiet:
-            print(f"# {registry.name} ({rendered.count} entries, {rendered.size} B)")
-        print(rendered.text, end="")
+            if home:
+                print(f"# {rendered.name} ({rendered.count} entries, every one "
+                      f"listed under {home}; `kinemata ids -r {rendered.name}` "
+                      "prints them)")
+            else:
+                print(f"# {rendered.name} ({rendered.count} entries, "
+                      f"{rendered.size} B)")
+        if not home:
+            print(rendered.text, end="")
         for violation in rendered.violations:
             print(f"warning: {violation}", file=sys.stderr)
             over_budget = True
