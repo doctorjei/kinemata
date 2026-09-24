@@ -25,6 +25,15 @@ import warnings
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+from .languages import (
+    shell_code_only,
+    shell_literals,
+    toml_code_only,
+    toml_literals,
+    yaml_code_only,
+    yaml_literals,
+)
+
 
 @contextmanager
 def reading_foreign_source() -> Iterator[None]:
@@ -431,7 +440,17 @@ def python_annotation_strings(source: str) -> set[str]:
 
 #: Filters by file suffix. A language with no filter is scanned raw, which
 #: over-reports rather than under-reports -- the safe direction for a catch.
-FILTERS = {".py": python_code_only}
+#: Comments blanked and every line kept, per language. ``.py`` also drops its
+#: docstrings; the others are the readers in :mod:`kinemata.languages`, which
+#: give each suffix what ``.py`` always had -- a comment is nothing.
+FILTERS = {
+    ".py": python_code_only,
+    ".sh": shell_code_only,
+    ".bash": shell_code_only,
+    ".yaml": yaml_code_only,
+    ".yml": yaml_code_only,
+    ".toml": toml_code_only,
+}
 
 #: An inline code span, with the run of backticks that opens it matched by an
 #: equal run closing it. A single-backtick pattern reads ``x`` as two empty
@@ -734,7 +753,14 @@ ILLUSTRATION_FILTERS = {".py": outside_illustrations, ".md": outside_illustratio
 MESSAGE_SKELETONS = {".py": python_message_skeletons}
 
 #: Literal extractors by suffix, used for strong/weak classification.
-LITERAL_EXTRACTORS = {".py": python_string_literals}
+LITERAL_EXTRACTORS = {
+    ".py": python_string_literals,
+    ".sh": shell_literals,
+    ".bash": shell_literals,
+    ".yaml": yaml_literals,
+    ".yml": yaml_literals,
+    ".toml": toml_literals,
+}
 
 #: Stricter filters, for antipatterns that describe a *value* rather than a
 #: code shape. Selected with ``scan(..., strings_only=True)``.

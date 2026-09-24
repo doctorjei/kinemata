@@ -738,6 +738,12 @@ retired `spec~box-vault` bounded as prose matches inside the live `spec~box-vaul
 | `unfenced` | `.md` | fenced blocks exempt; inline code spans **not** exempt |
 | `raw` | anything | no filtering at all |
 
+`strings` and `code` read each language kinemata knows the same way — `.py`, shell (`.sh`,
+`.bash`), YAML (`.yaml`, `.yml`) and TOML (`.toml`): **a comment is nothing, a literal that is a
+declared value is a strong finding, and a literal that merely contains it is weak** (listed under
+`-v`, never failing). In shell a bare word is a literal, since it is a string there. Any other
+suffix is read as raw lines, and every hit there is strong — see § Known limits.
+
 `prose` and `unfenced` are not opposites and neither subsumes the other. `prose` exempts what a
 document quotes inline; `unfenced` exempts what a document *displays*. A citation registry wants
 the second, because a specification illustrating its own notation is showing the form rather than
@@ -2005,17 +2011,22 @@ down, and the two shapes at the end are the findings that matter most.
 - **boundary** · **A `yaml-mapping` registry contributes nothing to `check`.** Its entries carry
   no antipatterns, so a green `check` over a mapping registry is not coverage of the mapping.
   **Declared data has no shape to re-derive** — that is a property of the kind, not a gap.
-- **accepted** · **Precision is Python-shaped, and declaring a suffix does not say so.** The
-  filters and the literal extractors in `prose.py` are keyed by suffix, and `.py` is the only key
-  any of them carries. A registry pointed at `.yaml`, `.sh` or `.toml` therefore gets raw line
-  matching — no comment stripping, nothing that knows where a string literal ends. Scanning an
-  unknown language whole over-reports rather than under-reports, which is the safe direction for a
-  catch and is deliberate. **What is not obvious from the knob is the second half: the strong/weak
-  split is computed only on the path where an extractor ran**, so on every other suffix a match
-  takes the default strength, and the default is `strong`. The weak tier does not exist outside
-  `.py` — a substring hit in a YAML comment is a gating finding, and `suffixes` gives a project no
-  way to say otherwise. Reported by an adopting project 2026-09-13 against the published package
-  and confirmed here.
+- **accepted** · **Precision covers the languages kinemata reads, and declaring another suffix
+  does not say so.** ⚑ **Narrowed 2026-09-24:** `.py`, shell (`.sh`, `.bash`), YAML (`.yaml`,
+  `.yml`) and TOML (`.toml`) are each read the same way — **a comment is nothing, a literal that
+  is a declared value is strong, a literal merely containing it is weak** (user, 2026-09-24: *"it
+  should be consistent (so nothing, since comments are nothing for py)"*). A shell word is a
+  literal, since it is a string there; a heredoc, a block scalar and a multi-line string are one
+  literal each, as a triple-quoted Python string is. Until then every suffix but `.py` read raw
+  lines and every hit was strong, so a YAML comment naming a value was a gating finding — reported
+  by an adopting project 2026-09-13 as the reason one of its checks could not migrate.
+  **What is left** is every other suffix: a registry pointed at `.js`, `.ini` or a file with none
+  gets raw line matching, no comment stripping and the default strength, which is `strong`.
+  Scanning an unknown language whole over-reports rather than under-reports, the safe direction
+  for a catch, and deliberate. **Strength is not a knob, on purpose**: marking a suffix weak would
+  silence a real bypass with the noise, and a value spelled inline instead of read from its one
+  source is a bypass in any language. **What it would take:** a reader per language, in
+  `kinemata/languages.py`. **What would revive it:** a project scanning a suffix with no reader.
 - **~~`PythonConstants` reads `ast.Assign` only.~~** True until 2026-09-09: a module-level
   `NAME: Final[str] = "..."` is an `ast.AnnAssign` and was invisible, which in that project hid 32
   annotated constants against 195 readable ones — concentrated in the module they most wanted to

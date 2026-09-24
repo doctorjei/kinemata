@@ -48,6 +48,16 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   printed `null` rather than reading the same as a field the declaration does not carry. Output
   that is not JSON diverges on its own row. Refused without a `field`, beside `translate`, and
   beside `ordered`. **The `text` form, and so every parity written before the key, is unchanged.**
+- **Shell, YAML and TOML are read the way `.py` is.** A comment is nothing, a literal that is a
+  declared value is a strong finding, and a literal that merely contains it is weak — in
+  `.sh`/`.bash`, `.yaml`/`.yml` and `.toml` as in Python. Before, every suffix but `.py` read raw
+  lines and every hit was strong, so `# see box.yaml for the format` failed a build and `echo
+  "restoring box.yaml.bak"` failed it as hard as a real bypass; an adopter named that as the reason
+  one of its checks could not migrate. A shell word is a literal (it is a string there, so `cp
+  box.yaml "$DEST"` stays strong); a heredoc, a block scalar and a multi-line string are one literal
+  each; a `#` inside quotes, a heredoc, a block scalar or a URL stays content. `undeclared` and
+  `clusters` read these files the same way. **What an existing config scanning these suffixes will
+  see:** comment hits disappear, and a hit inside a longer literal stops failing.
 - `[[registry]] only` names the files a registry applies to, and no others — the inverse of
   `home`. An entry fired everywhere except where it was defined, so an import discipline (an
   adopter's bootstrap module kept free of imports) could only be run as a CI step narrowed to that
