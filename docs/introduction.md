@@ -110,6 +110,20 @@ source = "keyspace-manifest.yaml"
 section = "keys"
 where = { present = ["default", "primary"] }
 
+# Two vocabularies can share one lexical shape: a settings key `box.enable_vault`
+# and a filename box.yaml. `defer_to` names the registries whose declared
+# VALUES are not this one's, so `undeclared` hands a candidate matching one of
+# their entries' values -- whole, never in part -- to them instead of calling it
+# undeclared, and says how many it handed over. Declared rather than inferred:
+# a constants module holding filenames can hold key strings too, and deferring to
+# all of it would silence a mistyped key constant. Narrow it with `where` first.
+[[registry]]
+name = "filenames"
+kind = "python-constants"
+modules = ["src/pkg/config.py"]
+where = { id_matches = "_FILE$" }
+# ...and on the closed keyspace:  defer_to = ["filenames"]
+
 # Code shapes: canonical helpers, declared by hand.
 [[registry]]
 name = "helpers"
@@ -857,6 +871,9 @@ outside, so the following are `ConfigError`, not silent skips:
 - a `flatten` level whose value is not a mapping — a matrix with one scalar row is a malformed
   matrix, and skipping it would make the registry quietly smaller
 - a registry that cannot recognize its own identifiers cannot be `closed`
+- a `defer_to` that would hand nothing over — given as a string or an empty list, naming no loaded
+  registry or the registry itself, naming one none of whose entries declares a value, or declared
+  on a registry with no candidates of its own to hand
 - a config declaring **no check at all** — every command it configures would pass by doing nothing
 - a `[[promise]]` with no `until`, an unparseable date, or a `note` with no `by`
 - a `[[count]]` naming a `run` no `[command]` declares, or giving both `command` and `run`

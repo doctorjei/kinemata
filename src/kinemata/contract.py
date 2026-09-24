@@ -309,6 +309,22 @@ class BaseRegistry(ABC):
     #: project's own spelling registry.
     mentions_are_uses: bool = True
 
+    #: Registries whose declared *values* are not this registry's vocabulary,
+    #: by name. A candidate this registry spots that is exactly one of their
+    #: entries' values is theirs, and :func:`deferred_to` says whose.
+    #:
+    #: **Declared, never inferred.** Two vocabularies can share one lexical
+    #: shape -- a settings key ``box.enable_vault`` and a filename :shown:`box.yaml`
+    #: -- and an adopting project's closed keyspace reported the second at the
+    #: line declaring it as another registry's constant (2026-09-24). The
+    #: obvious fix, *skip whatever any registry declares*, was measured against
+    #: that same project's config and is wrong: its constants registry also
+    #: holds key strings (``SETUP_MARKER_KEY = "system.setup_completed"``), so a
+    #: mistyped key constant would have been silenced at the only line its
+    #: literal appears on. Only the project knows which values are which, so it
+    #: names the registry -- narrowed with ``where`` when one mixes both.
+    defer_to: tuple[str, ...] = ()
+
     # -- the one required method ------------------------------------------
 
     @abstractmethod
@@ -418,7 +434,7 @@ def member(registry: object, attribute: str) -> Any:
 #: of them changes because fewer rows are in view.
 _CARRIED = (
     "name", "closed", "budget", "line_budget", "boundary", "match_mode",
-    "suffixes", "machinery", "mentions_are_uses",
+    "suffixes", "machinery", "mentions_are_uses", "defer_to",
 )
 
 
@@ -503,6 +519,24 @@ def closure_guard(registry: Registry) -> None:
         # A class with no candidates() gets the base's, which raises naming the
         # project's own class -- borrowed so there is one wording of this refusal.
         member(registry, "candidates")("")
+
+
+def deferred_to(identifier: str, registries: Iterable[Registry]) -> str | None:
+    """Which of ``registries`` declares ``identifier`` as an entry's value.
+
+    Read off the entries' ``antipatterns`` -- the spellings a registry already
+    says *are* one of its entries, and what its own scan reports as a bypass --
+    matched against the **whole** identifier. The contract carries a value
+    nowhere else: ``extra["value"]`` is one adapter's convention, and asking
+    ``declared()`` is the wrong question, a constant's identifier being its
+    *name*. A partial match is not deference: ``box.yaml`` is not declared by an
+    entry whose value is ``yaml``.
+    """
+    for registry in registries:
+        for entry in registry.entries():
+            if any(re.fullmatch(pattern, identifier) for pattern in entry.antipatterns):
+                return registry.name
+    return None
 
 
 def undeclared(registry: BaseRegistry, text: str) -> list[str]:

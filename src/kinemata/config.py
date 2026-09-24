@@ -79,6 +79,7 @@ from .contract import (
     Selected,
     closure_guard,
     field_path,
+    member,
     missing_members,
     spell_path,
     usable_boundary,
@@ -858,7 +859,7 @@ ROOT_KEYS = frozenset(
 REGISTRY_KEYS = frozenset(
     {
         "name", "kind", "closed", "allow_empty", "suffixes", "machinery",
-        "match_mode", "boundary", "where",
+        "match_mode", "boundary", "where", "defer_to",
     }
 )
 
@@ -1263,6 +1264,8 @@ def load(path: str | Path) -> Settings:
             registry.suffixes = tuple(spec["suffixes"])
         if "machinery" in spec:
             registry.machinery = tuple(spec["machinery"])
+        if "defer_to" in spec:
+            registry.defer_to = _deferral(spec["defer_to"], f"{path}: registry {registry.name!r}")
         # Matching behavior, same place and for the same reason. An adapter's
         # answer is a default: it knows what shape its own data model usually
         # has, and only the project knows what its identifiers are actually
@@ -1320,6 +1323,8 @@ def load(path: str | Path) -> Settings:
             ) from exc
 
         registries.append(registry)
+
+    _check_deferrals(registries, path)
 
     # **The key space is project-wide, not per file.** A project may keep more
     # than one bibliography, and only something holding all of them can see a
@@ -1847,6 +1852,66 @@ def _commands(raw: Any, path: Path) -> dict[str, tuple[str, ...]]:
             )
         declared[name] = tuple(str(part) for part in argv)
     return declared
+
+
+def _deferral(raw: Any, where: str) -> tuple[str, ...]:
+    """A ``defer_to`` list: registry names, refused when it is anything else.
+
+    A string is refused rather than iterated, on :func:`_argv`'s evidence, and an
+    empty list because a deferral to nobody is a key that does nothing.
+    """
+    if (
+        isinstance(raw, str)
+        or not isinstance(raw, (list, tuple))
+        or not raw
+        or not all(isinstance(name, str) and name for name in raw)
+    ):
+        raise ConfigError(
+            f"{where}: defer_to must be a non-empty list of registry names, "
+            f"not {raw!r}."
+        )
+    return tuple(raw)
+
+
+def _check_deferrals(registries: Sequence[Registry], path: Path) -> None:
+    """Every ``defer_to`` names a registry that can be deferred to, from one that
+    could defer.
+
+    Asked once every registry is built, since a deferral may name one declared
+    later in the file. **Each refusal is a deferral that would do nothing** --
+    the inert declaration this loader refuses everywhere else: a name nothing
+    answers to, a registry deferring to itself, one that recognizes no
+    identifiers and so never has a candidate to hand over, and a target none of
+    whose entries declares a value, which no candidate could ever match.
+    """
+    by_name = {registry.name: registry for registry in registries}
+    for registry in registries:
+        targets = member(registry, "defer_to")
+        if not targets:
+            continue
+        where = f"{path}: registry {registry.name!r}"
+        try:
+            member(registry, "candidates")("")
+        except NotImplementedError:
+            raise ConfigError(
+                f"{where} declares defer_to but recognizes no identifiers of its "
+                "own, so it never has a candidate to defer. Deference applies to "
+                "`kinemata undeclared`, which needs candidates()."
+            ) from None
+        for target in targets:
+            if target == registry.name:
+                raise ConfigError(f"{where} defers to itself.")
+            if target not in by_name:
+                raise ConfigError(
+                    f"{where} defers to {target!r}, which no loaded registry is "
+                    f"called (loaded: {', '.join(sorted(by_name))})."
+                )
+            if not any(entry.antipatterns for entry in by_name[target].entries()):
+                raise ConfigError(
+                    f"{where} defers to {target!r}, none of whose entries "
+                    "declares a value -- so no candidate could ever match one, "
+                    "and the deferral would do nothing."
+                )
 
 
 def _argv(raw: Any, where: str, key: str) -> tuple[str, ...]:

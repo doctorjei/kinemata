@@ -244,7 +244,18 @@ machinery: [path]      # files that declare these entries rather than use them
 mentions_are_uses: bool # is "nothing mentions this" a finding at all?
 boundary: charclass    # what may not abut an identifier for a match to count
 match_mode: str        # which filter table the scan reads through
+defer_to: [registry]   # registries whose declared values are not this one's vocabulary
 ```
+
+**`defer_to`** — a closed registry's syntax recognizes a *shape*, and a second vocabulary can
+share it: an adopting project's keyspace spotted *box.yaml* at the line declaring it as another
+registry's constant. The contract carries a declared value only as an entry's `antipatterns`, so
+that is what is asked — a candidate matching one **whole** is the other registry's, and
+`undeclared` reports the handover as a count rather than dropping it. **It is declared, never
+inferred**, because the inference was measured wrong on the same project: its constants registry
+also held key strings, and deferring to every declared value would have silenced a mistyped key
+constant at the only line its literal appears on. Only the project knows which values belong to
+which vocabulary, and `where` is how it says so of a registry that mixes them.
 
 **`closed`** — kanibako's keyspace is closed: an undeclared key is not a key, and
 reading or setting one is an error that names it. Not every registry can start that way;

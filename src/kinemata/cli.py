@@ -63,7 +63,7 @@ from .claims import CLAIMS_REGISTRY, ClaimsError, Verification, verify
 from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
 from .confirm import ConfirmError, apply, dating, plan, redate
 from .context import measure
-from .contract import BaseRegistry, Entry, member
+from .contract import BaseRegistry, Entry, deferred_to, member
 from .exclusion import audit, excluded, relative_paths
 from .gates import WORKFLOW_DIR, enforced, uncovered
 from .literals import clusters
@@ -457,7 +457,10 @@ def _strong(reports: list[tuple[str, Report]]) -> list[tuple[str, Bypass]]:
 
 
 def _strays(
-    args: argparse.Namespace, settings: Settings, target: Path
+    args: argparse.Namespace,
+    settings: Settings,
+    target: Path,
+    deferred: dict[str, dict[str, int]] | None = None,
 ) -> list[tuple[object, list[Stray]]]:
     """Catch A's scan, per registry that can answer.
 
@@ -471,6 +474,12 @@ def _strays(
     clean closed world nobody asked about; ``baseline`` legitimately runs on a
     project where no registry recognizes its own identifiers and simply has no
     strays to record.
+
+    **A registry's ``defer_to`` is applied here**, so ``baseline`` records exactly
+    what ``undeclared`` would fail on. A candidate another named registry
+    declares as a value is that registry's, and ``deferred`` -- when given --
+    counts them per registry and owner, because a finding that went elsewhere
+    must still be visible as having gone.
     """
     answered: list[tuple[object, list[Stray]]] = []
     for registry in settings.registries:
@@ -492,6 +501,18 @@ def _strays(
             )
         except NotImplementedError:
             continue  # cannot recognize an identifier; reported by the caller
+        targets = member(registry, "defer_to")
+        if targets:
+            named = [r for r in settings.registries if r.name in targets]
+            kept: list[Stray] = []
+            for stray in found:
+                owner = deferred_to(stray.identifier, named)
+                if owner is None:
+                    kept.append(stray)
+                elif deferred is not None:
+                    tally = deferred.setdefault(registry.name, {})
+                    tally[owner] = tally.get(owner, 0) + 1
+            found = kept
         answered.append((registry, found))
     return answered
 
@@ -737,7 +758,8 @@ def cmd_undeclared(args: argparse.Namespace) -> int:
     _needs_registries(settings, "check against")
     target = _target(args, settings)
 
-    answered = _strays(args, settings, target)
+    deferred: dict[str, dict[str, int]] = {}
+    answered = _strays(args, settings, target, deferred)
     if not answered:
         raise ConfigError(
             "no declared registry can recognize its own identifiers, so none "
@@ -771,13 +793,23 @@ def cmd_undeclared(args: argparse.Namespace) -> int:
         # the exempt with the live teaches them to cross-reference the baseline
         # to tell which is which.
         live = [s for s in found if id(s) not in exempt] if closed else found
+        # Not suppressed by --quiet, on the rule `check`'s `silent:` count
+        # follows: what went to another registry narrowed this one's answer.
+        handed = ", ".join(
+            f"{count} to {owner}"
+            for owner, count in sorted(deferred.get(registry.name, {}).items())
+        )
         if not live:
             if not args.quiet:
                 print(f"# {registry.name} ({label}): no undeclared identifiers.")
+            if handed:
+                print(f"  deferred: {handed} (declared there as a value)")
             continue
         print(f"# {registry.name} ({label})")
         for stray in live:
             print(f"  {stray}")
+        if handed:
+            print(f"  deferred: {handed} (declared there as a value)")
         if closed:
             failed += len(live)
 

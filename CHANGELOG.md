@@ -30,6 +30,15 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   rule is legal only where every arm of a default is a whole-value `$VAR`: the scalar rows were
   expressible with `each_matches`, the mode-keyed ones with nothing. **An empty container fails**,
   because the same manifest declares `default: {}` on rows a vacuous pass would have certified.
+- `[[registry]] defer_to` names the registries whose declared **values** are not this registry's
+  vocabulary. A closed keyspace spotting *box.yaml* — a filename sharing a settings key's shape —
+  at the line declaring it as another registry's constant used to call it undeclared; with
+  `defer_to` it hands a candidate matching one of the named registries' values to them, and
+  `undeclared` prints how many it handed over. **Declared, not inferred**: the adopter who reported
+  it keeps key strings in the same constants registry as the filenames, so deferring to every
+  declared value would have silenced a mistyped key constant. Narrow a mixed registry with `where`.
+  Refused when it would do nothing — a string, an empty list, a name no registry answers to, the
+  registry itself, a target declaring no values, or a registry with no candidates to hand over.
 
 **Fixed**
 
