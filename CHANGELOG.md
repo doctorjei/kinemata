@@ -106,6 +106,11 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 **Fixed**
 
+- A web address or a relative link holding a balanced pair of parentheses was cut at its first
+  `)`, so a link to Wikipedia's `Script_(Unix)` page was checked as `…Script_(Unix` and reported
+  dead. Found running against `nvbn/thefuck`, where it fired on every tree of the
+  project's history. A `)` now ends an address only when it does not close a `(` inside it, as
+  markdown reads a link target. Prose that wraps an address in parentheses keeps its own.
 - The reference sheet's list of clause boundaries was short by one. A **sentence end** has bounded a
   negation since before `0.1.0` and the list never said so, which understates how narrowly a
   negation reaches — the difference between *"there is no `a.py`. The loader is `b.py`"* withdrawing

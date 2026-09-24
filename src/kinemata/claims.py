@@ -247,14 +247,24 @@ _BACKTICKED = re.compile(r"(`+)([^`\s]+)\1")
 #: The bracket text is captured as well as the target, so that
 #: :func:`_link_claims` can tell a link from something that merely precedes a
 #: parenthesis. It is group 1; the target is group 2.
-_LINK = re.compile(r"\[([^\]]*)\]\(([^)#\s]+)[^)]*\)")
+#:
+#: **A balanced pair inside the target is part of it**, as markdown reads one:
+#: :shown:`[draft](notes_(draft).md)` names :shown:`notes_(draft).md`. The target used
+#: to stop at its first ``)``, the same cut :data:`_URL` made. A lone ``(`` is
+#: still an ordinary character.
+_LINK = re.compile(r"\[([^\]]*)\]\(((?:[^()#\s]|\([^()#\s]*\)|\()+)[^)]*\)")
 #: A short hash in an inline code span. Delimiter run matched deliberately, for
 #: the reason :data:`_BACKTICKED` gives: this project's own docstrings spell a
 #: cited commit as a doubled literal.
 _SHA = re.compile(r"(`+)([0-9a-f]{7,12})\1")
 #: A web address, whether it sits in a link target, in backticks, or bare in
 #: prose. All three spellings appear in this project's own documents.
-_URL = re.compile(r"https?://[^\s)>\]\"'`]+")
+#:
+#: **A ``)`` ends the address unless it closes a ``(`` inside it.** Prose that
+#: wraps an address keeps its own parenthesis, and a Wikipedia page such as
+#: ``Script_(Unix)`` keeps its. Found on ``nvbn/thefuck``, where the address
+#: was cut at its first ``)`` and reported dead on every tree of its history.
+_URL = re.compile(r"https?://(?:[^\s()>\]\"'`]|\([^\s()>\]\"'`]*\)|\()+")
 
 #: Status codes that settle a URL as gone. Everything else that is not a success
 #: is ambiguous from here -- see :func:`_reach`.

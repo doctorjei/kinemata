@@ -933,7 +933,42 @@ def test_a_server_refusing_head_is_asked_again_with_get(tmp_path, server):
     assert not [line for line in result.unavailable if "headless" in line]
 
 
+
 # -- shapes a foreign project reported, and this tree never had ---------------
+
+
+def test_a_url_holding_parentheses_is_read_whole(tmp_path, server):
+    """Found on ``nvbn/thefuck``, whose README links a Wikipedia page as
+    :shown:`[script](https://en.wikipedia.org/wiki/Script_(Unix))`.
+
+    The address stopped at its first ``)``, so ``…Script_(Unix`` was asked for
+    and reported dead on every tree of that history. Markdown reads a balanced
+    pair inside a target as part of it, and so does this now.
+    """
+    write(tmp_path, "doc.md", f"See [the page]({server}/Script_(Unix)-404).\n")
+    assert broken(verify(tmp_path, external=True)) == {
+        ("url", f"{server}/Script_(Unix)-404")
+    }
+
+
+def test_a_bare_url_inside_parentheses_still_ends_before_them(tmp_path, server):
+    """The control: prose that wraps an address keeps its own ``)``, and a
+    balanced pair inside the address does not change that."""
+    write(tmp_path, "doc.md",
+          f"(see {server}/plain-404) and (see {server}/Script_(Unix)-404)\n")
+    assert broken(verify(tmp_path, external=True)) == {
+        ("url", f"{server}/plain-404"),
+        ("url", f"{server}/Script_(Unix)-404"),
+    }
+
+
+def test_a_relative_link_holding_parentheses_is_read_whole(tmp_path):
+    """The same class in the other extractor: a target cut at its first ``)``
+    names a file that was never there."""
+    write(tmp_path, "notes_(draft).md", "x\n")
+    write(tmp_path, "doc.md",
+          "[here](notes_(draft).md) and [gone](gone_(draft).md)\n")
+    assert broken(verify(tmp_path)) == {("link", "gone_(draft).md")}
 
 
 def test_a_windows_environment_path_is_not_a_claim(tmp_path):
