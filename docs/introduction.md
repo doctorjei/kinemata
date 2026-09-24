@@ -1697,9 +1697,26 @@ limit is closed, in the same commit that closes it.**
   ⚑ **This is the one entry on the list that more work would simply fix**, and it is marked
   `accepted` rather than `boundary` for exactly that reason: nothing about the model limits the
   sample, only effort has. The corpus is kept so the run can be repeated. **Treat every figure
-  above as measured on the easy case** — a project with sparse or stale documentation is the case
-  nobody here has run, and the claims checker is the mechanism most likely to behave differently
-  on it.
+  above as measured on the easy case.**
+  ⚑ **The hard case, run 2026-09-24: `nvbn/thefuck`**, a README-only project, against labeled
+  history. The labeled set was its 40 most recent commits touching only `.md`, each run at its
+  parent. The rubric and predictions were fixed before any output was read.
+  - **31 of the 40 fixes were prose**: wording, typos, version numbers.
+  - Of the 9 that touched a line carrying a checkable claim, **none changed a stale path**. Every
+    path case was prose on a line that happened to carry one.
+  - The starter config caught **none of the 9**. With `external = true` it caught **2**: links
+    to a deleted fork and to a deleted branch. Both are judged against today's web, not the web
+    at the time of the fix.
+  - At HEAD it reported **2 findings under the starter config and 4 with URLs on, none true**.
+    Two of those are a rule named like a file (:shown:`test.py`) and a user-side file named bare
+    (:shown:`settings.py`), which are syntactically identical to a path claim. The other two are URL
+    defects this run found.
+  - **The same two false reports fire at every parent**, so a starter-config gate would be red on
+    every commit in that history.
+
+  **On sparse documentation, staleness is prose, and the tree-side claim kinds have little to
+  find.** What would move this entry is a third shape of project: one whose documentation names
+  its own files heavily, measured the same way.
 
 ### Found by the first outside audit, 2026-09-09
 
