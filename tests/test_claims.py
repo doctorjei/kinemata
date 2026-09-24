@@ -769,7 +769,12 @@ class _Answers(BaseHTTPRequestHandler):
     """Serves a status chosen by the path, so a test can name what it wants."""
 
     def do_HEAD(self):  # http.server's spelling, not ours
-        code = 405 if "headless" in self.path else self._code()
+        if "headless" in self.path:
+            code = 405
+        elif "headmissing" in self.path:
+            code = 404
+        else:
+            code = self._code()
         self.send_response(code)
         self.end_headers()
 
@@ -932,6 +937,27 @@ def test_a_server_refusing_head_is_asked_again_with_get(tmp_path, server):
     assert not result.broken
     assert not [line for line in result.unavailable if "headless" in line]
 
+
+def test_a_head_404_is_confirmed_with_get_before_it_is_called_dead(tmp_path, server):
+    """Some servers answer ``HEAD`` with 404 for a page ``GET`` serves.
+
+    Found on ``nvbn/thefuck``: a ``marketplace.visualstudio.com`` item answers
+    ``HEAD`` 404 and ``GET`` 200, and it was reported dead on every tree of that
+    history. A dead verdict is the one this check fails a gate on, so it is the
+    one worth a second request. A live ``HEAD`` still costs one.
+    """
+    write(tmp_path, "doc.md", f"See {server}/headmissing-200\n")
+    result = verify(tmp_path, external=True)
+    assert not result.broken
+    assert not [line for line in result.unavailable if "headmissing" in line]
+
+
+def test_a_page_gone_to_both_methods_is_still_dead(tmp_path, server):
+    """The control: the second request confirms a 404 rather than excusing it."""
+    write(tmp_path, "doc.md", f"See {server}/headmissing-404\n")
+    assert broken(verify(tmp_path, external=True)) == {
+        ("url", f"{server}/headmissing-404")
+    }
 
 
 # -- shapes a foreign project reported, and this tree never had ---------------

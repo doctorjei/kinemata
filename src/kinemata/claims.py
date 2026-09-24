@@ -741,10 +741,15 @@ def _reach(url: str, timeout: float = EXTERNAL_TIMEOUT) -> bool | None:
     the reader would learn to skim it.
 
     ``HEAD`` first because a link check has no use for the body, then ``GET``
-    when the server refuses the *method* rather than the resource.
+    when the server refuses the *method* rather than the resource, **and
+    before any dead verdict.** Some servers answer ``HEAD`` with 404 for a page
+    ``GET`` serves. Found on ``nvbn/thefuck``, where a Visual Studio Marketplace
+    item did that and was reported dead on every tree of its history. Dead is the
+    one verdict that fails a gate, so it is the one confirmed. A live ``HEAD``
+    still costs a single request.
     """
     verdict, status = _ask(url, "HEAD", timeout)
-    if status in HEAD_REFUSED:
+    if status in HEAD_REFUSED or verdict is False:
         verdict, _ = _ask(url, "GET", timeout)
     return verdict
 

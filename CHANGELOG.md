@@ -111,6 +111,10 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   dead. Found running against `nvbn/thefuck`, where it fired on every tree of the
   project's history. A `)` now ends an address only when it does not close a `(` inside it, as
   markdown reads a link target. Prose that wraps an address in parentheses keeps its own.
+- A link answered `HEAD` 404 was reported dead without asking again, and some servers answer
+  `HEAD` 404 for a page `GET` serves. A Visual Studio Marketplace item did this on the same
+  project. A dead verdict, the one that fails a gate, is now confirmed with `GET`. A live link
+  still costs one request.
 - The reference sheet's list of clause boundaries was short by one. A **sentence end** has bounded a
   negation since before `0.1.0` and the list never said so, which understates how narrowly a
   negation reaches — the difference between *"there is no `a.py`. The loader is `b.py`"* withdrawing

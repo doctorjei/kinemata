@@ -1710,7 +1710,7 @@ limit is closed, in the same commit that closes it.**
   - On the current tree it reported **2 findings under the starter config and 4 with URLs on,
     none true**. Two of those are a rule named like a file (:shown:`test.py`) and a user-side file
     named bare (:shown:`settings.py`), which are syntactically identical to a path claim. The
-    other two were URL defects this run found: an address cut at its first `)`, fixed since,
+    other two were URL defects this run found, both fixed since: an address cut at its first `)`,
     and a `HEAD` 404 taken as final when `GET` serves the page.
   - **The same two false reports fire at every parent**, so a starter-config gate would be red on
     every commit in that history.
