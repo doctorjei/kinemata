@@ -246,6 +246,17 @@ def crossings(root: str | Path) -> list[Crossing]:
     return [found for _, _, found in _tree(Path(root)) if found is not None]
 
 
+def _applies(rel: str, exclusions: Sequence[str], only: Sequence[str]) -> bool:
+    """Does a registry read this file: not excluded, and inside its ``only``.
+
+    One spelling for the three scans that read a registry's files, so what a
+    registry applies to cannot differ between ``check``, ``undeclared`` and
+    ``unused``. ``only`` is read with the same segment matcher as ``exclude`` --
+    see :attr:`kinemata.contract.BaseRegistry.only`.
+    """
+    return not excluded(rel, exclusions) and (not only or excluded(rel, only))
+
+
 def _walk(
     root: Path, suffixes: Sequence[str], within: Path | None = None
 ) -> Iterator[Path]:
@@ -347,9 +358,10 @@ def scan(
         return []
 
     found: list[Bypass] = []
+    only = tuple(member(registry, "only"))
     for path in _walk(root, suffixes, Path(within) if within else None):
         rel = str(path.relative_to(root))
-        if excluded(rel, exclusions):
+        if not _applies(rel, exclusions, only):
             continue
         try:
             source = path.read_text(errors="ignore")
@@ -511,9 +523,10 @@ def strays(
     strings_only = mode == "strings"
 
     found: list[Stray] = []
+    only = tuple(member(registry, "only"))
     for path in _walk(root, tuple(suffixes), Path(within) if within else None):
         rel = str(path.relative_to(root))
-        if excluded(rel, exclusions):
+        if not _applies(rel, exclusions, only):
             continue
         try:
             source = path.read_text(errors="ignore")
@@ -630,9 +643,10 @@ def unused(
         else {}
     )
 
+    only = tuple(member(registry, "only"))
     for path in _walk(Path(root), suffixes, Path(within) if within else None):
         rel = str(path.relative_to(root))
-        if excluded(rel, exclusions):
+        if not _applies(rel, exclusions, only):
             continue
         text = path.read_text(errors="ignore")
         filtered = shows.get(path.suffix)

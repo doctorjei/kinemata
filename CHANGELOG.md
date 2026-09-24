@@ -48,6 +48,12 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   printed `null` rather than reading the same as a field the declaration does not carry. Output
   that is not JSON diverges on its own row. Refused without a `field`, beside `translate`, and
   beside `ordered`. **The `text` form, and so every parity written before the key, is unchanged.**
+- `[[registry]] only` names the files a registry applies to, and no others — the inverse of
+  `home`. An entry fired everywhere except where it was defined, so an import discipline (an
+  adopter's bootstrap module kept free of imports) could only be run as a CI step narrowed to that
+  file; a plain `check` fired it across the whole tree. `only` is read with the same whole-segment
+  matcher as `exclude`, honored by `check`, `review`, `undeclared` and `unused` alike, and refused
+  at load when a fragment matches no file the registry reads.
 
 **What an existing config will see change**
 

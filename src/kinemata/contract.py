@@ -311,6 +311,21 @@ class BaseRegistry(ABC):
     #: project's own spelling registry.
     mentions_are_uses: bool = True
 
+    #: The only files this registry applies to, as ``exclude`` fragments -- whole
+    #: path segments, a leading ``/`` anchoring (:mod:`kinemata.exclusion`).
+    #: Empty applies it everywhere, which is every registry before the key.
+    #:
+    #: **The inverse of** :attr:`home`. An entry fires everywhere except where it
+    #: is defined, and nothing said *fires only here* -- which is what an import
+    #: discipline needs: an adopting project wants its bootstrap module kept free
+    #: of imports (named 2026-09-13), a pattern that is a finding in one file and
+    #: the ordinary shape of every other. Narrowing a run to that file with a
+    #: path argument worked, but only in a CI step written for it; a plain
+    #: ``check`` fired the registry across the whole tree. A fragment that
+    #: matches no file this registry reads is refused at load: a registry scoped
+    #: to nothing checks nothing, and reads exactly like one that passed.
+    only: tuple[str, ...] = ()
+
     #: Registries whose declared *values* are not this registry's vocabulary,
     #: by name. A candidate this registry spots that is exactly one of their
     #: entries' values is theirs, and :func:`deferred_to` says whose.
@@ -462,7 +477,7 @@ def member(registry: object, attribute: str) -> Any:
 #: of them changes because fewer rows are in view.
 _CARRIED = (
     "name", "closed", "budget", "line_budget", "boundary", "match_mode",
-    "suffixes", "machinery", "mentions_are_uses", "defer_to",
+    "suffixes", "machinery", "mentions_are_uses", "defer_to", "only",
 )
 
 

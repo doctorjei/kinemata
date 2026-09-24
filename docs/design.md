@@ -245,6 +245,7 @@ mentions_are_uses: bool # is "nothing mentions this" a finding at all?
 boundary: charclass    # what may not abut an identifier for a match to count
 match_mode: str        # which filter table the scan reads through
 defer_to: [registry]   # registries whose declared values are not this one's vocabulary
+only: [path]           # the only files this registry applies to -- the inverse of home
 ```
 
 **`defer_to`** — a closed registry's syntax recognizes a *shape*, and a second vocabulary can
@@ -256,6 +257,14 @@ inferred**, because the inference was measured wrong on the same project: its co
 also held key strings, and deferring to every declared value would have silenced a mistyped key
 constant at the only line its literal appears on. Only the project knows which values belong to
 which vocabulary, and `where` is how it says so of a registry that mixes them.
+
+**`only`** — the inverse of `home`. An entry fires everywhere except where it is defined, so a
+pattern that is a finding in one module and ordinary everywhere else — an adopting project's
+import-free bootstrap module — had no declarative form. `only` names the files a registry applies
+to, **read with the same whole-segment matcher as `exclude`**, so one rule governs every path
+fragment a config holds; every scan that reads a registry's files honors it through one predicate.
+A fragment matching no file the registry reads is refused, because a registry scoped to nothing
+checks nothing and reads green.
 
 **`closed`** — kanibako's keyspace is closed: an undeclared key is not a key, and
 reading or setting one is an error that names it. Not every registry can start that way;

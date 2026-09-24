@@ -126,6 +126,21 @@ modules = ["src/pkg/config.py"]
 where = { id_matches = "_FILE$" }
 # ...and on the closed keyspace:  defer_to = ["filenames"]
 
+# The inverse of `home`: a registry that applies ONLY to the files named, read
+# with the same segment matcher as `exclude`. An import discipline is a finding
+# in one module and the ordinary shape of every other. A fragment matching no
+# file the registry reads is refused -- a registry scoped to nothing checks
+# nothing and reads green.
+[[registry]]
+name = "bootstrap-imports"
+kind = "code-patterns"
+match_mode = "code"
+only = ["src/pkg/bootstrap.py"]
+
+  [[registry.entry]]
+  id = "no-imports-in-bootstrap"
+  antipatterns = ['^\s*(import|from)\s']
+
 # Code shapes: canonical helpers, declared by hand.
 [[registry]]
 name = "helpers"
@@ -890,6 +905,8 @@ outside, so the following are `ConfigError`, not silent skips:
 - a `flatten` level whose value is not a mapping — a matrix with one scalar row is a malformed
   matrix, and skipping it would make the registry quietly smaller
 - a registry that cannot recognize its own identifiers cannot be `closed`
+- an `only` that would scope a registry to nothing — empty, or holding a fragment that matches no
+  file the registry reads
 - a `defer_to` that would hand nothing over — given as a string or an empty list, naming no loaded
   registry or the registry itself, naming one none of whose entries declares a value, or declared
   on a registry with no candidates of its own to hand
@@ -1977,12 +1994,14 @@ down, and the two shapes at the end are the findings that matter most.
   **What would revive it:** a second data model with a parametric axis fed from outside the scanned
   corpus. One is an adopter's architecture; two is a shape. Reported 2026-09-18 from a read-only
   scoping pass, so even the first is a design report rather than a built adapter hitting it.
-- **accepted** · **Registry scoping is inverted, with no exception.** Entries fire everywhere
-  except `home`; there is no "fires only inside this one file", which is what an import-discipline
-  check needs. Nothing about the model prevents the inverse scope. ⚑ **"Nobody has needed it
-  enough" until 2026-09-13**, when an adopting project named the check it needs one for — that
-  their bootstrap module stays import-free. One named need is not a queue, so the mark does not
-  move; what changed is that this entry can no longer justify itself by saying nobody asked.
+- **accepted** · **~~Registry scoping is inverted, with no exception.~~** **Closed 2026-09-24 by
+  `[[registry]] only`.** Entries fired everywhere except `home`, and nothing said *fires only inside
+  this one file*, which is what an import-discipline check needs — an adopting project named theirs
+  on 2026-09-13: their bootstrap module stays import-free. `only` names the files a registry
+  applies to, read with **the same segment matcher as `exclude`**, and every scan that reads a
+  registry's files — `check`, `review`, `undeclared`, `unused` — honors it through one predicate. A
+  fragment that matches no file the registry reads is refused at load, since a registry scoped to
+  nothing reads exactly like one that passed.
 - **boundary** · **A `yaml-mapping` registry contributes nothing to `check`.** Its entries carry
   no antipatterns, so a green `check` over a mapping registry is not coverage of the mapping.
   **Declared data has no shape to re-derive** — that is a property of the kind, not a gap.

@@ -61,6 +61,7 @@ from .adapters.substitutions import Substitutions
 from .adapters.values import ValueRegistry
 from .baseline import BASELINE_NAME
 from .bypass import MODE_FILTERS, git_ignored
+from .bypass import _walk as _files
 from .citations import DEFAULT_ACCOMPANY_MAX
 from .claims import (
     CLAIMS_REGISTRY,
@@ -85,6 +86,7 @@ from .contract import (
     strings,
     usable_boundary,
 )
+from .exclusion import matches
 from .gates import Gate
 from .interpose import Funnel
 from .parity import AUTHORITIES, FORMATS, RELATIONS, Oracle, Translation
@@ -864,7 +866,7 @@ ROOT_KEYS = frozenset(
 REGISTRY_KEYS = frozenset(
     {
         "name", "kind", "closed", "allow_empty", "suffixes", "machinery",
-        "match_mode", "boundary", "where", "defer_to",
+        "match_mode", "boundary", "where", "defer_to", "only",
     }
 )
 
@@ -1273,6 +1275,14 @@ def load(path: str | Path) -> Settings:
             registry.machinery = _strings(
                 spec["machinery"], f"{path}: registry {registry.name!r} machinery"
             )
+        if "only" in spec:
+            where_only = f"{path}: registry {registry.name!r} only"
+            registry.only = _strings(spec["only"], where_only)
+            if not registry.only:
+                raise ConfigError(
+                    f"{where_only} is empty, which would apply the registry to "
+                    "nothing. Leave the key out to apply it everywhere."
+                )
         if "defer_to" in spec:
             registry.defer_to = _deferral(spec["defer_to"], f"{path}: registry {registry.name!r}")
         # Matching behavior, same place and for the same reason. An adapter's
@@ -1334,6 +1344,11 @@ def load(path: str | Path) -> Settings:
         registries.append(registry)
 
     _check_deferrals(registries, path)
+    _check_scopes(
+        registries, root,
+        _strings(project.get("suffixes", (".py",)), f"{path}: [project] suffixes"),
+        path,
+    )
 
     # **The key space is project-wide, not per file.** A project may keep more
     # than one bibliography, and only something holding all of them can see a
@@ -1880,6 +1895,32 @@ def _deferral(raw: Any, where: str) -> tuple[str, ...]:
             f"not {raw!r}."
         )
     return names
+
+
+def _check_scopes(
+    registries: Sequence[Registry], root: Path, suffixes: Sequence[str], path: Path
+) -> None:
+    """Every ``only`` fragment matches a file its registry reads.
+
+    Read against the registry's own file set -- its ``suffixes``, or the
+    project's -- because a fragment naming a file the registry never opens scopes
+    it to nothing just as surely as one naming a file that does not exist, and a
+    registry scoped to nothing reads exactly like one that passed.
+    """
+    for registry in registries:
+        only = member(registry, "only")
+        if not only:
+            continue
+        reads = member(registry, "suffixes") or suffixes
+        files = [str(file.relative_to(root)) for file in _files(root, tuple(reads))]
+        for fragment in only:
+            if not any(matches(rel, fragment) for rel in files):
+                raise ConfigError(
+                    f"{path}: registry {registry.name!r} only {fragment!r} matches "
+                    f"no file it reads ({', '.join(reads)} under {root}), so the "
+                    "registry would check nothing. A fragment names whole path "
+                    "segments, never part of a name."
+                )
 
 
 def _check_deferrals(registries: Sequence[Registry], path: Path) -> None:
