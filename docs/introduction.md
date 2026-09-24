@@ -1455,6 +1455,15 @@ limit is closed, in the same commit that closes it.**
   is the `text` form alone**, which has no spelling for *nothing* on either side and so still
   collapses the two. **What it would take:** nothing new — a declaration that needs the distinction
   uses the JSON form.
+- **accepted** · **A `[[shape]]` pattern rule cannot tell a declared `null` from a missing value.**
+  Neither matches any pattern, so `each_value_matches` fails a mode-keyed default with a `null`
+  arm. For an adopter that treats `null` as a declared *no value* and refuses a missing arm, that
+  is stricter than their own property. Measured 2026-09-24 against their current manifest: their
+  seven `null`-arm rows fall outside the rule's guard, and the one row it selects passes. The
+  difference appears only on a row they do not have yet. **Expressible today**: a rule's claim may
+  be a project predicate (`holds`), which receives the entry and can accept `None` arms. **What a
+  built-in form would take:** reading a declared `null` as a value of its own, as `[[parity]]
+  format = "json"` does, with an operator that says whether one is allowed.
 - **accepted** · **One registry, one `[[parity]]`**, so a project comparing three fields of one
   declaration needs three registry views of it. Refused rather than allowed because two oracles on
   one registry share a baseline scope and their records could not be told apart.
