@@ -26,6 +26,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import sys
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -39,6 +40,7 @@ from .prose import (
     STRING_FILTERS,
     UNFENCED_FILTERS,
 )
+from .sites import definitions, split
 
 #: Which filter table each ``match_mode`` selects. A mode is a row here, so
 #: adding one does not mean editing the branch that picks it.
@@ -135,8 +137,8 @@ class Bypass:
         )
 
 
-def _is_home(path: str, entry: Entry) -> bool:
-    """Is this file where the entry is defined?
+def _is_home_file(path: str, fragment: str) -> bool:
+    """Is this file the one a ``home`` fragment names?
 
     Compared by path *suffix*, in both directions, because the two strings are
     anchored differently: ``home`` is recorded relative to the project root
@@ -146,14 +148,52 @@ def _is_home(path: str, entry: Entry) -> bool:
     bypass of itself.
     """
     scanned = PurePosixPath(path.replace("\\", "/")).parts
+    declared = PurePosixPath(split(fragment)[0].replace("\\", "/")).parts
+    if not declared:
+        return False
+    shorter, longer = sorted((scanned, declared), key=len)
+    return longer[-len(shorter):] == shorter
+
+
+#: A home naming a whole file: every line of it is the definition.
+_WHOLE_FILE = ((1, sys.maxsize),)
+
+
+def _definition(path: str, entry: Entry, source: str) -> tuple[tuple[int, int], ...]:
+    """The lines of this file that are the entry's own definition, as spans.
+
+    Empty when the file is not a home. A fragment naming a file makes all of it
+    the definition, which is what ``home`` meant before a fragment could name a
+    site; a ``path::NAME`` fragment makes only the statement binding ``NAME``
+    the definition (:mod:`kinemata.sites`), so a second spelling beside it is
+    reported. A site whose name the file does not bind exempts nothing --
+    the definition itself is then reported, which is loud rather than silent.
+    """
+    spans: list[tuple[int, int]] = []
+    defined: dict[str, tuple[int, int]] | None = None
     for fragment in entry.home:
-        declared = PurePosixPath(fragment.replace("\\", "/")).parts
-        if not declared:
+        if not _is_home_file(path, fragment):
             continue
-        shorter, longer = sorted((scanned, declared), key=len)
-        if longer[-len(shorter):] == shorter:
-            return True
-    return False
+        name = split(fragment)[1]
+        if name is None:
+            return _WHOLE_FILE
+        if defined is None:
+            defined = definitions(source)
+        if name in defined:
+            spans.append(defined[name])
+    return tuple(spans)
+
+
+def _blanked(text: str, spans: tuple[tuple[int, int], ...]) -> str:
+    """``text`` with the lines in ``spans`` emptied, numbering kept."""
+    return "\n".join(
+        "" if _inside(number, spans) else line
+        for number, line in enumerate(text.splitlines(), start=1)
+    )
+
+
+def _inside(line: int, spans: tuple[tuple[int, int], ...]) -> bool:
+    return any(start <= line <= end for start, end in spans)
 
 
 @dataclass(frozen=True)
@@ -367,13 +407,16 @@ def scan(
             source = path.read_text(errors="ignore")
         except OSError:
             continue
+        own = {entry.id: _definition(rel, entry, source) for entry, _, _ in compiled}
         extractor = LITERAL_EXTRACTORS.get(path.suffix) if strings_only else None
         if extractor is not None:
             literals = extractor(source)
             for entry, pattern, rx in compiled:
-                if _is_home(rel, entry):
+                if own[entry.id] == _WHOLE_FILE:
                     continue
                 for number, content, line_text in literals:
+                    if _inside(number, own[entry.id]):
+                        continue
                     if rx.fullmatch(content):
                         strength = "strong"
                     elif rx.search(content):
@@ -400,10 +443,10 @@ def scan(
             source = source_filter(source)
         lines = source.splitlines()
         for entry, pattern, rx in compiled:
-            if _is_home(rel, entry):
+            if own[entry.id] == _WHOLE_FILE:
                 continue
             for number, text in enumerate(lines, start=1):
-                if rx.search(text):
+                if rx.search(text) and not _inside(number, own[entry.id]):
                     found.append(
                         Bypass(
                             entry_id=entry.id,
@@ -648,14 +691,19 @@ def unused(
         rel = str(path.relative_to(root))
         if not _applies(rel, exclusions, only):
             continue
-        text = path.read_text(errors="ignore")
+        source = path.read_text(errors="ignore")
         filtered = shows.get(path.suffix)
-        if filtered is not None:
-            text = filtered(text)
+        text = filtered(source) if filtered is not None else source
         for found in registry.detect(text):
-            # A reference inside the entry's own definition is not a use.
+            if found in referenced:
+                continue
+            # A reference inside the entry's own definition is not a use; one
+            # elsewhere in a file whose home is only a site still is.
             entry = next((e for e in entries if e.id == found), None)
-            if entry is not None and _is_home(rel, entry):
+            own = _definition(rel, entry, source) if entry is not None else ()
+            if own == _WHOLE_FILE:
+                continue
+            if own and found not in registry.detect(_blanked(text, own)):
                 continue
             referenced.add(found)
 

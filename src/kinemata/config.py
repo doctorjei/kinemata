@@ -60,7 +60,7 @@ from .adapters.patterns import CodePatterns
 from .adapters.substitutions import Substitutions
 from .adapters.values import ValueRegistry
 from .baseline import BASELINE_NAME
-from .bypass import MODE_FILTERS, git_ignored
+from .bypass import MODE_FILTERS, _is_home_file, git_ignored
 from .bypass import _walk as _files
 from .citations import DEFAULT_ACCOMPANY_MAX
 from .claims import (
@@ -107,6 +107,8 @@ from .shape import (
     ShapeError,
     asked,
 )
+from .sites import definitions
+from .sites import split as split_site
 from .targets import TARGET_FORM as FUNNEL_FORM
 from .targets import TargetError
 
@@ -1344,6 +1346,7 @@ def load(path: str | Path) -> Settings:
         registries.append(registry)
 
     _check_deferrals(registries, path)
+    _check_sites(registries, root, path)
     _check_scopes(
         registries, root,
         _strings(project.get("suffixes", (".py",)), f"{path}: [project] suffixes"),
@@ -1921,6 +1924,49 @@ def _check_scopes(
                     "registry would check nothing. A fragment names whole path "
                     "segments, never part of a name."
                 )
+
+
+def _check_sites(registries: Sequence[Registry], root: Path, path: Path) -> None:
+    """Every ``home = "file::NAME"`` names a Python file that binds ``NAME``.
+
+    A site that binds nothing exempts nothing, so the definition it meant is then
+    reported as a bypass of itself -- loud, but pointing at the wrong thing. The
+    usual cause is a rename, and the refusal names it. The file is looked up at
+    its path under the root first and by path suffix only when it is not there,
+    so a project spelling its homes repo-relative pays no tree walk.
+    """
+    walked: list[str] | None = None
+    for registry in registries:
+        for entry in registry.entries():
+            for fragment in entry.home:
+                file, name = split_site(fragment)
+                if name is None:
+                    continue
+                where = f"{path}: registry {registry.name!r} entry {entry.id!r} home {fragment!r}"
+                if not name.isidentifier() or not file.endswith(".py"):
+                    raise ConfigError(
+                        f"{where}: a site is `path/to/module.py::NAME`, the "
+                        "module-level statement binding NAME, found by reading "
+                        "the module as Python."
+                    )
+                if (root / file).is_file():
+                    homes = [file]
+                else:
+                    if walked is None:
+                        walked = [str(f.relative_to(root)) for f in _files(root, (".py",))]
+                    homes = [rel for rel in walked if _is_home_file(rel, fragment)]
+                if not homes:
+                    raise ConfigError(f"{where} names no file under {root}.")
+                if not any(
+                    name in definitions((root / rel).read_text(errors="ignore"))
+                    for rel in homes
+                ):
+                    raise ConfigError(
+                        f"{where}: {', '.join(homes)} binds nothing called "
+                        f"{name!r} at module level -- renamed, or never there. "
+                        "A site that binds nothing exempts nothing, and the "
+                        "definition would be reported as a bypass of itself."
+                    )
 
 
 def _check_deferrals(registries: Sequence[Registry], path: Path) -> None:

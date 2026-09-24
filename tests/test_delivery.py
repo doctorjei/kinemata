@@ -32,7 +32,7 @@ def test_a_constants_value_is_its_own_antipattern(tmp_path):
     (entry,) = PythonConstants([tmp_path / "consts.py"], root=tmp_path).entries()
     assert entry.id == "WORKSET_META_FILE"
     assert entry.antipatterns == (r"workset\.yaml",)
-    assert entry.home == ("consts.py",)
+    assert entry.home == ("consts.py::WORKSET_META_FILE",)
 
 
 def test_short_and_generic_values_get_no_antipattern(tmp_path):

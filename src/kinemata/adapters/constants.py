@@ -14,11 +14,12 @@ from __future__ import annotations
 
 import ast
 import re
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 from ..contract import _NAME_BOUNDARY, BaseRegistry, Entry
 from ..prose import parsed
+from ..sites import SITE, bindings
 
 #: Below this, a value is matched **only as a whole literal**. ``"box_data"``
 #: is worth finding inside a longer string; ``"GET"`` is not, because it is a
@@ -44,71 +45,12 @@ def _is_constant_name(name: str) -> bool:
     return name.isupper() or (name.startswith("_") and name[1:].isupper())
 
 
-def _unpacked(
-    target: ast.Tuple | ast.List, value: ast.expr
-) -> Iterator[tuple[str, ast.expr]]:
-    """Element-wise ``A, B = "x", "y"``, and only where it is unambiguous.
-
-    A starred element, or a right-hand side that is not a literal sequence of
-    matching length, cannot be paired without evaluating it. Nothing is yielded
-    in that case: attributing a value to the wrong name would put a real
-    constant's antipattern under somebody else's identifier, which reports a
-    bypass at a site that never touched it.
-    """
-    if not isinstance(value, (ast.Tuple, ast.List)):
-        return
-    if any(isinstance(element, ast.Starred) for element in target.elts):
-        return
-    if len(target.elts) != len(value.elts):
-        return
-    for element, item in zip(target.elts, value.elts, strict=True):
-        if isinstance(element, ast.Name):
-            yield element.id, item
-
-
-def _bindings(node: ast.stmt) -> Iterator[tuple[str, ast.expr]]:
-    """Every ``NAME = <expression>`` a module-level statement binds.
-
-    This read ``ast.Assign`` with exactly one plain target and nothing else,
-    which is not the whole of how a constant is written. Measured across an
-    adopting project's package on 2026-09-09: **195 bare-assign string
-    constants were readable and 32 annotated ones were not** -- ``NAME:
-    Final[str] = "..."`` is an ``ast.AnnAssign`` -- and the annotated ones
-    concentrated in exactly the module that project most wanted to declare. It
-    reached for a ``code-patterns`` registry instead of reshaping its source to
-    suit the tool. That preference is the right one and the tool should not
-    force it.
-
-    Chained targets (``A = B = "x"``) and tuple unpacking are read here for the
-    same reason: each is a spelling a project may already use, and being
-    invisible to the scan is indistinguishable from being clean.
-
-    **What is still invisible, stated rather than discovered later: enum
-    members.** They bind inside a class body, so recognizing them means first
-    deciding a class is an enum, and that decision is a base-name match -- which
-    an import alias, a project's own intermediate base class, or a metaclass
-    defeats without saying so. A recognizer that silently covers some enums and
-    not others reports clean over the rest, and a check that quietly stops
-    checking is worse than no check. Declare them with ``code-patterns``.
-    """
-    if isinstance(node, ast.AnnAssign):
-        if node.value is not None and isinstance(node.target, ast.Name):
-            yield node.target.id, node.value
-        return
-    if not isinstance(node, ast.Assign):
-        return
-    for target in node.targets:
-        if isinstance(target, ast.Name):
-            yield target.id, node.value
-        elif isinstance(target, (ast.Tuple, ast.List)):
-            yield from _unpacked(target, node.value)
-
-
 class PythonConstants(BaseRegistry):
     """Module-level string constants in one or more Python modules.
 
     :param paths: modules to read constants from.
-    :param root: repo root, so ``home`` is recorded repo-relative.
+    :param root: repo root, so ``home`` is recorded repo-relative -- as
+        the defining statement, ``path::NAME``, never the whole module.
     :param min_length: values shorter than this are not given antipatterns.
     :param include_private: also take ``_LEADING_UNDERSCORE`` constants. Off by
         default -- a private constant is usually deliberately module-local, and
@@ -175,7 +117,7 @@ class PythonConstants(BaseRegistry):
             home = str(path)
 
         for node in tree.body:
-            for name, value in _bindings(node):
+            for name, value in bindings(node):
                 if not _is_constant_name(name):
                     continue
                 if name.startswith("_") and not self._include_private:
@@ -188,7 +130,10 @@ class PythonConstants(BaseRegistry):
                 yield Entry(
                     id=name,
                     antipatterns=self._antipatterns_for(value.value),
-                    home=(home,),
+                    # The statement, not the module: a second spelling of the
+                    # value beside its definition is the one most likely to
+                    # appear, and a file home hid it (``kinemata.sites``).
+                    home=(f"{home}{SITE}{name}",),
                     extra={"value": value.value},
                 )
 

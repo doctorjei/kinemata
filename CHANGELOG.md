@@ -11,7 +11,27 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 ## Unreleased
 
-Nothing yet.
+**New**
+
+- A `home` can name a **definition site** rather than a file: `home = ["pkg/push.py::GRADING_TYPES"]`
+  exempts only the module-level statement binding that name, however many lines it spans, and a
+  match anywhere else in the file is reported like a match anywhere else in the tree. Asked for by
+  an adopter whose tuple vocabulary had two of its three historical re-spellings **inside** the
+  home file, where a file home would have passed them. A site whose name the file does not bind is
+  refused at load, so a rename is reported instead of turning the definition into a finding.
+
+**Changed**
+
+- `python-constants` records each entry's home as its defining statement (`path::NAME`) instead of
+  its module, so `check` now reports a second spelling of a constant's value **inside the constant's
+  own module**. Before this, a literal planted there was reported by nothing once a closed
+  registry had deferred the value with `defer_to`: `check` skipped the module and `undeclared` had
+  handed the value over. Measured before changing the default, on this repository, two validation
+  configs and an adopter's live constants modules: **no new strong finding**. The new weak ones
+  (20 on one validation config, 57 on the adopter's modules, none elsewhere) are substrings inside
+  messages. In `unused`, a constant mentioned elsewhere in its own module now counts as used, and
+  its output did not change on any config measured. Code reading `Entry.home` off a
+  `python-constants` registry sees the `::NAME` suffix.
 
 ## 0.4.0
 

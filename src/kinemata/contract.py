@@ -145,6 +145,8 @@ class Entry:
 
     #: Where the entry itself is defined, as repo-relative path fragments. A
     #: match inside its own definition is the canonical use, not a duplicate.
+    #: A fragment names a whole file, or -- written ``path.py::NAME`` -- only
+    #: the statement binding ``NAME`` in it (:mod:`kinemata.sites`).
     home: tuple[str, ...] = ()
 
 

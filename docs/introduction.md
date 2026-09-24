@@ -51,7 +51,7 @@ when the default is wrong for the data model.
 | `id` | `str` | the declared identifier |
 | `clauses` | `tuple[str, ...]` | text projected to agents |
 | `antipatterns` | `tuple[str, ...]` | regexes whose match means the entry was bypassed |
-| `home` | `tuple[str, ...]` | path fragments where the entry is defined; matches there are canonical use, not duplication |
+| `home` | `tuple[str, ...]` | where the entry is defined; matches there are canonical use, not duplication. A path fragment names a whole file; `path.py::NAME` names only the module-level statement binding `NAME`, so a re-spelling beside it in the same file is still reported. `python-constants` records the statement for every entry |
 | `extra` | `Mapping[str, Any]` | project payload, never interpreted |
 
 **Antipattern examples:**
@@ -150,6 +150,14 @@ kind = "code-patterns"
   id = "run_or_die"
   antipatterns = ['check\s*=\s*True']
   home = ["pkg/_run.py"]
+
+  # A home narrower than its file: only the statement binding GRADING_TYPES,
+  # however many lines it spans, so a second spelling in pkg/push.py is still a
+  # finding. A site that binds nothing -- a rename -- is refused at load.
+  [[registry.entry]]
+  id = "grading-types"
+  antipatterns = ['"none",\s*"on_paper"']
+  home = ["pkg/push.py::GRADING_TYPES"]
 
 # Forbidden spellings (retired names, dialect) as declared data.
 [[registry]]
