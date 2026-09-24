@@ -73,9 +73,11 @@ visible in a diff.
 [project]
 root = "."
 exclude = ["tests/", "build/"]     # gitignored paths are added automatically
-# A bare fragment matches anywhere in a path, so "tests/" also drops
-# docs/smoke-tests-design.md. A leading slash anchors at the root:
-# exclude = ["/tests/"]            # this directory, not this substring
+# A fragment names whole path segments at any depth: "tests/" drops tests/ and
+# pkg/tests/, never mytests/ or smoke-tests-design.md, and a trailing slash
+# changes nothing. A leading slash anchors at the root. Every check reads it
+# this one way, and so are `machinery` and `[claims] historical`:
+# exclude = ["/tests/"]            # only the tests/ at the root
 max_sites = 20                     # an antipattern matching more sites than
                                    # this is too generic to mean anything, and
                                    # is suppressed and listed rather than
@@ -1248,15 +1250,18 @@ carefully reading it.
 cannot see them; a mark that goes wrong goes wrong silently. **Re-read this section whenever a
 limit is closed, in the same commit that closes it.**
 
-- **accepted** · **One `exclude` line means two things, depending on which check reads it.** The
-  documentation scan strips a fragment's trailing slash before matching and the registry scans do
-  not, so `exclude = ["tests/"]` removes `docs/smoke-tests-design.md` from `kinemata claims` and
-  leaves it in `kinemata check`. Found by an adopter 2026-09-14, who lost two claims and an
-  external link to it. **Not repaired in place**, because narrowing the old spelling would silently
-  change what every config already written removes — the class of defect being fixed. The anchored
-  form (`/tests/`) is exact in both, and `check` and `review` now report any fragment that removed
-  nothing, or removed a path only as a substring. Unifying the two preparations is the work this
-  entry is waiting on, and it needs a deprecation rather than an edit.
+- **accepted** · **~~One `exclude` line means two things, depending on which check reads it.~~**
+  **Closed 2026-09-24**, by replacing the rule rather than deprecating it. The documentation scan
+  stripped a fragment's trailing slash and the registry scans did not, and both read it as a
+  substring, so `exclude = ["tests/"]` removed :shown:`docs/smoke-tests-design.md` from
+  `kinemata claims` and left it in `kinemata check` — found by an adopter 2026-09-14, who lost two
+  claims and an external link to it. **A fragment now names whole path segments, in every check**:
+  `tests/` is a directory called `tests` at any depth, a leading slash anchors, and nothing is
+  matched inside a name. This entry used to say the fix needed a deprecation because it would
+  change what configs remove; it does, and the change was made anyway on the measurement that
+  every exclude found in a real config is a directory or an exact file name, which the new rule
+  removes exactly as before. A fragment that relied on matching part of a name now removes
+  nothing, and `check` and `review` say so on every run.
 - **boundary** · **Semantic duplication is out of reach by design.** Rules enforced twice in
   dissimilar code are not detectable syntactically.
 - **boundary** · **Greenfield coverage: 4 of 13 instances** across 37 attributable commits (31%).

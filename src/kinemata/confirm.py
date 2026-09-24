@@ -399,7 +399,7 @@ def plan(
     declared: dict[str, Entry] = {
         entry.id: entry for book in books for entry in book.entries()
     }
-    exclusions = tuple(fragment.rstrip("/") for fragment in exclude if fragment)
+    exclusions = tuple(fragment for fragment in exclude if fragment)
     exclusions += git_ignored(root)
     archives = tuple(fragment for fragment in historical if fragment)
 

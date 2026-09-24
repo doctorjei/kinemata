@@ -84,7 +84,7 @@ def git_ignored(root: str | Path) -> tuple[str, ...]:
     Empty when git cannot answer, which over-reports rather than under-reports.
 
     **Anchored, because these are paths and not fragments.** A project's own
-    ``exclude`` entry is a substring by design; git's answer is a real
+    ``exclude`` entry names segments at any depth; git's answer is a real
     root-relative path, and spelling it unanchored let one remove files it does
     not name. An adopter reported the shape: an untracked, ignored
     :shown:`.claude/` at the root removed their tracked

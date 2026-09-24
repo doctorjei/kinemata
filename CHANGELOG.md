@@ -40,8 +40,17 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   Refused when it would do nothing — a string, an empty list, a name no registry answers to, the
   registry itself, a target declaring no values, or a registry with no candidates to hand over.
 
-**Fixed**
+**What an existing config will see change**
 
+- **`exclude` names whole path segments, and every check reads it the same way.** A fragment
+  like *tests/* is a directory called *tests* at any depth, a bare name is exactly that name at any depth, a leading
+  `/` anchors at the root, and nothing is ever matched inside a name. Before, a fragment was a
+  substring and `claims`, `confirm` and `stale` stripped its trailing slash while the scans did
+  not — so `exclude = ["tests/"]` removed a document called `smoke-tests-design.md` from `claims`
+  and left it in `check`, which cost an adopter two documentation claims without a word. The same
+  rule now governs `machinery` and `[claims] historical`. **What changes for an existing config:**
+  documents a slash-stripped fragment used to skip by accident are checked, and a fragment written
+  to match part of a name removes nothing — which `check` and `review` report on every run.
 - A flag in `kinemata.toml` that is not a boolean is refused rather than coerced. A registry
   declaring `closed = "false"` loaded as **closed** — every non-empty string is true — so a project
   could arm the closed-world gate while reading the opposite off its own line, and with `syntax`
@@ -49,6 +58,22 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   `[claims] external` and `[[probe]] exact` all coerced the same way; `[citations] provenance`
   already refused, and its refusal is now the one every flag shares. **A config spelling its flags
   as TOML booleans is unaffected**; what breaks is a line that never meant what it said.
+- A list-typed key in `kinemata.toml` given as a string is refused instead of being read one
+  character at a time. `suffixes = ".py"` on a registry meant the suffixes `.`, `p` and `y`, and
+  its `check` went from one bypass to exiting 0 having reported nothing; a code-patterns
+  `home = "pkg/_run.py"` became one-letter fragments every path contains, so every bypass read as
+  canonical use; `[[shape]] choices = "str"` accepted `"s"` and refused `"str"`. `command` was
+  fixed for this in `0.1.0` and the rest were not — every list key now goes through one reader,
+  including the ones read inside the code-patterns adapter. **A config spelling its lists as
+  lists is unaffected.**
+- A `[[shape]]` pattern rule (`matches`, `each_matches`) was satisfied by an entry that did not
+  carry the field at all, or carried a null there, whenever the pattern happened to fit the word
+  `None` — which is what a missing value was matched as. `matches = "^N"` passed every entry
+  without the field. A missing or null value now matches no pattern; whether a field must be there
+  is still `present`'s claim to make.
+
+**Fixed**
+
 - The reference sheet's list of clause boundaries was short by one. A **sentence end** has bounded a
   negation since before `0.1.0` and the list never said so, which understates how narrowly a
   negation reaches — the difference between *"there is no `a.py`. The loader is `b.py`"* withdrawing
@@ -68,19 +93,6 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 - A registry refused for being empty or for not being closable was named `'?'` when the config
   gave no `name`, even where the registry had one — an `import` class carrying its own, or a
   kind's default. Those refusals come after the registry is built, and now use its name.
-- A `[[shape]]` pattern rule (`matches`, `each_matches`) was satisfied by an entry that did not
-  carry the field at all, or carried a null there, whenever the pattern happened to fit the word
-  `None` — which is what a missing value was matched as. `matches = "^N"` passed every entry
-  without the field. A missing or null value now matches no pattern; whether a field must be there
-  is still `present`'s claim to make.
-- A list-typed key in `kinemata.toml` given as a string is refused instead of being read one
-  character at a time. `suffixes = ".py"` on a registry meant the suffixes `.`, `p` and `y`, and
-  its `check` went from one bypass to exiting 0 having reported nothing; a code-patterns
-  `home = "pkg/_run.py"` became one-letter fragments every path contains, so every bypass read as
-  canonical use; `[[shape]] choices = "str"` accepted `"s"` and refused `"str"`. `command` was
-  fixed for this in `0.1.0` and the rest were not — every list key now goes through one reader,
-  including the ones read inside the code-patterns adapter. **A config spelling its lists as
-  lists is unaffected.**
 
 ## 0.3.0
 

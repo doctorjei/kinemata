@@ -1,67 +1,87 @@
-"""What ``exclude`` removes, and whether it removed what its author named.
+"""What ``exclude`` removes: whole path segments, one reading, every check.
 
 **The incident.** An adopter wrote ``exclude = ["tests/"]`` to skip their test
-trees. The fragment is matched as an unanchored substring after its trailing
-slash is stripped, so it also removed
-``docs/plans/2026-03-07-smoke-tests-design.md`` and a sibling -- two
-documentation claims and one external link, silently. The general shape is worse
-than the loss: a project cannot say *this directory* as distinct from *this
-substring*, so a denylist cannot be used for scoping at all. ``exclude =
-["docs/"]`` would also remove ``api-docs/``, the tree such a config would exist
-to cover.
+trees. It was matched as an unanchored substring, and the documentation checks
+stripped its trailing slash first while the scans did not -- so it also removed
+``docs/plans/2026-03-07-smoke-tests-design.md`` from ``claims`` and left it in
+``check``: two documentation claims and one external link, lost silently, by one
+line meaning two things.
 
-Two answers here, and deliberately not a third. The anchored spelling is **new**
-rather than a repair of the old one: redefining a trailing slash would silently
-change what every config already written removes, which is the class of defect
-being fixed. And the audit reports what a fragment did, so a project that keeps
-the spelling it has still finds out.
+**The rule since 2026-09-24** (user: *"a consistent, always-runs-the-same
+solution - not a hack"*): a fragment names whole segments at any depth, a leading
+slash anchors, and nothing is a substring. The cases below pin it from the
+incident outward, and pin that every consumer reads it the same way.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from kinemata.exclusion import (
-    Removed,
-    anchored_form,
-    anchors,
-    audit,
-    excluded,
-    matches,
-)
+from kinemata.exclusion import Removed, audit, excluded, matches
 
 TREE = (
     "tests/test_thing.py",
     "tests/support/files.py",
+    "packages/agent-claude/tests/test_credentials.py",
+    "mytests/helper.py",
     "docs/plans/2026-03-07-smoke-tests-design.md",
     "docs/index.md",
     "api-docs/generated.md",
+    "LICENSE.md",
+    "vendor/lib/LICENSE.md",
     "src/kinemata/config.py",
 )
 
 
-# -- the substring rule, unchanged -------------------------------------------
+def removed(*fragments):
+    return [rel for rel in TREE if excluded(rel, fragments)]
 
 
-def test_a_bare_fragment_still_matches_anywhere(tmp_path):
-    """The historical behavior, pinned so the anchored form cannot alter it."""
-    assert matches("docs/plans/2026-03-07-smoke-tests-design.md", "tests")
-    assert matches("api-docs/generated.md", "docs/")
-    assert excluded("tests/test_thing.py", ("tests",))
+# -- the rule -----------------------------------------------------------------
 
 
-def test_the_adopter_s_loss_is_reproduced(tmp_path):
-    """Named because a regression here is a silent one."""
-    removed = [rel for rel in TREE if excluded(rel, ("tests",))]
-    assert "docs/plans/2026-03-07-smoke-tests-design.md" in removed
+def test_the_adopter_s_loss_does_not_happen():
+    """``tests/`` names the directory, never ``smoke-tests`` inside a name."""
+    assert "docs/plans/2026-03-07-smoke-tests-design.md" not in removed("tests/")
+
+
+def test_a_directory_is_removed_at_any_depth():
+    """The case an anchored remedy once got wrong: plugin test trees below the root."""
+    assert removed("tests/") == [
+        "tests/test_thing.py",
+        "tests/support/files.py",
+        "packages/agent-claude/tests/test_credentials.py",
+    ]
+
+
+def test_a_name_is_never_matched_inside_another_name():
+    assert not matches("mytests/helper.py", "tests/")
+    assert not matches("api-docs/generated.md", "docs/")
+    assert not matches("docs/plans/2026-03-07-smoke-tests-design.md", "tests")
+
+
+def test_a_trailing_slash_changes_nothing():
+    """One reading. The old split was a slash stripped on one side only."""
+    assert removed("tests/") == removed("tests")
+    assert removed("docs/") == removed("docs")
+
+
+def test_a_file_name_is_removed_wherever_it_is():
+    assert removed("LICENSE.md") == ["LICENSE.md", "vendor/lib/LICENSE.md"]
+
+
+def test_a_multi_segment_fragment_needs_every_segment_in_order():
+    assert matches("packages/agent-claude/tests/x.py", "agent-claude/tests")
+    assert not matches("packages/agent-claude/tests/x.py", "claude/tests")
+    assert not matches("tests/agent-claude/x.py", "agent-claude/tests")
 
 
 # -- the anchored spelling ---------------------------------------------------
 
 
 def test_a_leading_slash_anchors_at_the_root():
-    assert matches("docs/index.md", "/docs/")
-    assert not matches("api-docs/generated.md", "/docs/")
+    assert removed("/tests/") == ["tests/test_thing.py", "tests/support/files.py"]
+    assert removed("/LICENSE.md") == ["LICENSE.md"]
 
 
 def test_an_anchored_fragment_matches_the_path_itself():
@@ -74,17 +94,41 @@ def test_an_anchored_fragment_does_not_match_a_sibling_prefix():
     assert not matches("docs-old/index.md", "/docs")
 
 
-def test_a_bare_slash_removes_nothing():
+@pytest.mark.parametrize("fragment", ["", "/", "//"])
+def test_a_fragment_with_no_segments_removes_nothing(fragment):
     """An empty stem would otherwise match every path in the tree."""
-    assert not matches("docs/index.md", "/")
-    assert not matches("docs/index.md", "//")
+    assert not matches("docs/index.md", fragment)
 
 
 def test_the_scoping_case_the_adopter_abandoned():
-    """"Scan only this directory" as *exclude everything else* now works."""
+    """"Scan only this directory" as *exclude everything else* works."""
     kept = [rel for rel in TREE if not excluded(rel, ("/docs/",))]
     assert "api-docs/generated.md" in kept
     assert "docs/index.md" not in kept
+
+
+# -- every consumer reads it the same way -------------------------------------
+
+
+def test_claims_and_check_agree_on_what_tests_slash_removes(tmp_path):
+    """The split itself, end to end: one design doc, both commands reading it.
+
+    Before, ``claims`` skipped the document and ``check`` read it. The document
+    makes one false path claim, so ``claims`` now reports it -- which is the
+    claim the adopter lost.
+    """
+    from kinemata.cli import main
+
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_x.py").write_text("X = 1\n")
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "smoke-tests-design.md").write_text(
+        "The runner lives in `src/runner.py`.\n"
+    )
+    (tmp_path / "kinemata.toml").write_text(
+        '[project]\nroot = "."\nexclude = ["tests/"]\n\n[claims]\n'
+    )
+    assert main(["claims", "--config", str(tmp_path / "kinemata.toml")]) == 1
 
 
 # -- the audit ---------------------------------------------------------------
@@ -96,94 +140,16 @@ def test_a_fragment_that_removed_nothing_is_reported():
     assert "removed 0 files" in report.lines()[0]
 
 
-def test_a_substring_only_removal_is_reported_with_the_fix():
-    """Matched inside a name, where anchoring IS the right advice."""
-    report = audit(TREE, ("tests/",))
-    assert report.incidental
-    line = report.lines()[0]
-    assert "inside a name rather than a directory" in line
-    assert "docs/plans/2026-03-07-smoke-tests-design.md" in line
-    assert "'/tests/'" in line
-
-
-#: The adopter's tree, reduced to the shape that made the old remedy false: a
-#: fragment naming real directories that are not at the root.
-DEEP = (
-    "tests/test_core.py",
-    "docs/plans/2026-03-07-smoke-tests-design.md",
-    "packages/agent-claude/tests/test_credentials.py",
-    "packages/agent-codex/tests/test_auth.py",
-)
-
-
-def test_a_directory_below_the_root_is_not_told_to_anchor_at_the_root():
-    """🛑 The reported defect: the remedy reached none of the paths beside it.
-
-    An adopter was told to write ``/tests/`` for paths three directories down.
-    Anchoring is root-relative, so taking it would have stopped excluding three
-    plugin test trees while ``check`` went on exiting 0. They reproduced it
-    against this module and did not take the advice.
-    """
-    line = next(
-        line for line in audit(DEEP, ("tests/",)).lines()
-        if "below the root" in line
-    )
-    assert "packages/agent-claude/tests/test_credentials.py" in line
-    assert "ROOT-relative" in line
-    assert "'/packages/agent-claude/tests/'" in line
-    assert "'/packages/agent-codex/tests/'" in line
-
-
-def test_the_suggested_spelling_actually_removes_the_paths_it_is_printed_beside():
-    """The property the old message violated, asserted directly.
-
-    Deriving the advice from the fragment is what produced advice that matched
-    nothing it listed; this is the test that would have caught it.
-    """
-    for item in audit(DEEP, ("tests/",)).incidental:
-        for form in item.anchored_forms:
-            assert any(matches(rel, form) for rel in item.deeper), form
-        for rel in item.deeper:
-            assert any(matches(rel, form) for form in item.anchored_forms), rel
-
-
-def test_the_two_kinds_of_incidental_match_are_told_apart():
-    """One is probably meant and one probably is not; they got one remedy."""
-    item = audit(DEEP, ("tests/",)).incidental[0]
-    assert item.within_a_name == ("docs/plans/2026-03-07-smoke-tests-design.md",)
-    assert item.deeper == (
-        "packages/agent-claude/tests/test_credentials.py",
-        "packages/agent-codex/tests/test_auth.py",
-    )
-
-
-def test_a_fragment_is_matched_segment_wise_when_deriving_a_spelling():
-    """``tests`` names the directory and never ``smoke-tests``."""
-    assert anchored_form("packages/x/tests/a.py", "tests/") == "/packages/x/tests/"
-    assert anchored_form("docs/smoke-tests-design.md", "tests/") == ""
-    assert anchored_form("a/b/c.py", "") == ""
-
-
-def test_a_multi_segment_fragment_derives_its_whole_path():
-    assert anchored_form(
-        "packages/agent-claude/tests/support/x.py", "agent-claude/tests"
-    ) == "/packages/agent-claude/tests/"
-
-
-def test_a_fragment_matching_only_part_of_a_segment_has_no_anchored_form():
-    """And so is told the other thing, correctly.
-
-    ``claude/tests`` removes :shown:`packages/agent-claude/tests/x.py` as a
-    substring of ``agent-claude``, and no anchored spelling reaches it --
-    ``/claude/tests/`` needs a literal ``claude`` segment. Reporting an
-    anchored form here would be the original defect in a new place.
-    """
-    assert anchored_form("packages/agent-claude/tests/x.py", "claude/tests") == ""
+def test_a_fragment_written_for_part_of_a_name_is_reported_as_removing_nothing():
+    """What a config relying on the old substring reading sees: never silence."""
+    report = audit(TREE, ("egg-info", "smoke-tests"))
+    assert [item.fragment for item in report.inert] == ["egg-info", "smoke-tests"]
+    assert all("never part of a name" in line for line in report.lines())
 
 
 def test_a_clean_run_says_nothing():
     """A report that speaks when nothing is wrong is one readers learn to skip."""
-    assert audit(TREE, ("/docs/", "/tests/")).lines() == ()
+    assert audit(TREE, ("/docs/", "tests/")).lines() == ()
 
 
 def test_a_pruned_directory_is_not_called_inert():
@@ -196,35 +162,6 @@ def test_a_pruned_directory_is_not_called_inert():
     report = audit(TREE, (".venv/",), pruned=(".venv", "__pycache__"))
     assert report.removed == ()
     assert report.lines() == ()
-
-
-def test_an_over_broad_match_nothing_else_would_keep_is_not_reported():
-    """`tests/` took 511 paths on this repository and `corpus/` had them all.
-
-    An over-broad fragment that changes no outcome is noise. Only the paths no
-    other fragment removes are worth a line.
-    """
-    report = audit(TREE, ("tests/", "docs/"))
-    item = next(one for one in report.removed if one.fragment == "tests/")
-    assert not item.incidental
-
-
-def test_an_anchored_fragment_is_never_called_incidental():
-    report = audit(TREE, ("/tests/",))
-    assert not report.incidental
-    assert report.lines() == ()
-
-
-@pytest.mark.parametrize(
-    "rel, fragment, expected",
-    [
-        ("tests/a.py", "tests", True),
-        ("docs/smoke-tests-design.md", "tests", False),
-        ("tests", "tests", True),
-    ],
-)
-def test_anchors_is_the_discriminator_the_report_uses(rel, fragment, expected):
-    assert anchors(rel, fragment) is expected
 
 
 def test_removed_reports_its_own_shape():

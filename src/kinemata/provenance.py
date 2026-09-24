@@ -495,7 +495,7 @@ def survey(
         make the whole list writable by anyone with a text editor and no oracle.
     """
     root = Path(root)
-    exclusions = tuple(fragment.rstrip("/") for fragment in exclude if fragment)
+    exclusions = tuple(fragment for fragment in exclude if fragment)
     # Asked here as well as in the settings, the way ``claims`` and ``confirm``
     # ask: a caller reaching this as a library gets the same answer about whose
     # material this is as one reaching it through the command line. Pointing a

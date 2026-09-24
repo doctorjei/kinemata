@@ -1591,7 +1591,7 @@ def verify(
     """
     root = Path(root)
     archives = tuple(fragment for fragment in historical if fragment)
-    exclusions = tuple(fragment.rstrip("/") for fragment in exclude if fragment)
+    exclusions = tuple(fragment for fragment in exclude if fragment)
     exclusions += git_ignored(root)
     # A path promise is keyed by its normalized spelling so a claim can match
     # it; a `what` promise has nothing to match and only the date can end it.

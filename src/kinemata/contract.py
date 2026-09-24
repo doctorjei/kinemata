@@ -287,7 +287,9 @@ class BaseRegistry(ABC):
     suffixes: tuple[str, ...] | None = None
 
     #: Files that *declare* these entries rather than use them -- a key table, an
-    #: inventory, the manifest itself. Path fragments, matched as substrings.
+    #: inventory, the manifest itself. Path fragments, read exactly as ``exclude``
+    #: is -- whole segments at any depth, a leading ``/`` anchoring
+    #: (:mod:`kinemata.exclusion`).
     #:
     #: Distinct from the project's ``exclude``, which names build and test trees.
     #: This names the declaring machinery, and it exists because mentions there
