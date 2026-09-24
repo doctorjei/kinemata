@@ -30,7 +30,7 @@ from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from .contract import BaseRegistry, Entry, undeclared
+from .contract import BaseRegistry, Entry, member, undeclared
 from .exclusion import excluded
 from .prose import (
     FILTERS,
@@ -326,7 +326,7 @@ def scan(
     # Each parameter is resolved independently, so passing one does not silently
     # overwrite the other -- which it did, making an explicit code_only=False
     # behave as though the registry's mode had been requested.
-    mode = getattr(registry, "match_mode", "strings")
+    mode = member(registry, "match_mode")
     # With neither argument given, the mode picks its own table -- ``prose``
     # blanks inline code spans, ``unfenced`` blanks what a document shows. That
     # is what the two-way code/strings axis below cannot express, and reading
@@ -483,9 +483,9 @@ def strays(
     closed-world catch — the operation that *raises* rather than advising, and
     the one that makes a registry a mechanism instead of a convention.
 
-    **It only answers for a registry that can recognize its own identifiers**,
-    which today means a mapping registry with a declared ``syntax``. Any other
-    kind raises ``NotImplementedError`` from ``candidates()``, deliberately:
+    **It only answers for a registry that can recognize its own identifiers** --
+    one that implements ``candidates()``. Any other raises
+    ``NotImplementedError`` from the base's, deliberately:
     a registry that cannot tell an identifier from ordinary text would answer
     "nothing is undeclared" about every tree it was ever pointed at.
 
@@ -507,7 +507,7 @@ def strays(
     """
     root = Path(root)
     exclusions = tuple(exclude)
-    mode = getattr(registry, "match_mode", "strings")
+    mode = member(registry, "match_mode")
     strings_only = mode == "strings"
 
     found: list[Stray] = []
@@ -593,14 +593,14 @@ def unused(
     destroys deliberate declarations.
     """
     root = Path(root)
-    if not registry.mentions_are_uses:
+    if not member(registry, "mentions_are_uses"):
         raise ValueError(
             f"registry {registry.name!r}: these entries are declared so that "
             "nothing says them, so an unmentioned one is the convention being "
             "kept. Every entry would be reported and every report would be a "
             "success."
         )
-    declaring = tuple(machinery) + tuple(registry.machinery)
+    declaring = tuple(machinery) + tuple(member(registry, "machinery"))
     entries = list(registry.entries())
     if not declaring and not any(entry.home for entry in entries):
         raise ValueError(
@@ -626,7 +626,7 @@ def unused(
     # several languages knows which file it is holding.
     shows = (
         MODE_FILTERS["unfenced"]
-        if getattr(registry, "match_mode", "strings") == "unfenced"
+        if member(registry, "match_mode") == "unfenced"
         else {}
     )
 

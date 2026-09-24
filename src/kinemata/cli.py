@@ -63,7 +63,7 @@ from .claims import CLAIMS_REGISTRY, ClaimsError, Verification, verify
 from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
 from .confirm import ConfirmError, apply, dating, plan, redate
 from .context import measure
-from .contract import BaseRegistry, Entry
+from .contract import BaseRegistry, Entry, member
 from .exclusion import audit, excluded, relative_paths
 from .gates import WORKFLOW_DIR, enforced, uncovered
 from .literals import clusters
@@ -322,7 +322,7 @@ def _run_review(
             review(
                 registry,
                 _target(args, settings),
-                suffixes=registry.suffixes or settings.suffixes,
+                suffixes=member(registry, "suffixes") or settings.suffixes,
                 exclude=settings.exclude,
                 within=_within(args, settings),
                 max_sites=_max_sites(args, settings),
@@ -486,7 +486,7 @@ def _strays(
                 # declared its own suffixes: a bibliography does, and pointing
                 # a closed one at the project's `.py` default would find no
                 # citations anywhere and report a clean closed world.
-                suffixes=registry.suffixes or settings.suffixes,
+                suffixes=member(registry, "suffixes") or settings.suffixes,
                 exclude=settings.exclude,
                 within=_within(args, settings),
             )
@@ -565,7 +565,7 @@ def _report_unreadable(settings: Settings) -> None:
     """
     scoped = [
         registry for registry in settings.registries
-        if getattr(registry, "match_mode", "strings") == "strings"
+        if member(registry, "match_mode") == "strings"
     ]
     if not scoped:
         return
@@ -722,10 +722,16 @@ def cmd_undeclared(args: argparse.Namespace) -> int:
     check that was never going to fail.
 
     **Refuses when no registry can answer.** Only a registry that recognizes its
-    own identifiers can say what is undeclared, and today that is a mapping
-    registry with a ``syntax``. Pointing this at a project whose registries
+    own identifiers -- one whose ``candidates()`` answers rather than raising --
+    can say what is undeclared. Pointing this at a project whose registries
     cannot answer and exiting 0 would report "nothing undeclared" about a
     question nobody asked -- the inert signal this project exists to catch.
+
+    ⚑ **The refusal names the method, not the kinds that implement it.** It
+    said *"today: kind = yaml-mapping with syntax"* while a bibliography, a
+    ``toml-value`` given a ``syntax`` and a project's own ``import`` class all
+    answered, and an adopter who had just built the last of those read it
+    as describing a narrower mechanism than the one it guarded (2026-09-22).
     """
     settings = _settings(args)
     _needs_registries(settings, "check against")
@@ -735,8 +741,8 @@ def cmd_undeclared(args: argparse.Namespace) -> int:
     if not answered:
         raise ConfigError(
             "no declared registry can recognize its own identifiers, so none "
-            "can say what is undeclared. This needs a registry with an "
-            "identifier syntax (today: kind = \"yaml-mapping\" with `syntax`). "
+            "can say what is undeclared. This needs a registry that implements "
+            "candidates() -- which every closed registry must. "
             "Running anyway would report nothing and mean nothing."
         )
 
@@ -1198,7 +1204,7 @@ def cmd_unused(args: argparse.Namespace) -> int:
             found = unused(
                 registry,
                 target,
-                suffixes=registry.suffixes or settings.suffixes,
+                suffixes=member(registry, "suffixes") or settings.suffixes,
                 exclude=settings.exclude,
                 within=_within(args, settings),
             )

@@ -1302,9 +1302,9 @@ def load(path: str | Path) -> Settings:
             continue
         # A registry declared `closed` promises that an undeclared identifier is
         # an error -- a promise it can only keep if it can recognize an
-        # identifier at all. Every kind accepts `closed`; only `yaml-mapping`
-        # implements recognition, so the other three could be declared closed
-        # and would answer nothing, which reads exactly like a clean tree.
+        # identifier at all. Every kind accepts `closed`, and a kind without
+        # `candidates()` could be declared closed and would answer nothing,
+        # which reads exactly like a clean tree.
         #
         # `__post_init_check__` existed to ask, and was called from nowhere for
         # the mechanism's whole life. Called here because this is the one place

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .contract import BaseRegistry, Entry
+from .contract import Entry, Registry, member
 
 
 @dataclass(frozen=True)
@@ -61,7 +61,7 @@ class Projection:
         return len(self.text.encode("utf-8"))
 
 
-def project(registry: BaseRegistry) -> Projection:
+def project(registry: Registry) -> Projection:
     """Render ``registry`` to its projection and check it against its budget.
 
     Entries are sorted by identifier: a projection that reorders itself between
@@ -71,15 +71,18 @@ def project(registry: BaseRegistry) -> Projection:
 
     lines: list[str] = []
     violations: list[BudgetViolation] = []
+    render = member(registry, "line")
+    line_budget = member(registry, "line_budget")
+    budget = member(registry, "budget")
 
     for entry in entries:
-        rendered = registry.line(entry)
+        rendered = render(entry)
         size = len(rendered.encode("utf-8"))
-        if size > registry.line_budget:
+        if size > line_budget:
             violations.append(
                 BudgetViolation(
                     kind="line",
-                    limit=registry.line_budget,
+                    limit=line_budget,
                     actual=size,
                     identifier=entry.id,
                 )
@@ -88,9 +91,9 @@ def project(registry: BaseRegistry) -> Projection:
 
     text = "\n".join(lines) + ("\n" if lines else "")
     total = len(text.encode("utf-8"))
-    if total > registry.budget:
+    if total > budget:
         violations.append(
-            BudgetViolation(kind="total", limit=registry.budget, actual=total)
+            BudgetViolation(kind="total", limit=budget, actual=total)
         )
 
     return Projection(

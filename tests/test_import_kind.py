@@ -15,8 +15,16 @@ import textwrap
 
 import pytest
 
+from kinemata.cli import main
 from kinemata.config import ConfigError, load
-from kinemata.contract import BaseRegistry, closure_guard, missing_members
+from kinemata.contract import (
+    BaseRegistry,
+    Entry,
+    closure_guard,
+    member,
+    missing_members,
+)
+from kinemata.projection import project
 
 _counter = itertools.count()
 
@@ -402,8 +410,8 @@ def test_a_class_that_is_not_a_registry_is_refused_and_says_what_is_missing(
         load(path)
     message = str(caught.value)
     assert "is not a registry" in message
-    for member in ("entries", "declared", "resolve", "detect", "name", "closed"):
-        assert member in message
+    for absent in ("entries", "declared", "resolve", "detect", "name", "closed"):
+        assert absent in message
 
 
 def test_a_class_missing_one_member_is_still_refused(tmp_path, monkeypatch):
@@ -605,6 +613,117 @@ def test_closure_guard_uses_a_ducks_own_candidates_when_it_has_one():
 
     closure_guard(Recognizer())
     assert Recognizer.asked
+
+
+# -- a class carrying the protocol and nothing more ---------------------------
+
+#: ``closed`` plus ``candidates()`` beyond the protocol, and no base class. The
+#: config accepts it, so every command must be able to use it: before the
+#: readers went through ``member()`` all six below died on an ``AttributeError``
+#: for a member the protocol never asked for.
+DUCK = """
+    import re
+
+    from kinemata.contract import Entry
+
+
+    class Duck:
+        name = "duck"
+        closed = True
+        IDS = ("alpha.one", "alpha.two")
+
+        def entries(self):
+            return [Entry(id=i) for i in self.IDS]
+
+        def declared(self, identifier):
+            return identifier in self.IDS
+
+        def resolve(self, identifier):
+            return ()
+
+        def detect(self, text):
+            return [i for i in self.IDS if i in text]
+
+        def candidates(self, text):
+            return re.findall(r"alpha\\.[a-z]+", text)
+"""
+
+
+@pytest.mark.parametrize(
+    ("command", "status"),
+    [
+        ("ids", 0),
+        ("unused", 0),
+        ("review", 0),
+        ("check", 0),
+        ("undeclared", 1),  # the stray below, found -- not a crash
+        ("baseline", 0),
+    ],
+)
+def test_a_class_satisfying_only_the_protocol_runs_under_every_command(
+    tmp_path, monkeypatch, command, status
+):
+    """Reported by an adopting project on 2026-09-22, then measured wider.
+
+    They met two missing members and added them; a class with none of the
+    base's extras met six, one command after another.
+    """
+    name = module(tmp_path, monkeypatch, DUCK)
+    (tmp_path / "declares.py").write_text('A = "alpha.one"\nB = "alpha.two"\n')
+    (tmp_path / "uses.py").write_text('X = "alpha.one"\nY = "alpha.three"\n')
+    path = config(
+        tmp_path,
+        f"""
+        [[registry]]
+        kind = "import"
+        target = "{name}:Duck"
+        machinery = ["declares.py"]
+        """,
+    )
+    assert main([command, "--config", str(path)]) == status
+
+
+def test_the_projection_of_a_duck_uses_the_bases_defaults(tmp_path, monkeypatch):
+    name = module(tmp_path, monkeypatch, DUCK)
+    path = config(
+        tmp_path, f'[[registry]]\nkind = "import"\ntarget = "{name}:Duck"\n'
+    )
+    (registry,) = load(path).registries
+    projection = project(registry)
+    assert projection.text == "alpha.one\nalpha.two\n"
+    assert not projection.violations
+
+
+def test_an_open_duck_without_candidates_is_refused_by_undeclared(
+    tmp_path, monkeypatch, capsys
+):
+    """The base's ``NotImplementedError``, not an ``AttributeError``.
+
+    An open registry is never asked by the closure guard, so this is the first
+    place the missing method is reached -- and the refusal names the method
+    rather than a list of kinds that goes stale.
+    """
+    body = DUCK.replace("closed = True", "closed = False").replace(
+        "def candidates", "def _not_candidates"
+    )
+    name = module(tmp_path, monkeypatch, body)
+    path = config(
+        tmp_path, f'[[registry]]\nkind = "import"\ntarget = "{name}:Duck"\n'
+    )
+    assert main(["undeclared", "--config", str(path)]) == 2
+    assert "implements candidates()" in capsys.readouterr().err
+
+
+def test_member_prefers_the_registrys_own_and_binds_a_default_method():
+    class Own:
+        budget = 7
+
+    entry = Entry(id="x.y")
+    assert member(Own(), "budget") == 7
+    assert member(object(), "budget") == BaseRegistry.budget
+    assert member(object(), "line")(entry) == "x.y"
+    with pytest.raises(NotImplementedError, match="object does not implement"):
+        member(object(), "candidates")("")
 
 
 class _Whole(BaseRegistry):

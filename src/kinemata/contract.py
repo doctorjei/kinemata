@@ -19,6 +19,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from functools import cached_property
+from types import MethodType
 from typing import Any, Protocol, runtime_checkable
 
 #: Bytes a projection may occupy before it stops being loadable. A byte budget,
@@ -384,6 +385,34 @@ class BaseRegistry(ABC):
             self.candidates("")
 
 
+def member(registry: object, attribute: str) -> Any:
+    """``registry``'s own ``attribute``, or :class:`BaseRegistry`'s default.
+
+    **How every caller reads a member the** :class:`Registry` **protocol does not
+    name.** A class that satisfies the protocol without inheriting the base is
+    the population ``kind = "import"`` exists for, and the protocol stays
+    minimal on purpose (``docs/design.md`` [0TNXZD9-Pa0003]) -- so a budget, a
+    file set or a projected line is a default the base supplies, not a
+    requirement a project's class has to repeat.
+
+    Reported by an adopting project on 2026-09-22 and then measured against a
+    class carrying the protocol and nothing else: ``ids``, ``unused``,
+    ``review``, ``check``, ``undeclared`` and ``baseline`` each died on an
+    ``AttributeError`` from a member it read directly, six in all, while the
+    config loaded the class as valid. The load-time check was right about the
+    contract; the readers were not.
+
+    A default that is a method is bound to ``registry``, which is how
+    :func:`closure_guard` already borrowed the base's ``candidates()`` refusal.
+    """
+    if hasattr(registry, attribute):
+        return getattr(registry, attribute)
+    default = getattr(BaseRegistry, attribute)
+    if callable(default):
+        return MethodType(default, registry)
+    return default
+
+
 #: What :class:`Selected` carries over from the registry it narrows. Every one
 #: is a property of the *data model* or of the project's configuration, and none
 #: of them changes because fewer rows are in view.
@@ -421,20 +450,16 @@ class Selected(BaseRegistry):
         self._inner = inner
         self._keep = keep
         for attribute in _CARRIED:
-            setattr(
-                self,
-                attribute,
-                getattr(inner, attribute, getattr(BaseRegistry, attribute, None)),
-            )
+            setattr(self, attribute, member(inner, attribute))
 
     def entries(self) -> Iterable[Entry]:
         return [entry for entry in self._inner.entries() if self._keep(entry)]
 
     def line(self, entry: Entry) -> str:
-        return self._inner.line(entry)
+        return member(self._inner, "line")(entry)
 
     def candidates(self, text: str) -> list[str]:
-        return self._inner.candidates(text)
+        return member(self._inner, "candidates")(text)
 
     @property
     def notices(self) -> tuple[str, ...]:
@@ -475,13 +500,9 @@ def closure_guard(registry: Registry) -> None:
     if check is not None:
         check()
     elif registry.closed:
-        candidates = getattr(registry, "candidates", None)
-        if candidates is None:
-            # Raises, naming the project's own class. Borrowed rather than
-            # re-worded so there is one wording of this refusal.
-            BaseRegistry.candidates(registry, "")  # type: ignore[arg-type]
-        else:
-            candidates("")
+        # A class with no candidates() gets the base's, which raises naming the
+        # project's own class -- borrowed so there is one wording of this refusal.
+        member(registry, "candidates")("")
 
 
 def undeclared(registry: BaseRegistry, text: str) -> list[str]:
@@ -490,4 +511,5 @@ def undeclared(registry: BaseRegistry, text: str) -> list[str]:
     This is the catch. It must run where the agent cannot reach it -- host-side
     or in CI -- or it is a reminder wearing a catch's clothes.
     """
-    return [c for c in registry.candidates(text) if not registry.declared(c)]
+    return [c for c in member(registry, "candidates")(text)
+            if not registry.declared(c)]

@@ -38,6 +38,17 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   negation reaches — the difference between *"there is no `a.py`. The loader is `b.py`"* withdrawing
   one claim and withdrawing two. It also now says that a markdown table's `|` is deliberately not a
   boundary, which is a documented decision rather than an omission.
+- A `kind = "import"` class that satisfies the `Registry` protocol without subclassing
+  `BaseRegistry` now works under every command, instead of loading as valid and then dying on an
+  `AttributeError`. `ids`, `unused`, `review`, `check`, `undeclared` and `baseline` each read a
+  member the protocol never asks for — a projected line, a budget, a file set, the declaring
+  machinery, whether mentions are uses — and a class carrying only the protocol failed on six of
+  them one command at a time. Each is now read with the base's default where the class does not
+  carry one. **The protocol is unchanged**, so no class that satisfied it stops satisfying it.
+  An open class with no `candidates()` also gets `undeclared`'s refusal instead of a traceback.
+- `undeclared`'s refusal said it needed *"kind = yaml-mapping with `syntax`"* while a bibliography,
+  a `toml-value` given a `syntax` and a project's own `import` class all answered. It now names the
+  method — a registry that implements `candidates()`, which every closed registry must.
 
 ## 0.3.0
 
