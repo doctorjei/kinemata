@@ -803,6 +803,11 @@ does not want this.
 | `kinemata stale` | citations not confirmed within `stale_after`, scoped to kinds that cost a network request; a local claim is settled on every run, so a clock over it restates what the run already knows. A citation in a declared resource is clocked from its entry's date | never — refuses (exit 2) if `[citations] provenance` is not declared, because the citations carrying a stamp would then be an accident of who wrote them |
 | `kinemata confirm` | **the only command that writes.** Dry run by default; `--write` re-dates the keyed citations it verified in that run, and the `[citations] resources` entries whose documents it settled entirely | never — the exit code is what a project wires into CI, and a writer that can fail a build is one that can be made to pass one |
 
+Every gate above that reads the baseline also fails when it **covers less than the baseline
+locked**: a view, entry, rule, case or declared row that was covered when the baseline was
+recorded and is not now. That condition is not repeated in each row; § Adoption on a codebase that
+already fails lists what each gate locks.
+
 **Common flags:** `-c/--config`, `-r/--registry`, `-q/--quiet`, `-v/--verbose`, `--max-sites`.
 Each is accepted **on either side of the subcommand** — `kinemata -c x.toml check` and
 `kinemata check -c x.toml` are the same command, and given both, the later one wins.

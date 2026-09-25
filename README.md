@@ -292,8 +292,16 @@ can be adopted the same way; `kinemata baseline` prints the scopes. A second exe
 mode: two lists eventually disagree about what a project accepted, and the one
 nobody reads is the one still exempting something real. Records carry the check
 that produced them, so no gate reports another's as fixed — it names them
-instead, and `kinemata baseline` runs all three, being the only command that
-writes the file.
+instead, and `kinemata baseline` runs every one of them, being the only command
+that writes the file.
+
+**The same file locks what each gate covers.** `--record` also writes, from the
+declaration, what every gate that reads the baseline covers: a parity view's rows
+and fields, a registry's entries, a closed registry, a shape rule's group, a probe's
+cases, the declared counts and gate rows. A later run covering less **fails**, so a
+check narrowed by an edit to its own declaration cannot pass on what it has left.
+Accepting a narrower claim means re-recording, which shows in the file's diff. The
+reference sheet's baseline section lists what each gate locks.
 
 **A baseline is an allowlist, and allowlists rot.** Three properties exist
 against that, each one because the vaguer alternative fails quietly:
