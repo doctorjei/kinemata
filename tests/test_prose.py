@@ -156,7 +156,7 @@ def test_an_indented_block_is_not_treated_as_code():
 
 def test_prose_outside_a_fence_is_returned_verbatim():
     source = "one `span` two\n\n| a | b |\n\nplain prose\n"
-    assert outside_fenced_blocks(source) == source.rstrip("\n")
+    assert outside_fenced_blocks(source) == source
 
 
 def test_an_inline_span_is_left_alone():
@@ -164,7 +164,7 @@ def test_an_inline_span_is_left_alone():
     overlap: a backticked token on a prose line is a *mention*, which is
     ``outside_code_spans``'s job, and this one must not pre-empt it."""
     source = "the key `Ru0169` names a ruling\n"
-    assert outside_fenced_blocks(source) == source.rstrip("\n")
+    assert outside_fenced_blocks(source) == source
     assert "Ru0169" not in outside_code_spans(source)
 
 

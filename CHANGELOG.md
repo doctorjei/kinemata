@@ -48,6 +48,10 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   same verification. The loop over `resolve_in` reused the name of the predicate that asks whether an
   unresolved claim belongs to another project, so the first such claim called a directory. Reported
   by an adopter against `0.4.1`.
+- `kinemata confirm` refused outright, writing nothing, on any Python module or markdown document
+  ending in a blank line. The filters that reduce a file to its prose dropped the final line break,
+  so the file came back a line short, and `confirm` checks the count before trusting an offset.
+  The same join sat in five filters, and each now keeps the line count.
 
 ## 0.4.1
 

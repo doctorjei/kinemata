@@ -130,13 +130,27 @@ def python_code_only(source: str) -> str:
     try:
         tree = parsed(source)
     except SyntaxError:
-        return "\n".join(blanked)
+        return _rejoined(blanked, source)
 
     for row in docstring_rows(tree):
         if 0 < row <= len(blanked):
             blanked[row - 1] = ""
 
-    return "\n".join(blanked)
+    return _rejoined(blanked, source)
+
+
+def _rejoined(lines: list[str], source: str) -> str:
+    """Reduced lines put back together with ``source``'s own last line break.
+
+    ``"\n".join`` drops the break at the end, so a file ending in a blank line
+    came back one line shorter than it went in -- and every caller that reads a
+    finding's line number, or an offset, against the file on disk is then
+    reading the wrong line. ``kinemata confirm`` asserts the count and refused
+    outright on a module whose only fault was a trailing blank line; five
+    reducers shared the join, markdown's fence filter among them.
+    """
+    joined = "\n".join(lines)
+    return joined + "\n" if source.endswith(("\n", "\r")) else joined
 
 
 def python_prose_only(source: str) -> str:
@@ -196,7 +210,7 @@ def python_prose_only(source: str) -> str:
     except (tokenize.TokenError, IndentationError, SyntaxError):
         pass
 
-    return "\n".join(kept)
+    return _rejoined(kept, source)
 
 
 def python_strings_only(source: str) -> str:
@@ -242,7 +256,7 @@ def python_strings_only(source: str) -> str:
             line = blanked[row - 1]
             blanked[row - 1] = line[:col] + piece + line[col + len(piece):]
 
-    return "\n".join(blanked)
+    return _rejoined(blanked, source)
 
 
 def _string_tokens(source: str) -> list[tuple[int, str, str]]:
@@ -591,7 +605,7 @@ def outside_fenced_blocks(source: str) -> str:
         ):
             opener = None
         kept[index] = " " * len(line)
-    return "\n".join(kept)
+    return _rejoined(kept, source)
 
 
 #: The role that marks a span as shown rather than asserted. Declared once
