@@ -400,6 +400,9 @@ class Judged:
 
     rule: Rule
     examined: int = 0
+    #: The entries it examined, by id -- what the coverage lock records, so a
+    #: guard narrowed by an edit drops rows (:mod:`kinemata.coverage`).
+    names: tuple[str, ...] = ()
     violations: tuple[Violation, ...] = ()
     #: Why this rule could not be evaluated -- an unresolvable predicate, an
     #: operator naming an entry that is not there. Empty when it ran.
@@ -523,6 +526,7 @@ def _run(name: str, rule: Rule, entries: Sequence[Entry]) -> Judged:
         return Judged(
             rule=rule,
             examined=len(entries),
+            names=tuple(entry.id for entry in entries),
             violations=tuple(
                 Violation(registry=name, rule=rule.name, name=text)
                 for text in failures
@@ -535,6 +539,7 @@ def _run(name: str, rule: Rule, entries: Sequence[Entry]) -> Judged:
     return Judged(
         rule=rule,
         examined=len(group),
+        names=tuple(entry.id for entry in group),
         violations=tuple(
             Violation(registry=name, rule=rule.name, name=entry.id)
             for entry in group

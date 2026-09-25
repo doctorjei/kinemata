@@ -171,3 +171,176 @@ def test_malformed_coverage_is_refused(tmp_path):
     ))
     with pytest.raises(BaselineError, match="'coverage' must map"):
         Baseline.load(path)
+
+
+# -- phase 2: the other gates ------------------------------------------------------
+#
+# The user's definitions, 2026-09-25: `check` locks the entries each registry can
+# report a bypass of, not the files it read; `claims` locks the declared
+# `[[count]]` and `[[gate]]` rows, not the documents. Every row comes from a
+# declaration, so a code or prose edit never moves the lock.
+
+
+def config(tmp_path, body):
+    (tmp_path / "kinemata.toml").write_text(
+        '[project]\nroot = "."\n\n' + textwrap.dedent(body)
+    )
+    return str(tmp_path / "kinemata.toml")
+
+
+def test_check_fails_when_a_registry_loses_an_entry(tmp_path, capsys):
+    (tmp_path / "consts.py").write_text('A_FILE = "a.yaml"\nB_FILE = "b.yaml"\n')
+    (tmp_path / "more.py").write_text('C_FILE = "c.yaml"\n')
+    both = """
+        [[registry]]
+        name = "constants"
+        kind = "python-constants"
+        modules = ["consts.py", "more.py"]
+    """
+    record(capsys, config(tmp_path, both))
+    path = config(tmp_path, both.replace(', "more.py"', ""))
+    status, out = run(capsys, "check", "--config", path)
+    assert status == 1
+    assert "check:constants:entries: 1 row(s) no longer covered: C_FILE" in out
+
+
+def test_check_does_not_lock_the_files_it_read(tmp_path, capsys):
+    """The user's choice: a deleted source file is not a coverage drop."""
+    (tmp_path / "consts.py").write_text('A_FILE = "a.yaml"\n')
+    (tmp_path / "user.py").write_text("import consts\n")
+    path = config(tmp_path, """
+        [[registry]]
+        name = "constants"
+        kind = "python-constants"
+        modules = ["consts.py"]
+    """)
+    record(capsys, path)
+    (tmp_path / "user.py").unlink()
+    assert run(capsys, "check", "--config", path)[0] == 0
+
+
+KEYSPACE = """
+    [[registry]]
+    name = "keys"
+    kind = "yaml-mapping"
+    source = "keys.yaml"
+    section = "keys"
+    syntax = '\\bbox\\.[a-z_]+\\b'
+    {closed}
+"""
+
+
+def test_undeclared_fails_when_a_closed_registry_is_opened(tmp_path, capsys):
+    (tmp_path / "keys.yaml").write_text("keys:\n  box.name: {}\n")
+    record(capsys, config(tmp_path, KEYSPACE.format(closed="closed = true")))
+    path = config(tmp_path, KEYSPACE.format(closed=""))
+    status, out = run(capsys, "undeclared", "--config", path)
+    assert status == 1
+    assert "undeclared:keys: no longer claimed at all" in out
+
+
+COUNT = """
+    [claims]
+    suffixes = [".md"]
+
+    [[count]]
+    label = "answer"
+    pattern = 'answer is (\\d+)'
+    command = ["{python}", "-c", "print(42)"]
+    extract = '(\\d+)'
+"""
+
+
+def test_claims_fails_when_a_declared_count_is_deleted(tmp_path, capsys):
+    (tmp_path / "README.md").write_text("The answer is 42.\n")
+    record(capsys, config(tmp_path, COUNT))
+    path = config(tmp_path, '[claims]\nsuffixes = [".md"]\n')
+    status, out = run(capsys, "claims", "--config", path)
+    assert status == 1
+    assert "claims:counts: no longer claimed at all" in out
+
+
+SHAPE = """
+    [[registry]]
+    name = "keys"
+    kind = "yaml-mapping"
+    source = "keys.yaml"
+    section = "keys"
+
+    [[shape]]
+    registry = "keys"
+
+      [[shape.rule]]
+      name = "typed"
+      when = {{ id_matches = "{guard}" }}
+      present = "type"
+"""
+
+
+def test_shape_fails_when_a_guard_selects_fewer_entries(tmp_path, capsys):
+    (tmp_path / "keys.yaml").write_text(
+        "keys:\n  box.a: {type: str}\n  box.b: {type: str}\n"
+    )
+    record(capsys, config(tmp_path, SHAPE.format(guard="^box")))
+    path = config(tmp_path, SHAPE.format(guard="^box\\\\.a"))
+    status, out = run(capsys, "shape", "--config", path)
+    assert status == 1
+    assert "shape:keys:typed: 1 row(s) no longer covered: box.b" in out
+
+
+PROBE = """
+    [[probe]]
+    name = "scopes"
+    target = "lock_subject:check"
+    cases = "lock_corpus:{cases}"
+    outcome = "raises"
+    refusal = "lock_subject:Refused"
+"""
+
+
+def test_probe_fails_when_the_corpus_hands_over_fewer_cases(tmp_path, capsys, monkeypatch):
+    (tmp_path / "lock_subject.py").write_text(textwrap.dedent("""
+        class Refused(Exception):
+            pass
+
+
+        def check(name):
+            if name not in {"box", "workset"}:
+                raise Refused(name)
+    """))
+    (tmp_path / "lock_corpus.py").write_text(textwrap.dedent("""
+        from kinemata.probe import Case
+
+
+        def full():
+            return [Case(expect="accept", args=("box",), label="box"),
+                    Case(expect="accept", args=("workset",), label="workset"),
+                    Case(expect="refuse", args=("nope",), label="nope")]
+
+
+        def thinned():
+            return [Case(expect="accept", args=("box",), label="box"),
+                    Case(expect="refuse", args=("nope",), label="nope")]
+    """))
+    # Named apart from test_probe.py's `subject` and `corpus`: an import is
+    # cached for the whole session, and sharing a name hands that file ours.
+    monkeypatch.syspath_prepend(str(tmp_path))
+    record(capsys, config(tmp_path, PROBE.format(cases="full")))
+    path = config(tmp_path, PROBE.format(cases="thinned"))
+    status, out = run(capsys, "probe", "--config", path)
+    assert status == 1
+    assert "probe:scopes: 1 row(s) no longer covered: workset" in out
+
+
+def test_a_rule_that_could_not_run_is_not_reported_again_as_lost_coverage(tmp_path, capsys):
+    """It already fails as blocked; a second line calling it narrowed would
+    send a reader after the wrong cause."""
+    (tmp_path / "keys.yaml").write_text("keys:\n  box.a: {type: str}\n")
+    record(capsys, config(tmp_path, SHAPE.format(guard="^box")))
+    broken = SHAPE.format(guard="^box").replace(
+        'present = "type"', 'holds = "no_such_module:predicate"'
+    )
+    status, out = run(capsys, "shape", "--config", config(tmp_path, broken))
+    assert status == 1
+    assert "BLOCKED" in out or "could not" in out
+    assert "no longer claimed" not in out

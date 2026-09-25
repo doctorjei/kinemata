@@ -19,14 +19,14 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   values in its own notation inside mode-keyed maps, so *after this rewrite, compare as data* had
   no form: they split each map into one `text` view per mode, and built the maps on the oracle
   side where no reader of the config can see the rewrite.
-- **The baseline locks what each `[[parity]]` covers.** `baseline --record` writes the rows each
-  declaration compares, for membership and for values, and a `parity` run covering less fails:
-  a `field` removed, a declaration deleted, a `where` that keeps fewer rows, a changed relation.
-  An adopter removed `field` from a view over 18 rows, on a copy of their tree, and `parity` stayed
-  green while checking only that the rows exist. They had retired the tests pinning those values
-  on the strength of that view. Coverage is read from the declaration, so the lock does not move
-  with the code. A narrower claim is accepted by re-recording. Baselines recorded before this lock
-  nothing until they are re-recorded.
+- **The baseline locks what each gate covers.** `baseline --record` writes, from the declaration,
+  what `parity`, `check`, `undeclared`, `shape`, `probe` and `claims` each cover, and a run covering
+  less fails. Examples: a parity `field` removed, a registry dropped, a closed registry opened, a
+  shape guard that selects fewer entries, a corpus that hands over fewer cases, a `[[count]]`
+  deleted. An adopter removed `field` from a view over 18 rows, on a copy of their tree, and `parity`
+  stayed green while checking only that the rows exist. They had retired the tests pinning those
+  values on the strength of that view. Nothing is read from the code's output or the tree's files, so
+  the lock does not move with them. A narrower claim is accepted by re-recording.
 - `[[distinct]]` declares entries that are **separate facts sharing a spelling**, so neither
   definition is reported as a bypass of the other. An adopter's packaged-template directory
   `"agent_default"` and a YAML section of the same name are two facts, and declaring the section
@@ -37,9 +37,9 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 **Changed**
 
-- **Re-recording a baseline now also locks parity coverage.** Nothing changes for a baseline until
-  `baseline --record` runs again. After that, `parity` fails if a view compares fewer rows than it
-  did at the recording, and accepting that means recording again.
+- **Re-recording a baseline now also locks coverage.** Nothing changes for a baseline until
+  `baseline --record` runs again. After that, each gate fails if it covers less than it did at the
+  recording, and accepting that means recording again.
 
 **Fixed**
 

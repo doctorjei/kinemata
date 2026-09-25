@@ -230,6 +230,9 @@ class Probed:
     probe: str
     accepting: int = 0
     refusing: int = 0
+    #: Every case the corpus handed over, by name -- what the coverage lock
+    #: records, so a corpus that loses rows fails (:mod:`kinemata.coverage`).
+    cases: tuple[str, ...] = ()
     mismatches: tuple[Mismatch, ...] = ()
     #: Why this probe could not be evaluated -- an unresolvable target, a case
     #: list that is not one, a call neither outcome mode could read. Empty when
@@ -408,7 +411,8 @@ def examine(probe: Probe) -> Probed:
 
     accepting = sum(1 for row in rows if row.expect == ACCEPT)
     refusing = len(rows) - accepting
-    result = Probed(probe=probe.name, accepting=accepting, refusing=refusing)
+    cases = tuple(row.name for row in rows)
+    result = Probed(probe=probe.name, accepting=accepting, refusing=refusing, cases=cases)
     if result.vacuous:
         # Nothing is called. A corpus that cannot discriminate has not earned
         # the right to run the project's code, and a finding from it would be
@@ -434,6 +438,7 @@ def examine(probe: Probe) -> Probed:
         probe=probe.name,
         accepting=accepting,
         refusing=refusing,
+        cases=cases,
         mismatches=tuple(found),
     )
 

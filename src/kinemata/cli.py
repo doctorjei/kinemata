@@ -39,11 +39,12 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
+from . import coverage as coverage_of
 from . import stamps
 from .adapters.bibliography import EXTERNAL, Bibliography, undeclared_key
 from .baseline import Baseline, BaselineError, Split, record
@@ -63,7 +64,7 @@ from .claims import CLAIMS_REGISTRY, ClaimsError, Verification, verify
 from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
 from .confirm import ConfirmError, apply, dating, plan, redate
 from .context import measure
-from .contract import BaseRegistry, Entry, deferred_to, member
+from .contract import BaseRegistry, Entry, Registry, deferred_to, member
 from .exclusion import audit, excluded, relative_paths
 from .gates import WORKFLOW_DIR, enforced, uncovered
 from .literals import clusters
@@ -835,6 +836,12 @@ def cmd_undeclared(args: argparse.Namespace) -> int:
         print(f"\nbaseline: {len(split.accepted)} undeclared identifier(s) "
               f"accepted as pre-existing in {settings.baseline.name}{until}")
     _report_stale(split, quiet=args.quiet)
+    # The coverage lock: opening a closed registry is how this catch narrows.
+    narrowed = _locked(
+        baseline, settings,
+        coverage_of.undeclared(_selected_registries(args, settings)),
+        coverage_of.owned_by("undeclared", args.registry),
+    )
 
     if failed:
         print(
@@ -842,8 +849,8 @@ def cmd_undeclared(args: argparse.Namespace) -> int:
             "declares. Declare it, or open the registry deliberately.",
             file=sys.stderr,
         )
-        return 1
-    return 0
+    _narrowed_fail(narrowed)
+    return 1 if failed or narrowed else 0
 
 
 def _set_valued(result: Parity, args: argparse.Namespace) -> None:
@@ -903,6 +910,42 @@ def _parity(
     return parity_survey(
         settings.registries, specs, target, settings.oracle_timeout
     )
+
+
+def _selected_registries(args: argparse.Namespace, settings: Settings) -> list[Registry]:
+    """The registries a run covers: all of them, or the one ``--registry`` names."""
+    return [
+        registry for registry in settings.registries
+        if not args.registry or registry.name == args.registry
+    ]
+
+
+def _locked(
+    baseline: Baseline,
+    settings: Settings,
+    current: Mapping[str, Iterable[str]],
+    owned: Callable[[str], bool],
+) -> int:
+    """Print the coverage the baseline locked that this run no longer has, and
+    return how many claims narrowed. Shared by every gate, so the lock reads the
+    same wherever it fails (:mod:`kinemata.coverage`)."""
+    shrunk = baseline.shrunk(current, owned)
+    if shrunk:
+        print(f"\n# coverage recorded in {settings.baseline.name}, and not covered now")
+        for item in shrunk:
+            print(f"  {item}")
+        print("  A narrower claim is accepted by re-recording the baseline "
+              "(`kinemata baseline --record --until YYYY-MM-DD`), which shows in "
+              "its diff.", file=sys.stderr)
+    return len(shrunk)
+
+
+def _narrowed_fail(narrowed: int) -> None:
+    """The lock's own FAIL line, apart from a gate's findings: a narrowed claim
+    is not a finding, and what is left may be entirely clean."""
+    if narrowed:
+        print(f"\nFAIL: {narrowed} coverage claim(s) narrowed since the baseline "
+              "was recorded.", file=sys.stderr)
 
 
 def _parity_coverage(
@@ -1020,14 +1063,9 @@ def cmd_parity(args: argparse.Namespace) -> int:
     # -- a `field` removed, a block deleted, a `where` that keeps fewer rows --
     # still agrees about whatever it has left, so nothing above can fail it.
     # The baseline recorded what each view covered; covering less fails here.
-    shrunk = baseline.shrunk(_parity_coverage(args, settings), _parity_owns(args))
-    if shrunk:
-        print(f"\n# coverage recorded in {settings.baseline.name}, and not covered now")
-        for item in shrunk:
-            print(f"  {item}")
-        print("  A narrower claim is accepted by re-recording the baseline "
-              "(`kinemata baseline --record --until YYYY-MM-DD`), which shows in "
-              "its diff.", file=sys.stderr)
+    narrowed = _locked(
+        baseline, settings, _parity_coverage(args, settings), _parity_owns(args)
+    )
 
     if failed:
         print(
@@ -1035,11 +1073,9 @@ def cmd_parity(args: argparse.Namespace) -> int:
             "the code produces.",
             file=sys.stderr,
         )
-    if shrunk:
-        # Not a disagreement: both sides may agree perfectly about what is left.
-        print(f"\nFAIL: {len(shrunk)} coverage claim(s) narrowed since the "
-              "baseline was recorded.", file=sys.stderr)
-    return 1 if failed or shrunk else 0
+    # Not a disagreement: both sides may agree perfectly about what is left.
+    _narrowed_fail(narrowed)
+    return 1 if failed or narrowed else 0
 
 
 def _shape(args: argparse.Namespace, settings: Settings) -> list[Shaped]:
@@ -1143,14 +1179,20 @@ def cmd_shape(args: argparse.Namespace) -> int:
         print(f"\nbaseline: {len(split.accepted)} violation(s) accepted as "
               f"pre-existing in {settings.baseline.name}{until}")
     _report_stale(split, quiet=args.quiet)
+    # The coverage lock: a rule removed, or a guard selecting fewer entries.
+    covered, blocked = coverage_of.shape(results)
+    narrowed = _locked(
+        baseline, settings, covered,
+        coverage_of.owned_by("shape", args.registry, skip=blocked),
+    )
 
     if failed:
         print(
             f"\nFAIL: {failed} rule(s) a declaration does not satisfy.",
             file=sys.stderr,
         )
-        return 1
-    return 0
+    _narrowed_fail(narrowed)
+    return 1 if failed or narrowed else 0
 
 
 def _probe(args: argparse.Namespace, settings: Settings) -> list[Probed]:
@@ -1244,6 +1286,11 @@ def cmd_probe(args: argparse.Namespace) -> int:
         print(f"\nbaseline: {len(split.accepted)} case(s) accepted as "
               f"pre-existing in {settings.baseline.name}{until}")
     _report_stale(split, quiet=args.quiet)
+    # The coverage lock: a probe removed, or a corpus handing over fewer cases.
+    covered, blocked = coverage_of.probe(results)
+    narrowed = _locked(
+        baseline, settings, covered, coverage_of.owned_by("probe", skip=blocked)
+    )
 
     if mismatched or unanswered:
         said = []
@@ -1252,8 +1299,8 @@ def cmd_probe(args: argparse.Namespace) -> int:
         if unanswered:
             said.append(f"{unanswered} probe(s) that did not answer")
         print(f"\nFAIL: {', '.join(said)}.", file=sys.stderr)
-        return 1
-    return 0
+    _narrowed_fail(narrowed)
+    return 1 if mismatched or unanswered or narrowed else 0
 
 
 def cmd_unused(args: argparse.Namespace) -> int:
@@ -1650,6 +1697,17 @@ def cmd_claims(args: argparse.Namespace) -> int:
         _report_reworded(split)
         _report_unscanned(split)
 
+    # The coverage lock: a `[[count]]` deleted, or a gate row dropped from the
+    # inventory, leaves every remaining claim resolving.
+    narrowed = _locked(
+        baseline, settings,
+        coverage_of.claims(
+            [f"{count.label}: {count.pattern}" for count in settings.counts],
+            [gate.command for gate in settings.gates],
+        ),
+        coverage_of.owned_by("claims"),
+    )
+
     # A lapsed baseline fails here for the reason it fails `check`: the date is
     # the whole mechanism, and exemptions still in force that nobody has decided
     # again are what it is there to surface.
@@ -1690,6 +1748,7 @@ def cmd_claims(args: argparse.Namespace) -> int:
         if inventory.absent:
             parts.append(f"{len(inventory.absent)} declared gate(s) do not run")
         print(f"\nFAIL: {'; '.join(parts)}.", file=sys.stderr)
+        _narrowed_fail(narrowed)
         return 1
     if not args.quiet:
         # "All resolve" is not what green means once a baseline is in play, and
@@ -1702,7 +1761,8 @@ def cmd_claims(args: argparse.Namespace) -> int:
                   "the rest resolve.")
         else:
             print(f"{found.checked} documentation claim(s) checked, all resolve.")
-    return 0
+    _narrowed_fail(narrowed)
+    return 1 if narrowed else 0
 
 
 #: The starter config. Documentation-only by default, because that is the
@@ -2259,6 +2319,14 @@ def cmd_check(args: argparse.Namespace) -> int:
         _report_reworded(split)
         _report_unscanned(split)
 
+    # The coverage lock: a registry removed, a module dropped, or a `where`
+    # keeping fewer entries leaves the scan clean over what it still declares.
+    narrowed = _locked(
+        baseline, settings,
+        coverage_of.check(_selected_registries(args, settings)),
+        coverage_of.owned_by("check", args.registry),
+    )
+
     # A lapsed baseline fails even with nothing new, because that is the whole
     # point of the date: the exemptions are still in force and nobody has looked
     # at them since the day somebody said they would.
@@ -2288,8 +2356,8 @@ def cmd_check(args: argparse.Namespace) -> int:
     if split.new:
         label = "new bypass(es)" if baseline.exists else "bypass(es)"
         print(f"\nFAIL: {len(split.new)} {label} of declared things.", file=sys.stderr)
-        return 1
-    return 0
+    _narrowed_fail(narrowed)
+    return 1 if split.new or narrowed else 0
 
 
 def cmd_baseline(args: argparse.Namespace) -> int:
@@ -2372,7 +2440,8 @@ def cmd_baseline(args: argparse.Namespace) -> int:
     # way for a check not to have answered: a rule that examined no entry ran
     # without judging anything, so its records are exactly as unearned as a
     # blocked oracle's. Both stall the rewrite.
-    for shaped in _shape(args, settings):
+    shaped_all = _shape(args, settings)
+    for shaped in shaped_all:
         findings += shaped.findings()
         stalled += [f"{shaped.registry}: {why}" for why in shaped.unjudged()]
 
@@ -2381,10 +2450,29 @@ def cmd_baseline(args: argparse.Namespace) -> int:
     # project's code and still could not tell a discriminating callable from a
     # constant one. **The rule generalizes past oracles** -- anything that can
     # look like it checked while checking nothing must stall the writer.
-    for probed in _probe(args, settings):
+    probed_all = _probe(args, settings)
+    for probed in probed_all:
         findings += probed.findings()
         if probed.blocked or probed.vacuous:
             stalled.append(probed.unjudged())
+
+    # What every gate covers, for the lock `--record` writes and the view below
+    # reports against -- read the way each gate reads it, so the two agree.
+    shape_covered, shape_blocked = coverage_of.shape(shaped_all)
+    probe_covered, probe_blocked = coverage_of.probe(probed_all)
+    covered = {
+        **_parity_coverage(args, settings),
+        **coverage_of.check(settings.registries),
+        **coverage_of.undeclared(settings.registries),
+        **shape_covered,
+        **probe_covered,
+    }
+    if settings.checks_claims:
+        covered.update(coverage_of.claims(
+            [f"{count.label}: {count.pattern}" for count in settings.counts],
+            [gate.command for gate in settings.gates],
+        ))
+    unjudged = shape_blocked | probe_blocked
 
     # **A scan that could not run must not author the list.** Running every
     # check is only half the guarantee: an oracle that is not installed here
@@ -2436,7 +2524,7 @@ def cmd_baseline(args: argparse.Namespace) -> int:
             ) from exc
         fresh = record(settings.baseline, findings, until=until,
                        by=args.by or "", note=args.note or "",
-                       coverage=_parity_coverage(args, settings))
+                       coverage=covered)
         delta = fresh.size - baseline.size
         # Asked before the write, because `exists` asks the filesystem and
         # `save` is about to create the file: read afterwards, a first recording
@@ -2481,11 +2569,13 @@ def cmd_baseline(args: argparse.Namespace) -> int:
         return 0
 
     print(f"{baseline.path}: {baseline.size} accepted finding(s).")
-    if baseline.coverage:
+    # Not under a narrowed scan: a filter would report every other registry's
+    # lock as lost, the way it would every other registry's records as fixed.
+    if baseline.coverage and not scope:
         locked = sum(len(ids) for ids in baseline.coverage.values())
         print(f"coverage: {len(baseline.coverage)} claim(s) over {locked} row(s) "
               "locked; a run covering less fails its gate.")
-        for item in baseline.shrunk(_parity_coverage(args, settings), _parity_owns(args)):
+        for item in baseline.shrunk(covered, lambda key: key not in unjudged):
             print(f"  not covered now -- {item}")
     if split.new:
         # Named by the gate that would fail, not by one of them: this list feeds
