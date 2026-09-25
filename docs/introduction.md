@@ -159,6 +159,17 @@ kind = "code-patterns"
   antipatterns = ['"none",\s*"on_paper"']
   home = ["pkg/push.py::GRADING_TYPES"]
 
+# Two declared facts that share a spelling -- a template directory and a YAML
+# section both named after one concept. Renaming either would not rename the
+# other, so neither definition is a bypass of the other. Only the definitions are
+# exempt: an inline "agent_default" anywhere else is still reported, against
+# both, since nothing at that site says which it means. Refused with fewer than
+# two entries, an id no registry declares, or once the spellings no longer
+# collide -- so it cannot outlive the coincidence it describes.
+[[distinct]]
+entries = ["PACKAGED_AGENT_DEFAULT", "AGENT_DEFAULT_SECTION"]
+note = "the packaged template dir, and the core-defaults.yaml section"
+
 # Forbidden spellings (retired names, dialect) as declared data.
 [[registry]]
 name = "retired"

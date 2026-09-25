@@ -336,6 +336,7 @@ def _run_review(
                 exclude=settings.exclude,
                 within=_within(args, settings),
                 max_sites=_max_sites(args, settings),
+                partners=settings.distinct,
             ),
         ))
 

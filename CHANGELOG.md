@@ -19,6 +19,13 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   values in its own notation inside mode-keyed maps, so *after this rewrite, compare as data* had
   no form: they split each map into one `text` view per mode, and built the maps on the oracle
   side where no reader of the config can see the rewrite.
+- `[[distinct]]` declares entries that are **separate facts sharing a spelling**, so neither
+  definition is reported as a bypass of the other. An adopter's packaged-template directory
+  `"agent_default"` and a YAML section of the same name are two facts, and declaring the section
+  as its own constant made `check` report each definition against the other. Only the definitions
+  are exempt: an inline literal elsewhere is still reported, against every entry it could mean.
+  Refused for fewer than two entries, an id no registry declares, or spellings that no longer
+  collide.
 
 ## 0.4.1
 

@@ -27,8 +27,8 @@ import os
 import re
 import subprocess
 import sys
-from collections.abc import Iterable, Iterator, Sequence
-from dataclasses import dataclass
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 
 from .contract import BaseRegistry, Entry, member, undeclared
@@ -182,6 +182,22 @@ def _definition(path: str, entry: Entry, source: str) -> tuple[tuple[int, int], 
         if name in defined:
             spans.append(defined[name])
     return tuple(spans)
+
+
+def _exempt(
+    path: str,
+    entry: Entry,
+    source: str,
+    partners: Mapping[str, tuple[str, ...]] | None,
+) -> tuple[tuple[int, int], ...]:
+    """The lines where a match of ``entry`` is not a bypass: its own definition,
+    and the definition of any ``[[distinct]]`` partner sharing its spelling."""
+    spans = _definition(path, entry, source)
+    homes = (partners or {}).get(entry.id)
+    if not homes or spans == _WHOLE_FILE:
+        return spans
+    theirs = _definition(path, replace(entry, home=homes), source)
+    return _WHOLE_FILE if theirs == _WHOLE_FILE else spans + theirs
 
 
 def _blanked(text: str, spans: tuple[tuple[int, int], ...]) -> str:
@@ -353,6 +369,7 @@ def scan(
     within: str | Path | None = None,
     code_only: bool | None = None,
     strings_only: bool | None = None,
+    partners: Mapping[str, tuple[str, ...]] | None = None,
 ) -> list[Bypass]:
     """Every bypass of ``registry``'s entries under ``root``.
 
@@ -365,6 +382,9 @@ def scan(
         default: the same literal in prose is documentation, and reporting it is
         how the mechanism gets ignored. Measured on kanibako-cli, this is the
         difference between 8 real sites and 50 hits.
+    :param partners: each entry id's ``[[distinct]]`` partners' homes,
+        exempted as the entry's own home is: another declared fact spelled the
+        same way is not a bypass of this one where it is defined.
     :param strings_only: match only inside string literals. Use when the
         antipattern is a *value*: without it, ``box_data`` also matches the
         identifier ``box_data``, and those lines usually use the constant
@@ -407,7 +427,10 @@ def scan(
             source = path.read_text(errors="ignore")
         except OSError:
             continue
-        own = {entry.id: _definition(rel, entry, source) for entry, _, _ in compiled}
+        own = {
+            entry.id: _exempt(rel, entry, source, partners)
+            for entry, _, _ in compiled
+        }
         extractor = LITERAL_EXTRACTORS.get(path.suffix) if strings_only else None
         if extractor is not None:
             literals = extractor(source)

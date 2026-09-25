@@ -24,7 +24,7 @@ author a narrower pattern by hand.
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -128,10 +128,12 @@ def review(
     within: str | Path | None = None,
     strings_only: bool | None = None,
     max_sites: int | None = DEFAULT_MAX_SITES,
+    partners: Mapping[str, tuple[str, ...]] | None = None,
 ) -> Report:
     """Scan, then drop antipatterns that matched too widely to mean anything.
 
     :param max_sites: suppression threshold; ``None`` disables suppression.
+    :param partners: ``[[distinct]]`` homes, passed through to :func:`scan`.
     """
     raw = scan(
         registry,
@@ -140,6 +142,7 @@ def review(
         exclude=exclude,
         within=within,
         strings_only=strings_only,
+        partners=partners,
     )
 
     entries = len(list(registry.entries()))

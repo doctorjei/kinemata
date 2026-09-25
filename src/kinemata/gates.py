@@ -107,7 +107,8 @@ class Inventory:
 #: warning -- a running ``claims`` covers them by definition. ``[[interpose]]``
 #: runs as a pytest plugin, so no CLI command names it and no gate row could.
 #: ``[citations]`` is read by advisory commands. ``[[command]]`` declares
-#: helpers, not checks; ``[[gate]]`` is the inventory itself. Advisory readers
+#: helpers, not checks; ``[[gate]]`` is the inventory itself. ``[[distinct]]``
+#: narrows what ``check`` reports and runs wherever the registries do. Advisory readers
 #: (``review``, ``clusters``, ``unused``, ``ids``) cover nothing: the sentence
 #: being protected counts *checks that run*, and an advisory pass is not one.
 #: A registry is covered by ``check`` **or** ``undeclared`` -- closed

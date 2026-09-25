@@ -76,6 +76,7 @@ from .claims import (
 from .context import STRIPPERS, escapes
 from .contract import (
     BaseRegistry,
+    Entry,
     Registry,
     Selected,
     closure_guard,
@@ -256,6 +257,10 @@ class Settings:
     #: run them. Empty unless declared: a project that has not said which checks
     #: are required has not made a claim to falsify.
     gates: tuple[Gate, ...] = ()
+    #: ``[[distinct]]``: each entry id's partners' homes -- other declared facts
+    #: that share its spelling -- which a scan exempts as it exempts the entry's
+    #: own. Empty unless declared.
+    distinct: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     #: What a session loads, and what it may weigh. ``None`` when the project has
     #: not declared a ``[context]`` table -- distinct from a ceiling of zero.
     context: ContextBudget | None = None
@@ -859,8 +864,12 @@ ROOT_KEYS = frozenset(
     {
         "project", "registry", "count", "parity", "shape", "interpose", "gate",
         "probe", "claims", "context", "citations", "promise", "command",
+        "distinct",
     }
 )
+
+#: What a ``[[distinct]]`` table may declare.
+DISTINCT_KEYS = frozenset({"entries", "note"})
 
 #: What any ``[[registry]]`` may declare whatever its kind: its own name, the
 #: kind itself, and the contract attributes :func:`load` sets on the instance
@@ -1410,6 +1419,7 @@ def load(path: str | Path) -> Settings:
         probes=_build_probes(raw.get("probe", []), path),
         baseline=root / project.get("baseline", BASELINE_NAME),
         gates=_build_gates(raw.get("gate", []), path),
+        distinct=_build_distinct(raw.get("distinct"), registries, root, path),
         unfitted=tuple(unfitted),
         notices=tuple(
             message
@@ -1926,6 +1936,117 @@ def _check_scopes(
                 )
 
 
+def _home_files(root: Path, fragment: str, walked: dict[str, list[str]]) -> list[str]:
+    """The files a ``home`` fragment names, relative to ``root``.
+
+    Looked up at its path under the root first, and by path suffix -- the way a
+    scan matches a home -- only when it is not there, so a project spelling its
+    homes repo-relative pays no tree walk. ``walked`` caches one walk per file
+    suffix across calls.
+    """
+    file = split_site(fragment)[0]
+    if (root / file).is_file():
+        return [file]
+    suffix = PurePosixPath(file).suffix
+    if suffix not in walked:
+        walked[suffix] = [str(f.relative_to(root)) for f in _files(root, (suffix,))]
+    return [rel for rel in walked[suffix] if _is_home_file(rel, fragment)]
+
+
+def _definition_text(root: Path, fragment: str, walked: dict[str, list[str]]) -> str:
+    """What a ``home`` fragment defines, as text: the statement a site names, or
+    the whole file."""
+    name = split_site(fragment)[1]
+    texts = []
+    for rel in _home_files(root, fragment, walked):
+        source = (root / rel).read_text(errors="ignore")
+        if name is None:
+            texts.append(source)
+        elif name in definitions(source):
+            first, last = definitions(source)[name]
+            texts.append("\n".join(source.splitlines()[first - 1:last]))
+    return "\n".join(texts)
+
+
+def _build_distinct(
+    declared: object, registries: Sequence[Registry], root: Path, path: Path
+) -> dict[str, tuple[str, ...]]:
+    """``[[distinct]]``: entries that are separate facts sharing one spelling.
+
+    Returned as each entry id's **partners' homes**, which a scan exempts from
+    that entry's antipatterns as it exempts the entry's own. So each definition
+    stops being reported as a bypass of the other, and a literal anywhere else
+    is still reported -- against every entry it could mean, since nothing at
+    that site says which.
+
+    Asked for by an adopter whose packaged-template directory
+    ``PACKAGED_AGENT_DEFAULT = "agent_default"`` and a YAML section read as
+    ``.get("agent_default")`` are two facts: renaming either would not rename
+    the other. Declaring the section as its own constant made it worse -- each
+    constant's definition became a bypass of the other -- so the only cures were
+    a baseline record that lapses, or renaming one to satisfy the tool, which
+    they had done once already.
+
+    **Refused where it would do nothing**: fewer than two entries, an id no
+    registry declares, and a group whose spellings collide nowhere -- no entry's
+    antipattern appears in another's definition. The last is also what makes a
+    stale declaration fail once the two values diverge, rather than sit inert.
+    """
+    if declared is None:
+        return {}
+    if not isinstance(declared, list):
+        raise ConfigError(f"{path}: `distinct` must be an array of tables, [[distinct]].")
+    by_id: dict[str, list[Entry]] = {}
+    for registry in registries:
+        for entry in registry.entries():
+            by_id.setdefault(entry.id, []).append(entry)
+    walked: dict[str, list[str]] = {}
+    partners: dict[str, list[str]] = {}
+    for index, spec in enumerate(declared):
+        where = f"{path}: [[distinct]] {index}"
+        if not isinstance(spec, dict):
+            raise ConfigError(f"{where} must be a table.")
+        _reject_unknown(spec, DISTINCT_KEYS, where)
+        ids = _strings(spec.get("entries"), f"{where} entries")
+        if len(set(ids)) < 2:
+            raise ConfigError(
+                f"{where} names {len(set(ids))} distinct entr"
+                f"{'y' if len(set(ids)) == 1 else 'ies'}; it says two facts share a "
+                "spelling, so it needs at least two."
+            )
+        missing = [name for name in ids if name not in by_id]
+        if missing:
+            raise ConfigError(
+                f"{where} names {', '.join(map(repr, missing))}, which no registry "
+                "declares. Both facts must be declared entries: a literal nothing "
+                "declares is ambiguous, and exempting it would be an ignore list."
+            )
+        collides = False
+        for name in ids:
+            mine = by_id[name]
+            others = [e for other in ids if other != name for e in by_id[other]]
+            partners.setdefault(name, []).extend(
+                fragment for other in others for fragment in other.home
+            )
+            texts = [
+                _definition_text(root, fragment, walked)
+                for other in others for fragment in other.home
+            ]
+            if any(
+                re.search(pattern, text)
+                for entry in mine for pattern in entry.antipatterns
+                for text in texts
+            ):
+                collides = True
+        if not collides:
+            raise ConfigError(
+                f"{where}: no entry's spelling appears in another's definition, so "
+                "the declaration exempts nothing -- the values have diverged, or "
+                "they never shared a spelling. Remove it."
+            )
+    return {name: tuple(dict.fromkeys(homes)) for name, homes in partners.items()}
+
+
 def _check_sites(registries: Sequence[Registry], root: Path, path: Path) -> None:
     """Every ``home = "file::NAME"`` names a Python file that binds ``NAME``.
 
@@ -1935,7 +2056,7 @@ def _check_sites(registries: Sequence[Registry], root: Path, path: Path) -> None
     its path under the root first and by path suffix only when it is not there,
     so a project spelling its homes repo-relative pays no tree walk.
     """
-    walked: list[str] | None = None
+    walked: dict[str, list[str]] = {}
     for registry in registries:
         for entry in registry.entries():
             for fragment in entry.home:
@@ -1949,12 +2070,7 @@ def _check_sites(registries: Sequence[Registry], root: Path, path: Path) -> None
                         "module-level statement binding NAME, found by reading "
                         "the module as Python."
                     )
-                if (root / file).is_file():
-                    homes = [file]
-                else:
-                    if walked is None:
-                        walked = [str(f.relative_to(root)) for f in _files(root, (".py",))]
-                    homes = [rel for rel in walked if _is_home_file(rel, fragment)]
+                homes = _home_files(root, fragment, walked)
                 if not homes:
                     raise ConfigError(f"{where} names no file under {root}.")
                 if not any(
