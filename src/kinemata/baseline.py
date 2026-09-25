@@ -46,8 +46,8 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter
-from collections.abc import Iterable
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
@@ -254,6 +254,27 @@ class Split:
         return tuple(pairs)
 
 
+@dataclass(frozen=True)
+class Shrink:
+    """Coverage the baseline recorded that a run no longer has.
+
+    ``lost`` names the rows that dropped out; ``whole`` says the claim itself is
+    gone -- a ``field`` removed, a declaration deleted, a relation changed --
+    rather than rows leaving a claim that is still made.
+    """
+
+    key: str
+    lost: tuple[str, ...]
+    whole: bool
+
+    def __str__(self) -> str:
+        shown = ", ".join(self.lost[:8]) + (", ..." if len(self.lost) > 8 else "")
+        if self.whole:
+            return (f"{self.key}: no longer claimed at all -- {len(self.lost)} "
+                    f"row(s) were covered when the baseline was recorded: {shown}")
+        return f"{self.key}: {len(self.lost)} row(s) no longer covered: {shown}"
+
+
 @dataclass
 class Baseline:
     """Accepted findings, loaded from or written to one file.
@@ -276,6 +297,37 @@ class Baseline:
     #: it is on a promise: an unsigned reason is a reason with nobody behind it.
     by: str = ""
     note: str = ""
+    #: What each check covered when this was recorded, by coverage key -- the
+    #: rows a parity declaration compares, and how. **A lock rather than an
+    #: exemption**: a gate fails when a run covers less than this, so a check
+    #: narrowed by an edit to its declaration cannot pass on what is left. Empty
+    #: until a ``--record`` writes it, which is also every baseline written
+    #: before the lock existed -- those lock nothing and fail nothing.
+    coverage: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+
+    def shrunk(
+        self,
+        current: Mapping[str, Iterable[str]],
+        owned: Callable[[str], bool],
+    ) -> list[Shrink]:
+        """Recorded coverage this run no longer has, among the keys it ``owned``.
+
+        ``owned`` says which keys the calling gate is in a position to judge, for
+        the reason :attr:`Split.unscanned` exists: a run that did not compute a
+        key must not report it as gone. **Growth is never a finding** -- covering
+        more than was recorded is the direction a lock exists to allow.
+        """
+        found: list[Shrink] = []
+        for key, recorded in sorted(self.coverage.items()):
+            if not owned(key):
+                continue
+            if key not in current:
+                found.append(Shrink(key, tuple(recorded), whole=True))
+                continue
+            lost = tuple(sorted(set(recorded) - set(current[key])))
+            if lost:
+                found.append(Shrink(key, lost, whole=False))
+        return found
 
     def lapsed(self, today: date | None = None) -> bool:
         return self.until is not None and self.until < (today or date.today())
@@ -348,12 +400,22 @@ class Baseline:
                 raise BaselineError(
                     f"{path}: finding {index} is malformed: {exc}"
                 ) from exc
+        raw_coverage = document.get("coverage", {})
+        if not isinstance(raw_coverage, dict) or not all(
+            isinstance(ids, list) and all(isinstance(i, str) for i in ids)
+            for ids in raw_coverage.values()
+        ):
+            raise BaselineError(
+                f"{path}: 'coverage' must map each key to a list of identifiers. "
+                "Re-record it rather than editing by hand."
+            )
         return cls(
             path=path,
             accepted=tuple(records),
             until=until,
             by=str(document.get("by", "")),
             note=str(document.get("note", "")),
+            coverage={str(key): tuple(ids) for key, ids in raw_coverage.items()},
         )
 
     def save(self) -> None:
@@ -388,6 +450,10 @@ class Baseline:
             document["by"] = self.by
         if self.note:
             document["note"] = self.note
+        if self.coverage:
+            document["coverage"] = {
+                key: sorted(ids) for key, ids in sorted(self.coverage.items())
+            }
         document["findings"] = findings
         self.path.write_text(json.dumps(document, indent=2) + "\n")
 
@@ -478,8 +544,12 @@ def record(
     until: date,
     by: str = "",
     note: str = "",
+    coverage: Mapping[str, Iterable[str]] | None = None,
 ) -> Baseline:
     """Build a baseline covering exactly ``findings``, and the date it lapses.
+
+    ``coverage`` is what each check covered in the run being recorded, locked
+    so a later run covering less fails (:meth:`Baseline.shrunk`).
 
     Identical sites collapse into one record carrying their count, which is what
     makes the file readable at 111 findings and still exact.
@@ -506,4 +576,7 @@ def record(
         )
         for key, count in sorted(counts.items())
     )
-    return Baseline(path=Path(path), accepted=accepted, until=until, by=by, note=note)
+    return Baseline(
+        path=Path(path), accepted=accepted, until=until, by=by, note=note,
+        coverage={key: tuple(sorted(set(ids))) for key, ids in (coverage or {}).items()},
+    )

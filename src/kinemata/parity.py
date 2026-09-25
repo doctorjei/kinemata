@@ -790,6 +790,79 @@ def _declared_json(
         ), False)
 
 
+def _identifier_translation(spec: Oracle) -> Translation:
+    """What an entry's id becomes before it is compared with a printed one.
+
+    `translate` keeps its published target -- the identifiers of a membership
+    declaration, the values of a value one -- and `translate_identifier` is the
+    second hop, which only a value run can need: without a field there is one
+    side and `translate` already reaches it. The config refuses the pair in that
+    case rather than silently preferring one.
+    """
+    return spec.translate_identifier or (
+        Translation() if spec.field else (spec.translate or Translation())
+    )
+
+
+def coverage_key(registry: str, *parts: str) -> str:
+    """A coverage lock's key: ``parity:<registry>:<what>:<how>``."""
+    return ":".join(("parity", registry, *parts))
+
+
+def coverage(registry: Registry, spec: Oracle) -> dict[str, tuple[str, ...]]:
+    """What one declaration claims to cover, read off the declaration alone.
+
+    Two keys: the identifiers compared for **membership**, under the relation
+    claimed, and -- when a ``field`` is named -- the identifiers whose **value**
+    is compared, keyed by the field and how it is compared. The baseline locks
+    these, so a view that stops covering a row fails the gate rather than
+    passing on what is left (:meth:`kinemata.baseline.Baseline.shrunk`).
+
+    ⚑ **Read from the declaration, never from what the oracle printed.** A row
+    the code stops printing is already a membership finding; coverage read off
+    the output would move whenever the code did, and a lock that moves on its
+    own is not a lock.
+
+    Forced by an adopter's mutation, 2026-09-25: removing ``field`` from a view
+    over 18 rows left ``parity`` green, checking that the rows exist and no
+    longer what they hold. They had retired the tests pinning those values on
+    the strength of that view, and neither the config nor the run said the
+    claim had narrowed. A changed relation, format or ordering changes the key,
+    so it reads as a drop too: the claim that was recorded is no longer made.
+    """
+    entries = list(registry.entries())
+    identify = _identifier_translation(spec)
+    covered = {
+        coverage_key(spec.registry, "members", spec.relation): tuple(
+            sorted({identify.apply(entry.id) for entry in entries})
+        )
+    }
+    if spec.field:
+        how = f"{spell_path(spec.field)}:{spec.format}" + (":ordered" if spec.ordered else "")
+        covered[coverage_key(spec.registry, "values", how)] = tuple(sorted({
+            identify.apply(entry.id)
+            for entry in entries
+            if at_path(entry.extra, field_path(spec.field)) is not MISSING
+        }))
+    return covered
+
+
+def survey_coverage(
+    registries: Iterable[Registry], specs: Sequence[Oracle]
+) -> dict[str, tuple[str, ...]]:
+    """Every declaration's :func:`coverage`, merged -- two declarations over one
+    registry and field cover the union of their rows."""
+    by_name = {registry.name: registry for registry in registries}
+    merged: dict[str, set[str]] = {}
+    for spec in specs:
+        registry = by_name.get(spec.registry)
+        if registry is None:
+            continue  # :func:`survey` raises for this; coverage is not the place
+        for key, ids in coverage(registry, spec).items():
+            merged.setdefault(key, set()).update(ids)
+    return {key: tuple(sorted(ids)) for key, ids in merged.items()}
+
+
 def compare(
     registry: Registry,
     spec: Oracle,
@@ -873,14 +946,7 @@ def compare(
     printed, why = produced(spec, root, timeout)
     entries = list(registry.entries())
     translate = spec.translate or Translation()
-    # `translate` keeps its published target -- the identifiers of a membership
-    # declaration, the values of a value one -- and `translate_identifier` is
-    # the second hop, which only a value run can need: without a field there is
-    # one side and `translate` already reaches it. The config refuses the pair
-    # in that case rather than silently preferring one.
-    identify = spec.translate_identifier or (
-        Translation() if spec.field else translate
-    )
+    identify = _identifier_translation(spec)
     declared = {identify.apply(entry.id) for entry in entries}
     if printed is None:
         return Parity(

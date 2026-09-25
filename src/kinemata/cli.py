@@ -39,7 +39,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -69,6 +69,7 @@ from .gates import WORKFLOW_DIR, enforced, uncovered
 from .literals import clusters
 from .parity import RELATION_SAYS, Disagreement, Divergence, Parity
 from .parity import survey as parity_survey
+from .parity import survey_coverage as parity_coverage
 from .probe import Mismatch, Probed
 from .probe import survey as probe_survey
 from .projection import listed_elsewhere, project
@@ -904,6 +905,23 @@ def _parity(
     )
 
 
+def _parity_coverage(
+    args: argparse.Namespace, settings: Settings
+) -> dict[str, tuple[str, ...]]:
+    """What the declared parities cover, filtered as :func:`_parity` filters."""
+    specs = [
+        spec for spec in settings.parities
+        if not args.registry or spec.registry == args.registry
+    ]
+    return parity_coverage(settings.registries, specs)
+
+
+def _parity_owns(args: argparse.Namespace) -> Callable[[str], bool]:
+    """Which coverage keys a parity run judges: all of parity's, or one registry's."""
+    prefix = f"parity:{args.registry}:" if args.registry else "parity:"
+    return lambda key: key.startswith(prefix)
+
+
 def cmd_parity(args: argparse.Namespace) -> int:
     """Declared entries against the set the project's code actually produces.
 
@@ -998,14 +1016,30 @@ def cmd_parity(args: argparse.Namespace) -> int:
               f"pre-existing in {settings.baseline.name}{until}")
     _report_stale(split, quiet=args.quiet)
 
+    # **The coverage lock.** A view narrowed by an edit to its own declaration
+    # -- a `field` removed, a block deleted, a `where` that keeps fewer rows --
+    # still agrees about whatever it has left, so nothing above can fail it.
+    # The baseline recorded what each view covered; covering less fails here.
+    shrunk = baseline.shrunk(_parity_coverage(args, settings), _parity_owns(args))
+    if shrunk:
+        print(f"\n# coverage recorded in {settings.baseline.name}, and not covered now")
+        for item in shrunk:
+            print(f"  {item}")
+        print("  A narrower claim is accepted by re-recording the baseline "
+              "(`kinemata baseline --record --until YYYY-MM-DD`), which shows in "
+              "its diff.", file=sys.stderr)
+
     if failed:
         print(
             f"\nFAIL: {failed} disagreement(s) between a declaration and what "
             "the code produces.",
             file=sys.stderr,
         )
-        return 1
-    return 0
+    if shrunk:
+        # Not a disagreement: both sides may agree perfectly about what is left.
+        print(f"\nFAIL: {len(shrunk)} coverage claim(s) narrowed since the "
+              "baseline was recorded.", file=sys.stderr)
+    return 1 if failed or shrunk else 0
 
 
 def _shape(args: argparse.Namespace, settings: Settings) -> list[Shaped]:
@@ -2401,7 +2435,8 @@ def cmd_baseline(args: argparse.Namespace) -> int:
                 f"--until {args.until!r} is not a date. Write it as YYYY-MM-DD."
             ) from exc
         fresh = record(settings.baseline, findings, until=until,
-                       by=args.by or "", note=args.note or "")
+                       by=args.by or "", note=args.note or "",
+                       coverage=_parity_coverage(args, settings))
         delta = fresh.size - baseline.size
         # Asked before the write, because `exists` asks the filesystem and
         # `save` is about to create the file: read afterwards, a first recording
@@ -2429,8 +2464,11 @@ def cmd_baseline(args: argparse.Namespace) -> int:
         return 0
 
     if args.prune:
+        # The lock is carried over unchanged: pruning drops findings that are
+        # gone, and a coverage drop is not a finding that went away.
         kept = record(settings.baseline, split.accepted, until=baseline.until,
-                      by=baseline.by, note=baseline.note)
+                      by=baseline.by, note=baseline.note,
+                      coverage=baseline.coverage)
         dropped = baseline.size - kept.size
         kept.save()
         print(f"Dropped {dropped} record(s) no longer present; "
@@ -2443,6 +2481,12 @@ def cmd_baseline(args: argparse.Namespace) -> int:
         return 0
 
     print(f"{baseline.path}: {baseline.size} accepted finding(s).")
+    if baseline.coverage:
+        locked = sum(len(ids) for ids in baseline.coverage.values())
+        print(f"coverage: {len(baseline.coverage)} claim(s) over {locked} row(s) "
+              "locked; a run covering less fails its gate.")
+        for item in baseline.shrunk(_parity_coverage(args, settings), _parity_owns(args)):
+            print(f"  not covered now -- {item}")
     if split.new:
         # Named by the gate that would fail, not by one of them: this list feeds
         # two commands and telling a reader to look at `check` for a dead link

@@ -1098,6 +1098,15 @@ exemption list reads exactly like having accounted for all of it. `kinemata base
 one of those scans, being the only command that writes the file; a `--prune` covering some of
 them would delete the rest's records on the strength of never having looked.
 
+**The same file locks coverage.** `--record` also writes what each `[[parity]]` covered: the rows it
+compares for membership under its relation, and the rows whose value it compares, by field and
+format. A later `parity` run covering less **fails**. That includes a `field` removed, a declaration
+deleted, a `where` that keeps fewer rows, or a changed relation, since the claim that was recorded is
+no longer made. Covering more never fails. Coverage is read from the declaration, never from what
+the oracle printed, so the lock does not move when the code does. A narrower claim is accepted by
+re-recording, which shows in the file's diff, the way an accepted finding does; `--prune` leaves the
+lock as it was. A baseline recorded before the lock existed locks nothing.
+
 ⚑ **A shape rule brings a second way not to have answered, and it stalls a rewrite too.** A rule
 that examined no entry *ran*, and judged nothing — so pruning its records would drop them on the
 authority of a run that examined none of them. Blocked and vacuous rules both appear in the
@@ -1524,6 +1533,18 @@ limit is closed, in the same commit that closes it.**
   undeclared — so a project wanting both must close the whole view.
 - **boundary** · **A baseline is an allowlist.** An agent can silence a finding by re-recording
   it. What makes that survivable is that it is a committed file change, visible in review.
+- **accepted** · **The coverage lock catches a claim that shrinks, not one that loosens.** It locks
+  *which rows* a parity view compares and on what field, so a view whose `translate`, `extract` or
+  oracle command is edited to agree more easily still covers the same rows and passes. It also
+  locks **`[[parity]]` only** today. What it would take: a fingerprint of each check's declaration,
+  so any edit to what a check claims fails until re-recorded. A **warning when checks are declared
+  and no baseline locks them**, since a project that never records has no lock. And comparing
+  against the **default branch's** baseline in CI rather than the branch's own, since a branch can
+  re-record its own weakening, which the allowlist entry above already says of findings. Even then, a
+  direct push to the default branch is out of reach of anything in the repository.
+  **What would revive the three: more reports of a check weakened by an edit to its own
+  declaration.** The one that forced the lock was an adopter's deliberate mutation, and a deleted
+  field is the only form measured.
 - **boundary** · **`[[gate]]` verifies text presence, not execution.** Blind to a step disabled by
   `if:`, a job nothing triggers, or a command that runs and checks nothing. It does not parse
   YAML.
