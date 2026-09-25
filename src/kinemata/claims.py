@@ -1626,19 +1626,22 @@ def verify(
     files, directories = _index(root, git_ignored(root))
     roots = [root]
     for other in resolve_in:
-        elsewhere = (root / other).resolve()
-        if not elsewhere.is_dir():
+        # Not `elsewhere`: that is this function's predicate parameter, and
+        # rebinding it to a directory made the first unresolved claim call a
+        # Path (an adopter's report, 2026-09-25).
+        extra = (root / other).resolve()
+        if not extra.is_dir():
             raise ClaimsError(
                 f"resolve_in names {other!r}, which is not a directory here "
-                f"({elsewhere}). Every claim it was to settle would go "
+                f"({extra}). Every claim it was to settle would go "
                 "unchecked and the run would still read clean."
             )
-        roots.append(elsewhere)
-        more_files, more_directories = _index(elsewhere, git_ignored(elsewhere))
+        roots.append(extra)
+        more_files, more_directories = _index(extra, git_ignored(extra))
         # Indexed twice: bare, and under the tree's own name. Notes beside a
         # repository call it by name -- :shown:`workspace/docs/design.md` -- and
         # indexing only the inside of that tree reports the reference dead.
-        label = elsewhere.name
+        label = extra.name
         files |= more_files | {f"{label}/{rel}" for rel in more_files}
         directories |= more_directories | {f"{label}/{rel}" for rel in more_directories}
     tree = Tree(root=root, files=files, directories=directories, roots=tuple(roots))
@@ -1703,22 +1706,22 @@ def verify(
 
     commit_roots = list(roots)
     for other in commits_in:
-        elsewhere = (root / other).resolve()
+        repository = (root / other).resolve()
         # Refuse precisely what `_known_commits` would drop, so a declaration
         # that survives this loop is one that will actually be consulted.
-        if not elsewhere.is_dir():
+        if not repository.is_dir():
             raise ClaimsError(
                 f"commits_in names {other!r}, which is not a directory here "
-                f"({elsewhere}). Every commit it was to settle would be "
+                f"({repository}). Every commit it was to settle would be "
                 "reported against this repository alone."
             )
-        if not _is_repository(elsewhere):
+        if not _is_repository(repository):
             raise ClaimsError(
                 f"commits_in names {other!r}, which is not a git repository "
-                f"({elsewhere}). Naming it settles nothing and says nothing, "
+                f"({repository}). Naming it settles nothing and says nothing, "
                 "which is the failure resolve_in was taught to refuse."
             )
-        commit_roots.append(elsewhere)
+        commit_roots.append(repository)
     tree.commits = _known_commits(
         commit_roots, (text for kind, text, _ in pending if kind.needs_git)
     )

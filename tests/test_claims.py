@@ -1534,3 +1534,23 @@ def test_ordinary_prose_is_not_reported_as_crossing_a_cell(tmp_path):
     found = verify(tmp_path)
     assert found.negated == 1
     assert found.across_cells == 0
+
+
+def test_resolve_in_reports_an_unresolved_claim_instead_of_crashing(tmp_path, capsys):
+    """Reported by an adopter on 2026-09-25 against 0.4.1: the `resolve_in` loop
+    rebound `verify`'s `elsewhere` predicate to a directory, so the first claim
+    neither tree settled called a Path and `claims` died with a TypeError.
+    Every run through the CLI passes that predicate, which is why a test calling
+    `verify` directly never saw it.
+    """
+    from kinemata.cli import main
+
+    (tmp_path / "other").mkdir()
+    (tmp_path / "README.md").write_text("See `missing/module.py` for details.\n")
+    (tmp_path / "kinemata.toml").write_text(
+        '[project]\nroot = "."\n\n[claims]\nsuffixes = [".md"]\nresolve_in = ["other"]\n'
+    )
+    status = main(["claims", "--config", str(tmp_path / "kinemata.toml")])
+    out = capsys.readouterr()
+    assert status == 1, out
+    assert "missing/module.py" in out.out + out.err

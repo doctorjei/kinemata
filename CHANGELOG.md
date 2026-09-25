@@ -35,6 +35,14 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   Refused for fewer than two entries, an id no registry declares, or spellings that no longer
   collide.
 
+**Fixed**
+
+- `kinemata claims` crashed with `TypeError: 'PosixPath' object is not callable` whenever
+  `[claims] resolve_in` was set and any claim went unresolved, and so did `baseline`, which runs the
+  same verification. The loop over `resolve_in` reused the name of the predicate that asks whether an
+  unresolved claim belongs to another project, so the first such claim called a directory. Reported
+  by an adopter against `0.4.1`.
+
 ## 0.4.1
 
 **New**
