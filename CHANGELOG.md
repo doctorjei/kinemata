@@ -9,7 +9,7 @@ a project outside this repository runs against kinemata and upgrades between pub
 Commits are in `git log`; the reasoning behind a design decision stays in the document that
 carries the decision. A changelog repeating either becomes a second carrier and goes stale.
 
-## Unreleased
+## 0.5.0
 
 **New**
 
@@ -34,6 +34,12 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   are exempt: an inline literal elsewhere is still reported, against every entry it could mean.
   Refused for fewer than two entries, an id no registry declares, or spellings that no longer
   collide.
+
+**Changed**
+
+- **Re-recording a baseline now also locks parity coverage.** Nothing changes for a baseline until
+  `baseline --record` runs again. After that, `parity` fails if a view compares fewer rows than it
+  did at the recording, and accepting that means recording again.
 
 **Fixed**
 
