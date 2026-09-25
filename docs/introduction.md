@@ -387,6 +387,11 @@ replacement = 'agent.claude.'   # the code emits it per agent
 # Written the other way, "every generated artifact is among those the generator
 # reports current" is `equal` over an oracle printing the fresh ones, and the
 # stale one comes back as `declared, produced by nothing`.
+# The same holds for a claim that a set is EMPTY -- "a no-agent box emits no
+# agent keys": declare the rows it must not emit (narrowed with `where`, a
+# predicate when the rows are chosen by a null), and have the oracle print
+# EVERYTHING the code emits. `disjoint` then names any leak, and the filter
+# sits in the declaration where a reader can see it rather than in the oracle.
 #
 # The discriminator is one question: **is the oracle's set non-empty when
 # everything is fine?** Published versions are (that is why the version gate
