@@ -317,6 +317,14 @@ argument:
   one spurious report; keying on the line number would have reported most of the file.
 - **Multiplicity is recorded**, so a record covering three identical sites does not
   exempt a fourth. A baseline that cannot count is a baseline that absorbs.
+- **Coverage is locked as well as findings** (2026-09-25). A check narrowed by an edit to
+  its own declaration still agrees about whatever it has left, so no finding ever marks
+  it: an adopter removed `field` from a parity view and the gate stayed green while it
+  checked only that the rows exist. The baseline therefore also records what each gate
+  covers, **read from the declaration and never from the code's output or the tree**,
+  since a lock that moved with the code would move on its own. A run covering less fails.
+  `docs/introduction.md` lists what each gate locks, and its limits say what the lock does
+  not reach.
 
 The honest limit, stated because the alternative is implying reach this does not have:
 an agent can re-record the baseline and silence a real finding. That act is a committed
