@@ -171,13 +171,48 @@ def test_a_value_json_cannot_spell_blocks_rather_than_guessing(tmp_path, capsys)
     [
         ('format = "yaml"', "must be one of text, json"),
         ('format = "json"\nordered = true', "already compared in order"),
-        ('format = "json"\ntranslate = { from = "a", to = "b" }', "rewrite of text"),
     ],
 )
 def test_a_format_that_would_mean_nothing_is_refused(tmp_path, extra, refusal):
     path = project(tmp_path, {"k": {"default": "x"}}, {"k": "x"}, extra=extra)
     with pytest.raises(ConfigError, match=refusal):
         load(path)
+
+
+NOTATION = 'format = "json"\ntranslate = { pattern = \'^\\((.*)\\)$\', replacement = "\\\\1" }'
+
+
+def test_a_translate_rewrites_every_string_in_the_declared_value(tmp_path, capsys):
+    """The adopter's shape: values in the manifest's own notation, inside a
+    mode-keyed map, compared as data after one declared rewrite.
+
+    Refused until 2026-09-25 as *a rewrite of text, which data does not have*;
+    without it this claim was one ``text`` view per mode, or a map the oracle
+    built where the rewrite is invisible.
+    """
+    rows = {
+        "a.scalar": {"default": "(@system.canon/general)"},
+        "b.map": {"default": {"primary": "(@p)", "named": "(@n)"}},
+        "c.list": {"default": ["(x)", "(y)"]},
+    }
+    printed = {
+        "a.scalar": "@system.canon/general",
+        "b.map": {"named": "@n", "primary": "@p"},
+        "c.list": [json.dumps(["x", "y"])],  # a list here means raw lines
+    }
+    status, out = run(project(tmp_path, rows, printed, extra=NOTATION), capsys)
+    assert status == 0, out
+    # And without the rewrite, the same declaration is a divergence.
+    status, out = run(project(tmp_path, rows, printed), capsys)
+    assert status == 1
+
+
+def test_a_translate_leaves_keys_and_non_strings_alone(tmp_path, capsys):
+    """A map's keys are its shape, and a number is not text to rewrite."""
+    rows = {"k": {"default": {"(mode)": "(v)", "n": 3, "z": None}}}
+    printed = {"k": {"(mode)": "v", "n": 3, "z": None}}
+    status, out = run(project(tmp_path, rows, printed, extra=NOTATION), capsys)
+    assert status == 0, out
 
 
 def test_json_without_a_field_is_refused(tmp_path):

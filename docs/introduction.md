@@ -323,8 +323,12 @@ ordered = true
 # others is one comparison, where the text form refuses any map and stands the
 # whole registry down with it. A declared `null` must meet a printed `null`; a
 # field the declaration does not carry is still "records nothing". Output that
-# is not JSON diverges on its own row. Refused without a `field`, beside the
-# text-rewriting `translate`, and beside `ordered`, a JSON list being ordered.
+# is not JSON diverges on its own row. Refused without a `field`, and beside
+# `ordered`, a JSON list being ordered. A `translate` here rewrites every STRING
+# inside the declared value -- scalars, list items, map values, never map keys --
+# before it is compared as data, for a declaration spelling values in its own
+# notation: pattern '^\((.*)\)$', replacement '\1' turns "(@system.canon/x)" into
+# "@system.canon/x" in every arm of a mode-keyed map.
 [[parity]]
 registry = "defaults"
 command = ["{python}", "-m", "pkg.print_defaults"]   # prints: key <json>

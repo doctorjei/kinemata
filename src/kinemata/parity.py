@@ -304,8 +304,9 @@ class Oracle:
     #: carry, which the ``text`` form collapses: ``null`` must meet a printed
     #: ``null``, while an absent field stays *the declaration records nothing*.
     #:
-    #: Refused without :attr:`field`, beside :attr:`translate` (a rewrite of
-    #: text) and beside :attr:`ordered` (a JSON list is already ordered).
+    #: Refused without :attr:`field` and beside :attr:`ordered` (a JSON list is
+    #: already ordered). :attr:`translate` rewrites every string inside the
+    #: declared value, never a mapping's key -- see :func:`_declared_json`.
     format: str = "text"
 
 
@@ -737,7 +738,27 @@ def _declared_values(
     )
 
 
-def _declared_json(entry: Entry, spec: Oracle) -> _DeclaredSide:
+def _rewritten(value: object, translate: Translation) -> object:
+    """``value`` with ``translate`` applied to every string in it.
+
+    A scalar, a list item, a mapping's **value** -- never a mapping's key, which
+    is the data's shape rather than its content: a mode-keyed map's keys are the
+    modes, and an identifier hop has :attr:`Oracle.translate_identifier`.
+    Anything that is not a string passes through untouched, since a translation
+    is a rewrite of text and nothing here coerces a number into one.
+    """
+    if isinstance(value, str):
+        return translate.apply(value)
+    if isinstance(value, (list, tuple)):
+        return [_rewritten(item, translate) for item in value]
+    if isinstance(value, Mapping):
+        return {key: _rewritten(item, translate) for key, item in value.items()}
+    return value
+
+
+def _declared_json(
+    entry: Entry, spec: Oracle, translate: Translation
+) -> _DeclaredSide:
     """One entry's declared side under :attr:`Oracle.format` ``json``.
 
     **A field the declaration does not carry is absent; a declared ``null`` is
@@ -745,12 +766,23 @@ def _declared_json(entry: Entry, spec: Oracle) -> _DeclaredSide:
     spelling for nothing. A value JSON cannot spell -- a YAML date, say -- is
     refused for the registry as a container is in the text form, since
     rendering it some other way would be the guess this form exists to avoid.
+
+    ``translate`` reaches **every string inside the value** (:func:`_rewritten`)
+    before it is compared as data. This was refused until 2026-09-25 as *a
+    rewrite of text, which data does not have* -- but data's strings are text,
+    and an adopter's manifest spells values in its own notation inside
+    mode-keyed maps (``"(@system.canon/handbook/general)"``). With the refusal
+    the claim *after this rewrite, compare as data* had no form: they split
+    each map into one ``text`` view per mode, and built maps on the oracle side,
+    where no reader of the config can see the rewrite.
     """
     found = at_path(entry.extra, field_path(spec.field))
     if found is MISSING:
         return _DeclaredSide((), True, "", False)
     try:
-        return _DeclaredSide((_canonical(found),), False, "", False)
+        return _DeclaredSide(
+            (_canonical(_rewritten(found, translate)),), False, "", False
+        )
     except (TypeError, ValueError):
         return _DeclaredSide(None, False, (
             f"declares {entry.id} with a {spell_path(spec.field)!r} holding "
@@ -822,12 +854,12 @@ def compare(
         raise ValueError(
             f"unknown parity format: {spec.format!r} (known: {', '.join(FORMATS)})"
         )
-    if spec.format == "json" and (not spec.field or spec.translate or spec.ordered):
+    if spec.format == "json" and (not spec.field or spec.ordered):
         # The config refuses each of these first, naming which; this is the
         # second answer, for a caller assembling specs itself.
         raise ValueError(
             "a json parity compares one field's values as data: it needs a "
-            "field, and cannot take a text translate or ordered"
+            "field, and cannot take ordered"
         )
     if spec.field and spec.authority not in AUTHORITIES:
         # The config layer refuses this first; this is the second answer, for a
@@ -906,7 +938,7 @@ def compare(
             continue  # membership above has already said so
         as_data = spec.format == "json"
         side = (
-            _declared_json(entry, spec) if as_data
+            _declared_json(entry, spec, translate) if as_data
             else _declared_values(entry, spec, translate)
         )
         mine, absent, problem = side.values, side.absent, side.problem

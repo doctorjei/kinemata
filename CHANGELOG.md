@@ -11,7 +11,14 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 ## Unreleased
 
-Nothing yet.
+**New**
+
+- `[[parity]] format = "json"` now accepts `translate`, which rewrites every string inside the
+  declared value before it is compared as data: scalars, list items and map values, never map
+  keys. It was refused as a rewrite of text that data does not have. An adopter's manifest spells
+  values in its own notation inside mode-keyed maps, so *after this rewrite, compare as data* had
+  no form: they split each map into one `text` view per mode, and built the maps on the oracle
+  side where no reader of the config can see the rewrite.
 
 ## 0.4.1
 

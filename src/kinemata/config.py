@@ -2256,8 +2256,6 @@ def _build_parities(
             clash = (
                 "compares no field, and json is how a field's values are spelled"
                 if not value_field
-                else "declares 'translate', a rewrite of text, which data does "
-                "not have" if spec.get("translate") is not None
                 else "declares 'ordered', and a JSON list is already compared "
                 "in order" if ordered
                 else ""
