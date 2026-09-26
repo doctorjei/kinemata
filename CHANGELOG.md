@@ -9,6 +9,10 @@ a project outside this repository runs against kinemata and upgrades between pub
 Commits are in `git log`; the reasoning behind a design decision stays in the document that
 carries the decision. A changelog repeating either becomes a second carrier and goes stale.
 
+## Unreleased
+
+Nothing yet.
+
 ## 0.5.1
 
 **Fixed**
