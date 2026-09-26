@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kinemata"
-version = "0.5.1.dev0"
+version = "0.5.1"
 description = "One declared place per fact; find the code that re-derives it."
 readme = "README.md"                 # without this a built distribution ships no
                                      # long description at all: the PyPI page and
