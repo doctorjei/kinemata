@@ -526,6 +526,20 @@ class Selected(BaseRegistry):
     def notices(self) -> tuple[str, ...]:
         return tuple(getattr(self._inner, "notices", ()))
 
+    @property
+    def whole(self) -> Registry:
+        """The registry before selection -- what the declaration reads, of
+        which this view keeps a part."""
+        return self._inner
+
+
+def population(registry: Registry) -> list[Entry]:
+    """Every entry a registry's declaration reads, before a ``where`` keeps
+    fewer. The coverage lock asks it, so a row a view stopped keeping is told
+    apart from a row the data no longer holds (:mod:`kinemata.coverage`)."""
+    whole = registry.whole if isinstance(registry, Selected) else registry
+    return list(whole.entries())
+
 
 def missing_members(obj: object) -> tuple[str, ...]:
     """Which parts of :class:`Registry` ``obj`` does not have.

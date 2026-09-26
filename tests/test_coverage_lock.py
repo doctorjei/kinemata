@@ -344,3 +344,167 @@ def test_a_rule_that_could_not_run_is_not_reported_again_as_lost_coverage(tmp_pa
     assert status == 1
     assert "BLOCKED" in out or "could not" in out
     assert "no longer claimed" not in out
+
+
+# -- data edits: a row may leave by leaving the data ----------------------------------
+#
+# The user's decision, 2026-09-26, after this repository's own lock turned
+# `parity` red on a version bump: `tree-version` is a `toml-value` registry, so
+# its one identifier *is* the version. A row the data no longer holds passes
+# while the table reading the data is the one recorded; a row a `where`, guard
+# or `field` stopped covering is still in the data, and still fails.
+
+
+def test_a_version_bump_passes_the_lock(tmp_path, capsys):
+    """The incident, exactly: a `toml-value` identifier is the value itself."""
+    (tmp_path / "pyproject.toml").write_text('[project]\nversion = "1.0.dev0"\n')
+    (tmp_path / "oracle.py").write_text("print('0.9')\n")
+    path = config(tmp_path, """
+        [[registry]]
+        name = "tree-version"
+        kind = "toml-value"
+        source = "pyproject.toml"
+        path = ["project", "version"]
+
+        [[parity]]
+        registry = "tree-version"
+        relation = "disjoint"
+        command = ["{python}", "oracle.py"]
+        extract = '(?m)^(\\S+)$'
+    """)
+    record(capsys, path)
+    (tmp_path / "pyproject.toml").write_text('[project]\nversion = "1.0.dev1"\n')
+    status, out = run(capsys, "parity", "--config", path)
+    assert status == 0, out
+
+
+def test_a_renamed_row_passes(tmp_path, capsys):
+    record(capsys, write(tmp_path, ("keys", VALUES)))
+    status, out = run(capsys, "parity", "--config",
+                      write(tmp_path, ("keys", VALUES), rows=("a.x", "b.z")))
+    assert status == 0, out
+
+
+def test_a_retired_row_passes(tmp_path, capsys):
+    record(capsys, write(tmp_path, ("keys", VALUES)))
+    status, out = run(capsys, "parity", "--config",
+                      write(tmp_path, ("keys", VALUES), rows=("a.x",)))
+    assert status == 0, out
+
+
+def test_a_row_still_declared_that_loses_its_value_fails(tmp_path, capsys):
+    """Still in the data, no longer compared: the view narrowed on that row."""
+    path = write(tmp_path, ("keys", VALUES))
+    record(capsys, path)
+    (tmp_path / "keys.yaml").write_text('keys:\n  a.x: {default: "a.x"}\n  b.y: {}\n')
+    status, out = run(capsys, "parity", "--config", path)
+    assert status == 1
+    assert "parity:keys:values:default:text: 1 row(s) no longer covered: b.y" in out
+
+
+def test_a_retirement_beside_an_edited_registry_table_is_judged_strictly(tmp_path, capsys):
+    """Which rows an edited declaration dropped cannot be told from which the
+    data did, so both count -- even a `where` that keeps everything."""
+    record(capsys, write(tmp_path, ("keys", VALUES)))
+    path = write(tmp_path, ("keys", VALUES), where='where = { id_matches = "." }',
+                 rows=("a.x",))
+    status, out = run(capsys, "parity", "--config", path)
+    assert status == 1
+    assert "1 row(s) no longer covered: b.y" in out
+
+
+def test_a_lock_recorded_without_populations_stays_strict(tmp_path, capsys):
+    """Every lock `0.5.0` wrote: judged as it was when written."""
+    record(capsys, write(tmp_path, ("keys", VALUES)))
+    baseline = tmp_path / ".kinemata-baseline.json"
+    document = json.loads(baseline.read_text())
+    assert document.pop("populations")
+    baseline.write_text(json.dumps(document))
+    path = write(tmp_path, ("keys", VALUES), rows=("a.x",))
+    assert run(capsys, "parity", "--config", path)[0] == 1
+
+
+def test_pruning_keeps_the_populations(tmp_path, capsys):
+    path = write(tmp_path, ("keys", VALUES))
+    record(capsys, path)
+    before = json.loads((tmp_path / ".kinemata-baseline.json").read_text())["populations"]
+    assert before
+    assert run(capsys, "baseline", "--config", path, "--prune")[0] == 0
+    after = json.loads((tmp_path / ".kinemata-baseline.json").read_text())["populations"]
+    assert after == before
+
+
+def test_malformed_populations_are_refused(tmp_path):
+    path = tmp_path / ".kinemata-baseline.json"
+    path.write_text(json.dumps(
+        {"version": 1, "until": "2099-01-01", "populations": {"registry:k": 3}}
+    ))
+    with pytest.raises(BaselineError, match="'populations' must map"):
+        Baseline.load(path)
+
+
+def test_check_passes_when_a_constant_is_deleted_from_its_module(tmp_path, capsys):
+    """The module list is the declaration; what the module holds is data."""
+    (tmp_path / "consts.py").write_text('A_FILE = "a.yaml"\nB_FILE = "b.yaml"\n')
+    path = config(tmp_path, """
+        [[registry]]
+        name = "constants"
+        kind = "python-constants"
+        modules = ["consts.py"]
+    """)
+    record(capsys, path)
+    (tmp_path / "consts.py").write_text('A_FILE = "a.yaml"\n')
+    status, out = run(capsys, "check", "--config", path)
+    assert status == 0, out
+
+
+def test_shape_passes_when_a_selected_entry_is_retired(tmp_path, capsys):
+    (tmp_path / "keys.yaml").write_text(
+        "keys:\n  box.a: {type: str}\n  box.b: {type: str}\n"
+    )
+    path = config(tmp_path, SHAPE.format(guard="^box"))
+    record(capsys, path)
+    (tmp_path / "keys.yaml").write_text("keys:\n  box.a: {type: str}\n")
+    status, out = run(capsys, "shape", "--config", path)
+    assert status == 0, out
+
+
+def test_probe_passes_when_a_case_is_retired_from_the_corpus(tmp_path, capsys, monkeypatch):
+    """The corpus reads its rows at call time, so an edit to them is seen by
+    the second run -- an import would be cached for the session."""
+    (tmp_path / "retire_subject.py").write_text(textwrap.dedent("""
+        class Refused(Exception):
+            pass
+
+
+        def check(name):
+            if name not in {"box", "workset"}:
+                raise Refused(name)
+    """))
+    (tmp_path / "retire_corpus.py").write_text(textwrap.dedent("""
+        import json
+        import pathlib
+
+        from kinemata.probe import Case
+
+
+        def rows():
+            here = pathlib.Path(__file__).with_name("rows.json")
+            return [Case(expect=expect, args=(name,), label=name)
+                    for name, expect in json.loads(here.read_text())]
+    """))
+    rows = tmp_path / "rows.json"
+    rows.write_text(json.dumps([["box", "accept"], ["workset", "accept"], ["nope", "refuse"]]))
+    monkeypatch.syspath_prepend(str(tmp_path))
+    path = config(tmp_path, """
+        [[probe]]
+        name = "scopes"
+        target = "retire_subject:check"
+        cases = "retire_corpus:rows"
+        outcome = "raises"
+        refusal = "retire_subject:Refused"
+    """)
+    record(capsys, path)
+    rows.write_text(json.dumps([["box", "accept"], ["nope", "refuse"]]))
+    status, out = run(capsys, "probe", "--config", path)
+    assert status == 0, out

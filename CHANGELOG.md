@@ -11,7 +11,17 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 ## Unreleased
 
-Nothing yet.
+**Fixed**
+
+- **The coverage lock no longer fails when a row leaves the data.** In `0.5.0` a locked row that
+  was renamed or deleted from the data failed its gate as if the declaration had narrowed:
+  a registry entry, a constant, a probe case, or the version a `toml-value` registry reads. A
+  version bump turned `parity` red in this repository. A row now counts as lost only if it is
+  still in the data, or if the `[[registry]]` or `[[probe]]` table reading the data has changed
+  since the recording. A `where`, a guard, a removed `field`, a module dropped from `modules` and a
+  `cases` pointed elsewhere all still fail. A baseline stores a fingerprint of each such table
+  beside its lock (`populations`). A lock recorded by `0.5.0` has none and is judged as before,
+  until it is recorded again.
 
 ## 0.5.0
 

@@ -805,7 +805,7 @@ does not want this.
 
 Every gate above that reads the baseline also fails when it **covers less than the baseline
 locked**: a view, entry, rule, case or declared row that was covered when the baseline was
-recorded and is not now. That condition is not repeated in each row; § Adoption on a codebase that
+recorded, is still declared, and is not covered now. That condition is not repeated in each row; § Adoption on a codebase that
 already fails lists what each gate locks.
 
 **Common flags:** `-c/--config`, `-r/--registry`, `-q/--quiet`, `-v/--verbose`, `--max-sites`.
@@ -1112,11 +1112,16 @@ declaration, and a later run of that gate covering less **fails**. Covering more
 | `check` | each registry's entries that carry an antipattern | a registry removed, a module dropped, a `where` that keeps fewer entries |
 | `undeclared` | each closed registry | a registry opened |
 | `shape` | the entries each rule examined | a rule removed, a guard that selects fewer |
-| `probe` | the cases each corpus hands over | a probe removed, a corpus that hands over fewer cases |
+| `probe` | the cases each corpus hands over | a probe removed, `cases` pointed at a corpus that hands over fewer |
 | `claims` | the declared `[[count]]` and `[[gate]]` rows | a count deleted, a gate row dropped from the inventory |
 
 Nothing is read from what the code printed or what the tree contains, so the lock does not move
-when the code or the prose does. A narrower claim is accepted by re-recording, which shows in the
+when the code or the prose does. **A row may leave by leaving the data.** A renamed or deleted
+entry, constant or case, or a bumped version, passes while the `[[registry]]` or `[[probe]]` table
+reading it is the one recorded. The baseline keeps a fingerprint of each such table under
+`populations` for this. A row still in the data and no longer covered fails, and so does every
+row, gone or not, once that table has changed. A lock recorded before `populations` existed is
+judged strictly. A narrower claim is accepted by re-recording, which shows in the
 file's diff, the way an accepted finding does. `--prune` leaves the lock as it was, and a baseline
 recorded before the lock existed locks nothing.
 
@@ -1551,7 +1556,11 @@ limit is closed, in the same commit that closes it.**
   to agree more easily still covers the same rows and passes. `check` locks entries, **not the files
   it reads**, so an `exclude`, `only` or `suffixes` narrowing is not caught; `claims` locks declared
   counts and gates, **not the documents** or the claims in them. Both were chosen over the
-  alternative because every deleted or renamed file would otherwise need a re-record. What it would take: a fingerprint of each check's declaration,
+  alternative because every deleted or renamed file would otherwise need a re-record. **Rows get
+  the same trade**: one deleted from the data leaves the lock, so emptying a data file narrows
+  a check and passes. The other way failed every renamed entry and every version bump. A row
+  retired in the same commit as an edit to its registry's table is judged strictly and needs a
+  re-record. What it would take: a fingerprint of each check's declaration,
   so any edit to what a check claims fails until re-recorded. A **warning when checks are declared
   and no baseline locks them**, since a project that never records has no lock. And comparing
   against the **default branch's** baseline in CI rather than the branch's own, since a branch can

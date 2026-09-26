@@ -52,6 +52,7 @@ from datetime import date
 from pathlib import Path
 
 from .bypass import Bypass, is_strays_scope
+from .coverage import Covered
 from .parity import VALUE_DIRECTION, is_parity_scope
 from .probe import is_probe_scope
 from .shape import is_shape_scope
@@ -304,10 +305,16 @@ class Baseline:
     #: until a ``--record`` writes it, which is also every baseline written
     #: before the lock existed -- those lock nothing and fail nothing.
     coverage: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    #: Each population's declaration when this was recorded, by source -- a
+    #: registry's or a probe's table, as :func:`kinemata.coverage.fingerprint`.
+    #: While it still matches, a locked row gone from the data is a data edit
+    #: and passes. Empty in a lock recorded before 2026-09-26, which is judged
+    #: strictly, as it was then.
+    populations: Mapping[str, str] = field(default_factory=dict)
 
     def shrunk(
         self,
-        current: Mapping[str, Iterable[str]],
+        current: Mapping[str, Covered | Iterable[str]],
         owned: Callable[[str], bool],
     ) -> list[Shrink]:
         """Recorded coverage this run no longer has, among the keys it ``owned``.
@@ -316,6 +323,10 @@ class Baseline:
         the reason :attr:`Split.unscanned` exists: a run that did not compute a
         key must not report it as gone. **Growth is never a finding** -- covering
         more than was recorded is the direction a lock exists to allow.
+
+        **A row gone from the data is not lost** while the declaration reading
+        the data is the one recorded: a renamed entry, a retired one, a version
+        bumped. :mod:`kinemata.coverage` carries the rule.
         """
         found: list[Shrink] = []
         for key, recorded in sorted(self.coverage.items()):
@@ -324,9 +335,18 @@ class Baseline:
             if key not in current:
                 found.append(Shrink(key, tuple(recorded), whole=True))
                 continue
-            lost = tuple(sorted(set(recorded) - set(current[key])))
+            now = current[key]
+            rows = set(now.rows if isinstance(now, Covered) else now)
+            lost = set(recorded) - rows
+            if (
+                isinstance(now, Covered)
+                and now.population is not None
+                and now.fingerprint
+                and self.populations.get(now.source) == now.fingerprint
+            ):
+                lost &= now.population
             if lost:
-                found.append(Shrink(key, lost, whole=False))
+                found.append(Shrink(key, tuple(sorted(lost)), whole=False))
         return found
 
     def lapsed(self, today: date | None = None) -> bool:
@@ -409,6 +429,14 @@ class Baseline:
                 f"{path}: 'coverage' must map each key to a list of identifiers. "
                 "Re-record it rather than editing by hand."
             )
+        raw_populations = document.get("populations", {})
+        if not isinstance(raw_populations, dict) or not all(
+            isinstance(value, str) for value in raw_populations.values()
+        ):
+            raise BaselineError(
+                f"{path}: 'populations' must map each source to a fingerprint. "
+                "Re-record it rather than editing by hand."
+            )
         return cls(
             path=path,
             accepted=tuple(records),
@@ -416,6 +444,7 @@ class Baseline:
             by=str(document.get("by", "")),
             note=str(document.get("note", "")),
             coverage={str(key): tuple(ids) for key, ids in raw_coverage.items()},
+            populations={str(key): value for key, value in raw_populations.items()},
         )
 
     def save(self) -> None:
@@ -454,6 +483,8 @@ class Baseline:
             document["coverage"] = {
                 key: sorted(ids) for key, ids in sorted(self.coverage.items())
             }
+        if self.populations:
+            document["populations"] = dict(sorted(self.populations.items()))
         document["findings"] = findings
         self.path.write_text(json.dumps(document, indent=2) + "\n")
 
@@ -544,12 +575,16 @@ def record(
     until: date,
     by: str = "",
     note: str = "",
-    coverage: Mapping[str, Iterable[str]] | None = None,
+    coverage: Mapping[str, Covered | Iterable[str]] | None = None,
+    populations: Mapping[str, str] | None = None,
 ) -> Baseline:
     """Build a baseline covering exactly ``findings``, and the date it lapses.
 
     ``coverage`` is what each check covered in the run being recorded, locked
-    so a later run covering less fails (:meth:`Baseline.shrunk`).
+    so a later run covering less fails (:meth:`Baseline.shrunk`). The
+    fingerprint of each population it was held against is recorded with it,
+    and ``populations`` carries prints forward as they are -- what ``--prune``
+    passes, the lock being unchanged by a prune.
 
     Identical sites collapse into one record carrying their count, which is what
     makes the file readable at 111 findings and still exact.
@@ -576,7 +611,16 @@ def record(
         )
         for key, count in sorted(counts.items())
     )
+    locked: dict[str, tuple[str, ...]] = {}
+    prints = dict(populations or {})
+    for key, held in (coverage or {}).items():
+        if isinstance(held, Covered):
+            locked[key] = tuple(sorted(set(held.rows)))
+            if held.source and held.fingerprint:
+                prints[held.source] = held.fingerprint
+        else:
+            locked[key] = tuple(sorted(set(held)))
     return Baseline(
         path=Path(path), accepted=accepted, until=until, by=by, note=note,
-        coverage={key: tuple(sorted(set(ids))) for key, ids in (coverage or {}).items()},
+        coverage=locked, populations=prints,
     )

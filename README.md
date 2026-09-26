@@ -300,7 +300,9 @@ declaration, what every gate that reads the baseline covers: a parity view's row
 and fields, a registry's entries, a closed registry, a shape rule's group, a probe's
 cases, the declared counts and gate rows. A later run covering less **fails**, so a
 check narrowed by an edit to its own declaration cannot pass on what it has left.
-Accepting a narrower claim means re-recording, which shows in the file's diff. The
+A row that leaves the data, such as a renamed entry or a bumped version, is not a
+narrowing and passes. Accepting a narrower claim means re-recording, which shows in
+the file's diff. The
 reference sheet's baseline section lists what each gate locks.
 
 **A baseline is an allowlist, and allowlists rot.** Three properties exist
@@ -501,7 +503,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **1362 tests**, and
+The companion guard is a number with an oracle. This suite is **1373 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 

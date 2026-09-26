@@ -45,12 +45,21 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .bypass import Bypass
 from .claims import ORACLE_TIMEOUT, run_oracle
-from .contract import MISSING, Entry, Registry, at_path, field_path, spell_path
+from .contract import (
+    MISSING,
+    Entry,
+    Registry,
+    at_path,
+    field_path,
+    population,
+    spell_path,
+)
+from .coverage import Coverage, Covered, registry_source
 
 #: The name parity findings travel under in a baseline record, so a reader can
 #: tell which scan produced an exemption and no scan reports another's records
@@ -809,7 +818,9 @@ def coverage_key(registry: str, *parts: str) -> str:
     return ":".join(("parity", registry, *parts))
 
 
-def coverage(registry: Registry, spec: Oracle) -> dict[str, tuple[str, ...]]:
+def coverage(
+    registry: Registry, spec: Oracle, prints: Mapping[str, str] | None = None
+) -> dict[str, Covered]:
     """What one declaration claims to cover, read off the declaration alone.
 
     Two keys: the identifiers compared for **membership**, under the relation
@@ -829,38 +840,60 @@ def coverage(registry: Registry, spec: Oracle) -> dict[str, tuple[str, ...]]:
     the strength of that view, and neither the config nor the run said the
     claim had narrowed. A changed relation, format or ordering changes the key,
     so it reads as a drop too: the claim that was recorded is no longer made.
+
+    Both keys are held against the registry **before its** ``where``, spelled as
+    the comparison spells it, so a row the view stopped keeping stays in the
+    population and a row the data no longer holds leaves it.
     """
     entries = list(registry.entries())
     identify = _identifier_translation(spec)
+    source = registry_source(registry.name)
+
+    def held(rows: Iterable[str]) -> Covered:
+        return Covered(
+            rows=tuple(sorted(set(rows))),
+            population=frozenset(
+                identify.apply(entry.id) for entry in population(registry)
+            ),
+            source=source,
+            fingerprint=(prints or {}).get(source, ""),
+        )
+
     covered = {
-        coverage_key(spec.registry, "members", spec.relation): tuple(
-            sorted({identify.apply(entry.id) for entry in entries})
+        coverage_key(spec.registry, "members", spec.relation): held(
+            identify.apply(entry.id) for entry in entries
         )
     }
     if spec.field:
         how = f"{spell_path(spec.field)}:{spec.format}" + (":ordered" if spec.ordered else "")
-        covered[coverage_key(spec.registry, "values", how)] = tuple(sorted({
+        covered[coverage_key(spec.registry, "values", how)] = held(
             identify.apply(entry.id)
             for entry in entries
             if at_path(entry.extra, field_path(spec.field)) is not MISSING
-        }))
+        )
     return covered
 
 
 def survey_coverage(
-    registries: Iterable[Registry], specs: Sequence[Oracle]
-) -> dict[str, tuple[str, ...]]:
+    registries: Iterable[Registry],
+    specs: Sequence[Oracle],
+    prints: Mapping[str, str] | None = None,
+) -> Coverage:
     """Every declaration's :func:`coverage`, merged -- two declarations over one
-    registry and field cover the union of their rows."""
+    registry and field cover the union of their rows, against the one
+    population that registry has."""
     by_name = {registry.name: registry for registry in registries}
-    merged: dict[str, set[str]] = {}
+    merged: dict[str, Covered] = {}
     for spec in specs:
         registry = by_name.get(spec.registry)
         if registry is None:
             continue  # :func:`survey` raises for this; coverage is not the place
-        for key, ids in coverage(registry, spec).items():
-            merged.setdefault(key, set()).update(ids)
-    return {key: tuple(sorted(ids)) for key, ids in merged.items()}
+        for key, held in coverage(registry, spec, prints).items():
+            earlier = merged.get(key)
+            merged[key] = held if earlier is None else replace(
+                held, rows=tuple(sorted(set(earlier.rows) | set(held.rows)))
+            )
+    return dict(merged)
 
 
 def compare(

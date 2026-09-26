@@ -323,6 +323,10 @@ argument:
   checked only that the rows exist. The baseline therefore also records what each gate
   covers, **read from the declaration and never from the code's output or the tree**,
   since a lock that moved with the code would move on its own. A run covering less fails.
+  **A row may leave by leaving the data** (2026-09-26): the lock is about the declaration, so a
+  renamed or retired row passes while the table reading the data is the one recorded, and is
+  judged strictly once it is not. Locking data rows turned this repository's own `parity` red on
+  a version bump.
   `docs/introduction.md` lists what each gate locks, and its limits say what the lock does
   not reach.
 

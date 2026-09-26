@@ -65,6 +65,7 @@ from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
 from .confirm import ConfirmError, apply, dating, plan, redate
 from .context import measure
 from .contract import BaseRegistry, Entry, Registry, deferred_to, member
+from .coverage import Coverage, Covered
 from .exclusion import audit, excluded, relative_paths
 from .gates import WORKFLOW_DIR, enforced, uncovered
 from .literals import clusters
@@ -923,7 +924,7 @@ def _selected_registries(args: argparse.Namespace, settings: Settings) -> list[R
 def _locked(
     baseline: Baseline,
     settings: Settings,
-    current: Mapping[str, Iterable[str]],
+    current: Mapping[str, Covered | Iterable[str]],
     owned: Callable[[str], bool],
 ) -> int:
     """Print the coverage the baseline locked that this run no longer has, and
@@ -950,13 +951,13 @@ def _narrowed_fail(narrowed: int) -> None:
 
 def _parity_coverage(
     args: argparse.Namespace, settings: Settings
-) -> dict[str, tuple[str, ...]]:
+) -> Coverage:
     """What the declared parities cover, filtered as :func:`_parity` filters."""
     specs = [
         spec for spec in settings.parities
         if not args.registry or spec.registry == args.registry
     ]
-    return parity_coverage(settings.registries, specs)
+    return parity_coverage(settings.registries, specs, settings.populations)
 
 
 def _parity_owns(args: argparse.Namespace) -> Callable[[str], bool]:
@@ -1180,7 +1181,7 @@ def cmd_shape(args: argparse.Namespace) -> int:
               f"pre-existing in {settings.baseline.name}{until}")
     _report_stale(split, quiet=args.quiet)
     # The coverage lock: a rule removed, or a guard selecting fewer entries.
-    covered, blocked = coverage_of.shape(results)
+    covered, blocked = coverage_of.shape(results, settings.registries, settings.populations)
     narrowed = _locked(
         baseline, settings, covered,
         coverage_of.owned_by("shape", args.registry, skip=blocked),
@@ -1287,7 +1288,7 @@ def cmd_probe(args: argparse.Namespace) -> int:
               f"pre-existing in {settings.baseline.name}{until}")
     _report_stale(split, quiet=args.quiet)
     # The coverage lock: a probe removed, or a corpus handing over fewer cases.
-    covered, blocked = coverage_of.probe(results)
+    covered, blocked = coverage_of.probe(results, settings.populations)
     narrowed = _locked(
         baseline, settings, covered, coverage_of.owned_by("probe", skip=blocked)
     )
@@ -2323,7 +2324,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     # keeping fewer entries leaves the scan clean over what it still declares.
     narrowed = _locked(
         baseline, settings,
-        coverage_of.check(_selected_registries(args, settings)),
+        coverage_of.check(_selected_registries(args, settings), settings.populations),
         coverage_of.owned_by("check", args.registry),
     )
 
@@ -2458,11 +2459,13 @@ def cmd_baseline(args: argparse.Namespace) -> int:
 
     # What every gate covers, for the lock `--record` writes and the view below
     # reports against -- read the way each gate reads it, so the two agree.
-    shape_covered, shape_blocked = coverage_of.shape(shaped_all)
-    probe_covered, probe_blocked = coverage_of.probe(probed_all)
+    shape_covered, shape_blocked = coverage_of.shape(
+        shaped_all, settings.registries, settings.populations
+    )
+    probe_covered, probe_blocked = coverage_of.probe(probed_all, settings.populations)
     covered = {
         **_parity_coverage(args, settings),
-        **coverage_of.check(settings.registries),
+        **coverage_of.check(settings.registries, settings.populations),
         **coverage_of.undeclared(settings.registries),
         **shape_covered,
         **probe_covered,
@@ -2556,7 +2559,7 @@ def cmd_baseline(args: argparse.Namespace) -> int:
         # gone, and a coverage drop is not a finding that went away.
         kept = record(settings.baseline, split.accepted, until=baseline.until,
                       by=baseline.by, note=baseline.note,
-                      coverage=baseline.coverage)
+                      coverage=baseline.coverage, populations=baseline.populations)
         dropped = baseline.size - kept.size
         kept.save()
         print(f"Dropped {dropped} record(s) no longer present; "

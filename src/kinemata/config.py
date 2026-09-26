@@ -87,6 +87,7 @@ from .contract import (
     strings,
     usable_boundary,
 )
+from .coverage import fingerprint, probe_source, registry_source
 from .exclusion import matches
 from .gates import Gate
 from .interpose import Funnel
@@ -249,6 +250,11 @@ class Settings:
     #: project's code -- which is the same contract every ``module:attribute``
     #: in this file already carries.
     probes: tuple[Probe, ...] = ()
+    #: Each ``[[registry]]`` and ``[[probe]]`` table's fingerprint, by
+    #: coverage source. The coverage lock compares these with the ones it
+    #: recorded, to tell a row a declaration dropped from one the data did
+    #: (:mod:`kinemata.coverage`).
+    populations: Mapping[str, str] = field(default_factory=dict)
     #: Where accepted findings are recorded. Always a path, even when no file is
     #: there yet -- ``baseline --record`` has to know where to write the first
     #: one, and a project that has never recorded is the normal starting state.
@@ -1417,6 +1423,12 @@ def load(path: str | Path) -> Settings:
         shapes=_build_shapes(raw.get("shape", []), path,
                              [built.name for built in registries]),
         probes=_build_probes(raw.get("probe", []), path),
+        populations={
+            **{registry_source(str(spec.get("name", ""))): fingerprint(spec)
+               for spec in declarations},
+            **{probe_source(str(spec.get("name", "")).strip()): fingerprint(spec)
+               for spec in raw.get("probe", [])},
+        },
         baseline=root / project.get("baseline", BASELINE_NAME),
         gates=_build_gates(raw.get("gate", []), path),
         distinct=_build_distinct(raw.get("distinct"), registries, root, path),
