@@ -214,6 +214,11 @@ class Settings:
     historical: tuple[str, ...] = ()
     #: Sibling trees a documentation claim may resolve against.
     resolve_in: tuple[str, ...] = ()
+    #: Registries whose ``declared()`` settles a `path` claim the filesystem
+    #: and :attr:`resolve_in` directories do not. Names declared here must match
+    #: a ``[[registry]]`` block; an unknown name refuses rather than silently
+    #: matching nothing.
+    declared_in: tuple[str, ...] = ()
     #: Further repositories whose commits the documentation may cite.
     commits_in: tuple[str, ...] = ()
     #: May `claims` leave the machine to settle a URL? Off by default, and the
@@ -831,7 +836,8 @@ PROJECT_KEYS = frozenset(
 CLAIMS_KEYS = frozenset(
     {
         "suffixes", "file_suffixes", "historical", "resolve_in", "commits_in",
-        "external", "external_timeout", "oracle_timeout", "promised",
+        "declared_in", "external", "external_timeout", "oracle_timeout",
+        "promised",
     }
 )
 CONTEXT_KEYS = frozenset({"include", "external", "budget", "strip"})
@@ -1408,6 +1414,7 @@ def load(path: str | Path) -> Settings:
         claim_file_suffixes=_claim_file_suffixes(claims, path),
         historical=_strings(claims.get("historical", ()), f"{path}: [claims] historical"),
         resolve_in=_strings(claims.get("resolve_in", ()), f"{path}: [claims] resolve_in"),
+        declared_in=_strings(claims.get("declared_in", ()), f"{path}: [claims] declared_in"),
         commits_in=_strings(claims.get("commits_in", ()), f"{path}: [claims] commits_in"),
         external=_flag(claims, "external", f"{path}: [claims]"),
         external_timeout=float(claims.get("external_timeout", EXTERNAL_TIMEOUT)),

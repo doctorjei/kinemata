@@ -11,7 +11,19 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 ## Unreleased
 
-Nothing yet.
+**New**
+
+- `[claims] declared_in` names registries whose `declared()` settles a `path` claim the filesystem
+  and `[claims] resolve_in` did not. Asked only of the `path` kind and only after the tree has
+  failed, so a registry cannot take a live claim out of the check; it can only name one we had no
+  other way to see. Refuses rather than silently matching nothing when a name has no matching
+  `[[registry]]`, the same shape `[claims] resolve_in` refuses on. Default empty, so existing
+  configs are unchanged. The case: a project's prose names settings files, store layout leaves and
+  similar runtime paths that live on a user's machine rather than in the repository, and
+  `[claims] resolve_in` was the only route, which required committing a stand-in tree an
+  adopter declined. A `toml-value` registry of string identifiers is the shape the runtime names
+  need; a `python-constants` registry answers identifiers, not the strings they hold, so it
+  cannot reach this case.
 
 ## 0.5.1
 

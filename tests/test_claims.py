@@ -9,12 +9,13 @@ from __future__ import annotations
 import subprocess
 import textwrap
 import threading
+from collections.abc import Iterable, Mapping
 from datetime import date
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
-from kinemata.claims import CLAIM_KINDS, ClaimsError, Promise, verify
+from kinemata.claims import CLAIM_KINDS, Claim, ClaimsError, Promise, verify
 from kinemata.config import ConfigError, load
 
 
@@ -1554,3 +1555,171 @@ def test_resolve_in_reports_an_unresolved_claim_instead_of_crashing(tmp_path, ca
     out = capsys.readouterr()
     assert status == 1, out
     assert "missing/module.py" in out.out + out.err
+
+
+# -- declared_in: a registry augments disk resolution ------------------------
+
+
+def test_a_path_declared_by_a_registry_is_settled(tmp_path):
+    """The case the question was asked for: a runtime path the project names in
+    a registry, that doesn't live in this tree, is settled by the registry.
+
+    Reports a real false positive without it: an adopter's prose points at the
+    store layout, every entry of which lives on a user's machine, not in the
+    repo. Settled or it would never go green.
+    """
+    write(tmp_path, "doc.md", "Stores live under `boxes/` and `channels/`.\n")
+    registry = _FakeValuesRegistry(("boxes/", "channels/"))
+
+    assert verify(tmp_path, path_declared=registry.declared).broken == []
+
+
+def test_an_undeclared_path_stays_a_finding(tmp_path):
+    """A path the registry doesn't declare is still checked.
+
+    The mechanism augments disk resolution, not replaces it -- a project
+    declaring its store layout does not exempt every string-shaped word the
+    prose happens to use.
+    """
+    write(tmp_path, "doc.md", "Stores live under `boxes/` and `elsewhere/`.\n")
+    registry = _FakeValuesRegistry(("boxes/", "channels/"))
+
+    found = verify(tmp_path, path_declared=registry.declared)
+    assert broken(found) == {("path", "elsewhere/")}
+
+
+def test_a_python_constants_registry_does_not_settle_value_shaped_paths(tmp_path):
+    """A `python-constants` registry exposes NAMES, not the strings they hold.
+
+    The fixture is a plausible mistake: the project declares its bootstrap
+    module and expects `declared('boxes')` to settle the path -- but the
+    registry answers about `BOXES_PATH`, not about `'boxes'`. Settling here
+    would mask a real finding (the registry's data model doesn't fit the
+    claim's shape) and is the reason the user picks the registry, not us.
+    """
+    write(tmp_path, "doc.md", "Stores live under `boxes/`.\n")
+    registry = _FakePythonConstantsRegistry({"BOXES_PATH": "boxes"})
+
+    found = verify(tmp_path, path_declared=registry.declared)
+    assert broken(found) == {("path", "boxes/")}
+
+
+def test_a_path_that_resolves_on_disk_is_not_asked_of_the_registry(tmp_path):
+    """A resolved path is settled, even when the registry would say no.
+
+    The order matters: disk first, registry second. A project that happens to
+    have a real file the registry knows nothing about is checked against the
+    file, not against the registry's silence.
+    """
+    write(tmp_path, "src/app.py", "x = 1\n")
+    write(tmp_path, "doc.md", "See `src/app.py`.\n")
+    registry = _FakeValuesRegistry(())  # declares nothing
+
+    assert verify(tmp_path, path_declared=registry.declared).broken == []
+
+
+def test_path_declared_does_not_settle_a_link_claim(tmp_path):
+    """Only `path` claims are asked of the registry.
+
+    A `[link]` is a relative URL and answers to ``_resolve_link``, which a
+    values-registry has no business with. Asking would be overreaching.
+    """
+    write(tmp_path, "real.md", "x\n")
+    write(tmp_path, "doc.md", "[here](./real.md) and [gone](./missing.md)\n")
+    registry = _FakeValuesRegistry(("./missing.md",))
+
+    found = verify(tmp_path, path_declared=registry.declared)
+    assert broken(found) == {("link", "./missing.md")}
+
+
+def test_an_empty_declared_in_is_a_no_op(tmp_path):
+    """Default behaviour is unchanged when no predicate is passed.
+
+    Every adopter on a kinemata before this change runs `verify()` with no
+    `path_declared`; the result must be identical.
+    """
+    write(tmp_path, "doc.md", "See `src/gone.py`.\n")
+    line = "See `src/gone.py`."
+    assert verify(tmp_path).broken == [Claim("path", "src/gone.py", "doc.md", 1, line)]
+
+
+def test_declared_in_with_an_unknown_registry_name_refuses(tmp_path, capsys):
+    """`[claims] declared_in` naming a registry that does not exist refuses.
+
+    The same shape `resolve_in` refuses on: a config that points at nothing
+    is asking for a check it is not getting, and silent no-op is exactly the
+    failure mode this rule exists to refuse.
+    """
+    from kinemata.cli import _path_declared_predicate
+    from kinemata.config import load
+
+    # No registries declared; `declared_in` names "store-layout" -- refused.
+    write(tmp_path, "kinemata.toml", textwrap.dedent("""\
+        [project]
+        root = "."
+
+        [claims]
+        suffixes = [".md"]
+        declared_in = ["store-layout"]
+        """).lstrip())
+    settings = load(tmp_path / "kinemata.toml")
+    with pytest.raises(ConfigError, match="store-layout"):
+        _path_declared_predicate(settings)
+
+
+def test_declared_in_end_to_end_via_the_cli(tmp_path):
+    """The full path: TOML -> registry -> predicate -> settled claim.
+
+    Uses ``kind = "toml-value"`` over a TOML file of runtime path names -- the
+    shape kanibako's ``store-layout`` should take. A claim for a declared
+    value is settled; a claim for an undeclared one is still a finding.
+    """
+    from kinemata.cli import main
+
+    # `toml-value` reads a flat list of scalars at the declared `path` -- the
+    # leaf is a list, which `_scalars` accepts as identifiers.
+    write(tmp_path, "kinemata-store-layout.toml", textwrap.dedent("""\
+        paths = ["boxes", "channels"]
+        """).lstrip())
+    write(tmp_path, "kinemata.toml", textwrap.dedent("""\
+        [project]
+        root = "."
+
+        [claims]
+        suffixes = [".md"]
+        declared_in = ["store-layout"]
+
+        [[registry]]
+        name = "store-layout"
+        kind = "toml-value"
+        source = "kinemata-store-layout.toml"
+        path = ["paths"]
+        """).lstrip())
+    write(tmp_path, "doc.md", "Stores live under `boxes/` and `elsewhere/`.\n")
+
+    status = main(["claims", "--config", str(tmp_path / "kinemata.toml")])
+    assert status == 1  # `elsewhere/` is still a finding
+    # And: a re-run after declaring `elsewhere` would settle it. We don't
+    # assert that here -- it's what the unit tests above cover.
+
+
+class _FakeValuesRegistry:
+    """A values-shaped registry, just enough for `declared()` to answer."""
+
+    def __init__(self, values: Iterable[str]) -> None:
+        self._values = tuple(values)
+        self.name = "fake-values"
+
+    def declared(self, name: str) -> bool:
+        return name in self._values
+
+
+class _FakePythonConstantsRegistry:
+    """A python-constants-shaped registry; identifiers are the names, not values."""
+
+    def __init__(self, mapping: Mapping[str, str]) -> None:
+        self._names = tuple(mapping)
+        self.name = "fake-constants"
+
+    def declared(self, name: str) -> bool:
+        return name in self._names

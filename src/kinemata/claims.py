@@ -1519,6 +1519,7 @@ def verify(
     resolve_in: Iterable[str] = (),
     commits_in: Iterable[str] = (),
     elsewhere: Callable[[Claim], bool] | None = None,
+    path_declared: Callable[[str], bool] | None = None,
     promised: Iterable[Promise] = (),
     today: date | None = None,
     external: bool = False,
@@ -1583,6 +1584,14 @@ def verify(
         artifacts, permanently unresolvable here because those trees are not
         this one. Left unhandled they are dead claims forever, which is a gate
         that can never go green over text nobody should change.
+    :param path_declared: predicate asked of an unresolved `path` claim's text;
+        returns ``True`` when the path is a runtime name the project has
+        declared (a settings file, a store layout leaf). Consulted only for the
+        ``path`` kind and only after the filesystem and ``resolve_in`` have
+        failed, so a registry cannot mask a real claim -- it can only name one
+        we had no other way to see. The caller builds this from any registries
+        listed in :attr:`Settings.declared_in`, so this module stays ignorant
+        of what a registry is.
     :param resolve_in: further trees a claim may resolve against. Process notes
         that live beside a repository rather than inside it describe *that*
         tree, and resolving them only against their own is how a correct
@@ -1784,6 +1793,14 @@ def verify(
         # declaration can never take a live claim out of the check.
         if elsewhere is not None and elsewhere(claim):
             found.elsewhere.append(claim)
+            continue
+        # Runtime paths the project declares (settings files, store layout)
+        # never live in this tree. Asked only of `path` claims and only after
+        # the filesystem and `resolve_in` directories have failed -- so a
+        # registry cannot take a real path out of the check, only declare
+        # one we never had a way to see.
+        if path_declared is not None and kind.name == "path" and \
+                path_declared(claim.text):
             continue
         if kind.name in PROMISABLE and _normalize(text) in promised_paths:
             found.deferred.append(claim)

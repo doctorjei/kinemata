@@ -1433,6 +1433,7 @@ def _verify(args: argparse.Namespace, settings: Settings) -> Verification:
         historical=settings.historical,
         counts=settings.counts,
         resolve_in=settings.resolve_in,
+        path_declared=_path_declared_predicate(settings),
         commits_in=settings.commits_in,
         elsewhere=declared_elsewhere(_elsewhere_keys(settings)),
         promised=settings.promised,
@@ -1440,6 +1441,34 @@ def _verify(args: argparse.Namespace, settings: Settings) -> Verification:
         timeout=settings.external_timeout,
         oracle_timeout=settings.oracle_timeout,
     )
+
+
+def _path_declared_predicate(
+    settings: Settings,
+) -> Callable[[str], bool] | None:
+    """``(path) -> bool`` for the registries :attr:`Settings.declared_in` names.
+
+    Refuses rather than silently matches nothing when a name has no matching
+    ``[[registry]]``: a config that points at nothing is asking for a check it
+    is not getting, which is the same shape ``resolve_in`` refuses on.
+    """
+    if not settings.declared_in:
+        return None
+    available = {registry.name: registry for registry in settings.registries}
+    missing = [name for name in settings.declared_in if name not in available]
+    if missing:
+        raise ConfigError(
+            f"[claims] declared_in names {missing!r}, which "
+            f"{'is' if len(missing) == 1 else 'are'} not a registered "
+            f"[[registry]] block (known: "
+            f"{sorted(available) if available else 'none declared'})."
+        )
+    chosen = [available[name] for name in settings.declared_in]
+
+    def declared(path: str) -> bool:
+        return any(registry.declared(path) for registry in chosen)
+
+    return declared
 
 
 def _report_stale(split: Split, *, quiet: bool = False) -> None:

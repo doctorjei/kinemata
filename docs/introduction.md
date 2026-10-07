@@ -2302,6 +2302,22 @@ down, and the two shapes at the end are the findings that matter most.
   this reason. **The report says how many bytes came from outside and deliberately does not say
   which key declared them** — it claimed `[context] external` and was wrong the first time a
   symlink was pointed at it.
+- **accepted** · **A `path` claim naming a runtime location the tree cannot show is only
+  expressible through `[claims] resolve_in`.** Closed 2026-10-07 by `[claims] declared_in`:
+  a list of registry names whose `declared(path)` is asked of an unresolved `path` claim after
+  the filesystem and `[claims] resolve_in` directories have failed. The case: a project's
+  prose names settings files, store layout leaves and similar runtime paths that live on a
+  user's machine, not in the repository — and the previous route required committing a
+  stand-in directory of empty placeholders an adopter declined. Asked only of the `path` kind,
+  only after the tree has failed, so a registry cannot take a live claim out of the check;
+  it can only name one we had no other way to see. **Refuses** rather than silently matching
+  nothing when a name has no matching `[[registry]]`, the same shape `[claims] resolve_in`
+  refuses on. The right registry shape is a values-registry (`[[registry]] kind =
+  "toml-value"` over a TOML file of strings, or `kind = "import"` over a project class whose
+  `declared()` answers about values); a `python-constants` registry exposes **names**, not the
+  strings they hold, so `declared("boxes")` returns `False` against a
+  :shown:`bootstrap.py`-shaped module carrying `BOXES_PATH = "boxes"`, and reaching for it is
+  the wrong shape rather than a missing feature.
 - **boundary** · **No mechanism settles a prose sentence false about behavior.** Six such
   sentences passed every gate on an adopting project's tree 2026-09-20: a signature given as
   `-> str | None` beside code saying `-> str`, a rationale paragraph inverted by its own diff,
