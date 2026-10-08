@@ -25,7 +25,11 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   narrowing of `[[registry]] only` is still honored, because narrowing is a different decision
   from re-inclusion. The structural key is the existing `home` field: empty `home` means
   absence, set `home` means positive, and the two are answered differently by both
-  `max_sites` and `[project] exclude`.
+  `max_sites` and `[project] exclude`. Gitignored paths are still always excluded -- an
+  absence rule overrides `[project] exclude`, not git's answer to "is this the project's
+  material?". This repository's `spelling` registry scopes itself with `[[registry]] only`
+  to source, the changelog and the README: tests carry British spellings as fixtures for the
+  substitutions mechanism itself, and the data file lists every word the registry would flag.
 
 ## 0.5.2
 
