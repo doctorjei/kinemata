@@ -9,9 +9,16 @@ a project outside this repository runs against kinemata and upgrades between pub
 Commits are in `git log`; the reasoning behind a design decision stays in the document that
 carries the decision. A changelog repeating either becomes a second carrier and goes stale.
 
-## Unreleased
+## 0.5.4
 
-Nothing yet.
+**Fixed**
+
+- **`[project] exclude` is now applied per entry, not per registry.** A mixed registry (one
+  absence entry alongside a positive one) used to read tests/ for both once any entry was an
+  absence rule, because the override was a single flag covering the whole walk. The data model
+  separates the two modes per entry: an absence entry (`home = ()`) reads tests despite
+  `[project] exclude`; a positive entry (with `home`) still honors it. Smoke-tested against the
+  published 0.5.3 on a mixed fixture; shipped as a follow-up to that release.
 
 ## 0.5.3
 
