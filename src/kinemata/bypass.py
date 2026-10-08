@@ -443,10 +443,7 @@ def scan(
         code_only = mode != "raw"
 
     compiled: list[tuple[Entry, str, re.Pattern[str]]] = []
-    has_absence = False
     for entry in registry.entries():
-        if not entry.home:
-            has_absence = True
         for pattern in entry.antipatterns:
             compiled.append((entry, pattern, re.compile(pattern)))
     if not compiled:
@@ -456,20 +453,39 @@ def scan(
     only = tuple(member(registry, "only"))
     for path in _walk(root, suffixes, Path(within) if within else None):
         rel = str(path.relative_to(root))
-        if not _applies(rel, project_exclusions, git_exclusions, only, has_absence=has_absence):
-            continue
         try:
             source = path.read_text(errors="ignore")
         except OSError:
             continue
+        # Per-entry applicability. A mixed registry -- one with both an absence
+        # entry and a positive entry -- used to scan tests/ for both once any
+        # entry was an absence rule: a single has_absence flag covered the whole
+        # registry, and the override was binary. The data model separates the
+        # two modes per entry: an absence entry (no `home`) reads tests despite
+        # `[project] exclude`; a positive entry (with `home`) still honors it.
+        # Kanibako's 09-28 ask is answered without a regression on positive
+        # entries that lived alongside absence ones.
+        applicable = [
+            (entry, pattern, rx)
+            for entry, pattern, rx in compiled
+            if _applies(
+                rel,
+                project_exclusions,
+                git_exclusions,
+                only,
+                has_absence=not entry.home,
+            )
+        ]
+        if not applicable:
+            continue
         own = {
             entry.id: _exempt(rel, entry, source, partners)
-            for entry, _, _ in compiled
+            for entry, _, _ in applicable
         }
         extractor = LITERAL_EXTRACTORS.get(path.suffix) if strings_only else None
         if extractor is not None:
             literals = extractor(source)
-            for entry, pattern, rx in compiled:
+            for entry, pattern, rx in applicable:
                 if own[entry.id] == _WHOLE_FILE:
                     continue
                 for number, content, line_text in literals:
@@ -500,7 +516,7 @@ def scan(
         if source_filter is not None:
             source = source_filter(source)
         lines = source.splitlines()
-        for entry, pattern, rx in compiled:
+        for entry, pattern, rx in applicable:
             if own[entry.id] == _WHOLE_FILE:
                 continue
             for number, text in enumerate(lines, start=1):
