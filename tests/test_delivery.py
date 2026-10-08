@@ -257,11 +257,11 @@ def test_an_absence_rule_ignores_max_sites(tmp_path):
     """
     from kinemata.adapters.patterns import CodePatterns
 
-    body = "\n".join(f'x{i} = "behaviour"' for i in range(30))
+    body = "\n".join(f'x{i} = "behavior"' for i in range(30))
     write(tmp_path, "app.py", body + "\n")
 
     reg = CodePatterns(
-        [{"id": "no-behaviour", "antipatterns": ["behaviour"]}],
+        [{"id": "no-behavior", "antipatterns": ["behavior"]}],
         name="absence",
     )
     report = review(reg, tmp_path, max_sites=20)
@@ -280,14 +280,14 @@ def test_an_absence_rule_in_a_mixed_registry_is_not_suppressed(tmp_path):
     """
     from kinemata.adapters.patterns import CodePatterns
 
-    body = "\n".join(f'x{i} = "behaviour"' for i in range(30))
+    body = "\n".join(f'x{i} = "behavior"' for i in range(30))
     body += "\n" + "\n".join(f'x{i} = "workset"' for i in range(30))
     write(tmp_path, "app.py", body + "\n")
     write(tmp_path, "consts.py", 'WORKSET = "workset"\n')
 
     reg = CodePatterns(
         [
-            {"id": "no-behaviour", "antipatterns": ["behaviour"]},  # absence
+            {"id": "no-behavior", "antipatterns": ["behavior"]},  # absence
             {
                 "id": "WORKSET",
                 "antipatterns": ['"workset"'],
@@ -298,7 +298,7 @@ def test_an_absence_rule_in_a_mixed_registry_is_not_suppressed(tmp_path):
     )
     report = review(reg, tmp_path, max_sites=20)
 
-    absence_hits = [b for b in report.bypasses if b.entry_id == "no-behaviour"]
+    absence_hits = [b for b in report.bypasses if b.entry_id == "no-behavior"]
     positive_hits = [b for b in report.bypasses if b.entry_id == "WORKSET"]
     assert len(absence_hits) == 30
     assert positive_hits == []

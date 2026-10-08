@@ -191,7 +191,7 @@ def test_an_absence_entry_reads_test_trees_excluded_by_project(tmp_path):
     ``[project] exclude`` for itself; a positive entry alongside it does not.
     """
     write(tmp_path, "config.py", 'BOX_META_FILE = "box.yaml"\n')
-    write(tmp_path, "tests/test_paths.py", 'assert p == "behaviour"\n')
+    write(tmp_path, "tests/test_paths.py", 'assert p == "behavior"\n')
 
     class Mixed(BaseRegistry):
         name = "mixed"
@@ -204,7 +204,7 @@ def test_an_absence_entry_reads_test_trees_excluded_by_project(tmp_path):
                 home=("config.py",),
             )
             # absence: no canonical home -- SHOULD scan tests despite [exclude].
-            yield Entry(id="no-behaviour", antipatterns=(r"behaviour",))
+            yield Entry(id="no-behavior", antipatterns=(r"behavior",))
 
     reg = Mixed()
     findings = scan(reg, tmp_path, exclude=["tests/"])
@@ -228,11 +228,11 @@ def test_only_is_honored_when_the_registry_has_absence_entries():
     from kinemata.bypass import _applies
 
     # Without `only`, the absence rule re-includes tests.
-    assert _applies("tests/foo.py", ["tests/"], [], has_absence=True) is True
+    assert _applies("tests/foo.py", ["tests/"], [], [], has_absence=True) is True
     # With `only = ["src/"]`, the same file is outside the narrowing.
-    assert _applies("tests/foo.py", ["tests/"], ["src/"], has_absence=True) is False
+    assert _applies("tests/foo.py", ["tests/"], [], ["src/"], has_absence=True) is False
     # A positive-only registry still excludes tests.
-    assert _applies("tests/foo.py", ["tests/"], [], has_absence=False) is False
+    assert _applies("tests/foo.py", ["tests/"], [], [], has_absence=False) is False
 
 
 def test_a_positive_only_registry_still_skips_tests(tmp_path):

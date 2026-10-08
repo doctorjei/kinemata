@@ -469,11 +469,18 @@ case_sensitive = true   # identifiers; `Entries()` is a different thing
 # The project's spelling convention, as data. It lived as a table inside
 # doc-check.py until that table was found to be missing two words that were
 # sitting in live documents while the check reported clean.
+#
+# Scoped to source, the changelog and the README. Tests intentionally use
+# British spellings as fixtures for the substitutions mechanism itself, so an
+# absence rule (every match is a finding) reading tests/ would name the
+# fixtures as violations. The data file `docs/american-english.toml` is
+# excluded because it carries the substitutions it would flag.
 [[registry]]
 name = "spelling"
 kind = "substitutions"
 source = "docs/american-english.toml"
 suffixes = [".md", ".py"]
+only = ["src/", "CHANGELOG.md", "README.md"]
 
 # Where the sources this project cites actually live. A citation carries a stamp
 # and a reference key; the key's entry carries the path or the address, so a

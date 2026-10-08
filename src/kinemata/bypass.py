@@ -304,7 +304,8 @@ def crossings(root: str | Path) -> list[Crossing]:
 
 def _applies(
     rel: str,
-    exclusions: Sequence[str],
+    project_exclusions: Sequence[str],
+    git_exclusions: Sequence[str],
     only: Sequence[str],
     *,
     has_absence: bool = False,
@@ -313,25 +314,32 @@ def _applies(
 
     One spelling for the three scans that read a registry's files, so what a
     registry applies to cannot differ between ``check``, ``undeclared`` and
-    ``unused``. ``only`` is read with the same segment matcher as ``exclude`` --
-    see :attr:`kinemata.contract.BaseRegistry.only`.
+    ``unused``. ``only`` is read with the same segment matcher as
+    ``project_exclusions`` -- see :attr:`kinemata.contract.BaseRegistry.only`.
 
-    An absence entry has no canonical home, and the absence rule's purpose is
-    to find matches everywhere -- including test trees the project excluded
-    from the scan. A registry carrying such an entry overrides
-    ``[project] exclude`` for itself; ``only`` is still honored, because
-    narrowing is a different decision from re-inclusion. Reported by kanibako
-    2026-09-28: an absence rule could not see tests, so the spelling they had
-    decided against was unguarded exactly where it would tend to grow.
+    Two lists of exclusions answer different questions, and conflating them was
+    the hole that let absence rules read the project's own corpus:
 
-    :param has_absence: whether the calling registry has any entry whose
-        ``home`` is empty. Computed once per scan and passed in.
+    - ``project_exclusions`` are the project's own scope decisions
+      (``[project] exclude``) -- tests that deliberately spell a literal,
+      generated files, vendored code. An absence entry overrides this list,
+      because the absence rule's purpose is to find matches everywhere,
+      including the tests the project would rather not check. Reported by kanibako
+      2026-09-28: an absence rule could not see tests, so the spelling they had
+      decided against was unguarded exactly where it would tend to grow.
+    - ``git_exclusions`` are paths git is told to ignore -- not the project's
+      material at all. Test corpora, ``.venv``, generated files outside the
+      commit boundary. Honored unconditionally; an absence rule does not
+      override them, because scanning other people's code for the project's
+      spelling convention is the wrong question.
 
     :return: whether the file is in the registry's reach
     """
     if only and not excluded(rel, only):
         return False
-    if excluded(rel, exclusions) and not has_absence:
+    if excluded(rel, git_exclusions):
+        return False
+    if excluded(rel, project_exclusions) and not has_absence:
         return False
     return True
 
@@ -414,7 +422,8 @@ def scan(
         correctly.
     """
     root = Path(root)
-    exclusions = tuple(exclude)
+    project_exclusions = tuple(exclude)
+    git_exclusions = git_ignored(root)
 
     # The registry chooses its own matching mode; an explicit argument wins.
     # Each parameter is resolved independently, so passing one does not silently
@@ -447,7 +456,7 @@ def scan(
     only = tuple(member(registry, "only"))
     for path in _walk(root, suffixes, Path(within) if within else None):
         rel = str(path.relative_to(root))
-        if not _applies(rel, exclusions, only, has_absence=has_absence):
+        if not _applies(rel, project_exclusions, git_exclusions, only, has_absence=has_absence):
             continue
         try:
             source = path.read_text(errors="ignore")
@@ -618,7 +627,7 @@ def strays(
     only = tuple(member(registry, "only"))
     for path in _walk(root, tuple(suffixes), Path(within) if within else None):
         rel = str(path.relative_to(root))
-        if not _applies(rel, exclusions, only):
+        if not _applies(rel, exclusions, (), only):
             continue
         try:
             source = path.read_text(errors="ignore")
@@ -738,7 +747,7 @@ def unused(
     only = tuple(member(registry, "only"))
     for path in _walk(Path(root), suffixes, Path(within) if within else None):
         rel = str(path.relative_to(root))
-        if not _applies(rel, exclusions, only):
+        if not _applies(rel, exclusions, (), only):
             continue
         source = path.read_text(errors="ignore")
         filtered = shows.get(path.suffix)

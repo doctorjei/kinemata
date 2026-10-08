@@ -725,7 +725,7 @@ def test_a_commit_cannot_be_promised(tmp_path):
 
 def test_a_promise_past_its_date_fails(tmp_path):
     """A promise otherwise expires **only by being kept**. If the work is
-    cancelled or never starts, the document goes on citing a file nobody will
+    canceled or never starts, the document goes on citing a file nobody will
     build and nothing is ever red again -- the document still cites the path, so
     coverage cannot tell. A date is the only signal available for that case."""
     write(tmp_path, "design.md", "It writes `out/report.json` when it runs.\n")
@@ -1633,7 +1633,7 @@ def test_path_declared_does_not_settle_a_link_claim(tmp_path):
 
 
 def test_an_empty_declared_in_is_a_no_op(tmp_path):
-    """Default behaviour is unchanged when no predicate is passed.
+    """Default behavior is unchanged when no predicate is passed.
 
     Every adopter on a kinemata before this change runs `verify()` with no
     `path_declared`; the result must be identical.
