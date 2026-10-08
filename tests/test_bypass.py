@@ -179,6 +179,77 @@ def test_excluded_paths_are_skipped(tmp_path):
     assert scan(reg, tmp_path, exclude=["tests/"]) == []
 
 
+# -- absence rules scan what [project] exclude removed ------------------------
+
+
+def test_an_absence_entry_reads_test_trees_excluded_by_project(tmp_path):
+    """An entry with no ``home`` is an absence rule: it has business in tests.
+
+    Reported by kanibako 2026-09-28: an absence rule could not see the tests
+    directory the project had excluded from the scan, so the very place a
+    spelling would tend to grow was unguarded. The absence entry overrides
+    ``[project] exclude`` for itself; a positive entry alongside it does not.
+    """
+    write(tmp_path, "config.py", 'BOX_META_FILE = "box.yaml"\n')
+    write(tmp_path, "tests/test_paths.py", 'assert p == "behaviour"\n')
+
+    class Mixed(BaseRegistry):
+        name = "mixed"
+
+        def entries(self):
+            # positive: respelling of the canonical home -- should NOT scan tests.
+            yield Entry(
+                id="BOX_META_FILE",
+                antipatterns=(r"box\.yaml",),
+                home=("config.py",),
+            )
+            # absence: no canonical home -- SHOULD scan tests despite [exclude].
+            yield Entry(id="no-behaviour", antipatterns=(r"behaviour",))
+
+    reg = Mixed()
+    findings = scan(reg, tmp_path, exclude=["tests/"])
+    paths = {hit.path for hit in findings}
+
+    # The absence match lands in the test tree.
+    assert any("tests/" in p for p in paths)
+    # The positive entry does not: its home is config.py, the duplication is in tests,
+    # and `[project] exclude = ["tests/"]` keeps tests out of the scan for that entry.
+    assert all(hit.entry_id != "BOX_META_FILE" for hit in findings)
+
+
+def test_only_is_honored_when_the_registry_has_absence_entries():
+    """``[[registry]] only`` narrows even an absence rule.
+
+    A narrowing is a deliberate scope decision; the absence rule's
+    re-inclusion of test trees does not silently widen past it. Direct unit
+    test on :func:`kinemata.bypass._applies`; the scan-level guarantee is the
+    composite of this and the file walk.
+    """
+    from kinemata.bypass import _applies
+
+    # Without `only`, the absence rule re-includes tests.
+    assert _applies("tests/foo.py", ["tests/"], [], has_absence=True) is True
+    # With `only = ["src/"]`, the same file is outside the narrowing.
+    assert _applies("tests/foo.py", ["tests/"], ["src/"], has_absence=True) is False
+    # A positive-only registry still excludes tests.
+    assert _applies("tests/foo.py", ["tests/"], [], has_absence=False) is False
+
+
+def test_a_positive_only_registry_still_skips_tests(tmp_path):
+    """Positive entries have homes; ``[project] exclude`` is honored.
+
+    The fix is structural -- keyed on ``home = ()`` -- and does not change the
+    behavior of registries that are entirely positive. This guards against a
+    regression where the override leaks into registries it should not.
+    """
+    write(tmp_path, "config.py", 'BOX_META_FILE = "box.yaml"\n')
+    write(tmp_path, "tests/test_paths.py", 'assert p == "box.yaml"\n')
+
+    reg = Constants({"BOX_META_FILE": (r"box\.yaml", "config.py")})
+    findings = scan(reg, tmp_path, exclude=["tests/"])
+    assert findings == []
+
+
 # -- unused: a review list, never a cut list ----------------------------------
 
 

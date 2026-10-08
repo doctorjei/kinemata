@@ -2302,6 +2302,15 @@ down, and the two shapes at the end are the findings that matter most.
   this reason. **The report says how many bytes came from outside and deliberately does not say
   which key declared them** — it claimed `[context] external` and was wrong the first time a
   symlink was pointed at it.
+- **accepted** · **A `code-patterns` absence rule cannot see tests and is silenced past 20 sites.**
+  Closed 2026-10-08 by reading `home = ()` as the data-model separator between *positive*
+  (`home` set, the canonical place; matches elsewhere are findings) and *absence* (no home;
+  every match is a finding). For an absence entry, `max_sites` no longer suppresses -- the
+  larger the regression, the louder the check -- and the entry reads through `[project]
+  exclude`, so the place a forbidden spelling would tend to grow is in the scan. `[[registry]]
+  only` is still honored, because narrowing is a different decision from re-inclusion. A
+  registry carrying both modes is answered correctly by both heuristics, with no per-registry
+  knob. Reported by kanibako 2026-09-28.
 - **accepted** · **A `path` claim naming a runtime location the tree cannot show is only
   expressible through `[claims] resolve_in`.** Closed 2026-10-07 by `[claims] declared_in`:
   a list of registry names whose `declared(path)` is asked of an unresolved `path` claim after

@@ -302,15 +302,38 @@ def crossings(root: str | Path) -> list[Crossing]:
     return [found for _, _, found in _tree(Path(root)) if found is not None]
 
 
-def _applies(rel: str, exclusions: Sequence[str], only: Sequence[str]) -> bool:
+def _applies(
+    rel: str,
+    exclusions: Sequence[str],
+    only: Sequence[str],
+    *,
+    has_absence: bool = False,
+) -> bool:
     """Does a registry read this file: not excluded, and inside its ``only``.
 
     One spelling for the three scans that read a registry's files, so what a
     registry applies to cannot differ between ``check``, ``undeclared`` and
     ``unused``. ``only`` is read with the same segment matcher as ``exclude`` --
     see :attr:`kinemata.contract.BaseRegistry.only`.
+
+    An absence entry has no canonical home, and the absence rule's purpose is
+    to find matches everywhere -- including test trees the project excluded
+    from the scan. A registry carrying such an entry overrides
+    ``[project] exclude`` for itself; ``only`` is still honored, because
+    narrowing is a different decision from re-inclusion. Reported by kanibako
+    2026-09-28: an absence rule could not see tests, so the spelling they had
+    decided against was unguarded exactly where it would tend to grow.
+
+    :param has_absence: whether the calling registry has any entry whose
+        ``home`` is empty. Computed once per scan and passed in.
+
+    :return: whether the file is in the registry's reach
     """
-    return not excluded(rel, exclusions) and (not only or excluded(rel, only))
+    if only and not excluded(rel, only):
+        return False
+    if excluded(rel, exclusions) and not has_absence:
+        return False
+    return True
 
 
 def _walk(
@@ -411,7 +434,10 @@ def scan(
         code_only = mode != "raw"
 
     compiled: list[tuple[Entry, str, re.Pattern[str]]] = []
+    has_absence = False
     for entry in registry.entries():
+        if not entry.home:
+            has_absence = True
         for pattern in entry.antipatterns:
             compiled.append((entry, pattern, re.compile(pattern)))
     if not compiled:
@@ -421,7 +447,7 @@ def scan(
     only = tuple(member(registry, "only"))
     for path in _walk(root, suffixes, Path(within) if within else None):
         rel = str(path.relative_to(root))
-        if not _applies(rel, exclusions, only):
+        if not _applies(rel, exclusions, only, has_absence=has_absence):
             continue
         try:
             source = path.read_text(errors="ignore")

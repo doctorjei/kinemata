@@ -242,6 +242,69 @@ def test_only_strong_signals_gate(tmp_path):
     assert report.clean
 
 
+# -- absence rules: max_sites does not apply --------------------------------
+
+
+def test_an_absence_rule_ignores_max_sites(tmp_path):
+    """An entry with no `home` is an absence rule: the right number of matches
+    is zero, and every site is a finding -- no matter how many.
+
+    `max_sites` is the suppression heuristic for POSITIVE registries, where an
+    antipattern matching 30 times is a domain word rather than a duplication.
+    For an absence rule the same number of matches is the WORST outcome, not a
+    noise floor. Reported by kanibako 2026-09-28: the larger the absence rule
+    regresses, the quieter the check.
+    """
+    from kinemata.adapters.patterns import CodePatterns
+
+    body = "\n".join(f'x{i} = "behaviour"' for i in range(30))
+    write(tmp_path, "app.py", body + "\n")
+
+    reg = CodePatterns(
+        [{"id": "no-behaviour", "antipatterns": ["behaviour"]}],
+        name="absence",
+    )
+    report = review(reg, tmp_path, max_sites=20)
+
+    assert len(report.bypasses) == 30
+    assert report.suppressed == ()
+
+
+def test_an_absence_rule_in_a_mixed_registry_is_not_suppressed(tmp_path):
+    """A positive entry with `home` suppresses as before; an absence entry
+    alongside it does not.
+
+    The same registry can carry both modes, and they are answered differently
+    by the same heuristic. The data model already separates them; the
+    suppression has to follow.
+    """
+    from kinemata.adapters.patterns import CodePatterns
+
+    body = "\n".join(f'x{i} = "behaviour"' for i in range(30))
+    body += "\n" + "\n".join(f'x{i} = "workset"' for i in range(30))
+    write(tmp_path, "app.py", body + "\n")
+    write(tmp_path, "consts.py", 'WORKSET = "workset"\n')
+
+    reg = CodePatterns(
+        [
+            {"id": "no-behaviour", "antipatterns": ["behaviour"]},  # absence
+            {
+                "id": "WORKSET",
+                "antipatterns": ['"workset"'],
+                "home": ["consts.py"],
+            },  # positive
+        ],
+        name="mixed",
+    )
+    report = review(reg, tmp_path, max_sites=20)
+
+    absence_hits = [b for b in report.bypasses if b.entry_id == "no-behaviour"]
+    positive_hits = [b for b in report.bypasses if b.entry_id == "WORKSET"]
+    assert len(absence_hits) == 30
+    assert positive_hits == []
+    assert [s.entry_id for s in report.suppressed] == ["WORKSET"]
+
+
 # -- suppression --------------------------------------------------------------
 
 

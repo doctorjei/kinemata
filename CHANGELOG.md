@@ -11,7 +11,21 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 ## Unreleased
 
-Nothing yet.
+**Fixed**
+
+- **A `code-patterns` absence rule is no longer silenced by `max_sites`.** An entry whose `home`
+  is empty is an absence rule -- every match is a finding, no matter how many sites it matches.
+  `max_sites` is the suppression heuristic for **positive** registries, where an antipattern
+  matching 30 times is a domain word rather than a duplication; for an absence rule the same
+  number of matches is the worst outcome, not a noise floor. Reported by kanibako 2026-09-28:
+  the larger the absence rule regressed, the quieter the check.
+- **An absence rule now reads test trees `[project] exclude` would have removed.** The absence
+  rule's purpose is to find matches *everywhere*, including the test directory it would tend to
+  grow into. A registry carrying such an entry overrides `[project] exclude` for itself; the
+  narrowing of `[[registry]] only` is still honored, because narrowing is a different decision
+  from re-inclusion. The structural key is the existing `home` field: empty `home` means
+  absence, set `home` means positive, and the two are answered differently by both
+  `max_sites` and `[project] exclude`.
 
 ## 0.5.2
 

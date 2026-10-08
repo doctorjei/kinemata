@@ -152,7 +152,18 @@ def review(
         return Report(bypasses=tuple(raw), scanned=scanned, entries=entries)
 
     counts = Counter((hit.entry_id, hit.antipattern) for hit in raw)
-    noisy = {key for key, count in counts.items() if count > max_sites}
+    # An absence rule has no canonical home: every match is a finding, no matter
+    # how many sites it matches. `max_sites` is the suppression heuristic for
+    # POSITIVE registries whose antipatterns would otherwise be drowned out by a
+    # domain word -- it is the wrong knob for an entry whose right number of
+    # sites is zero. Conflating the two modes was the kanibako 2026-09-28
+    # report's Gap 2: the WORSE the regression, the quieter the check.
+    absence_ids = {entry.id for entry in registry.entries() if not entry.home}
+    noisy = {
+        key
+        for key, count in counts.items()
+        if count > max_sites and key[0] not in absence_ids
+    }
 
     kept = tuple(h for h in raw if (h.entry_id, h.antipattern) not in noisy)
     suppressed = tuple(
