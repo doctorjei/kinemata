@@ -124,6 +124,7 @@ than going through the derived surface:
 | `undeclared()` in `contract.py` — the closed-world catch | `declared()` |
 | `[[interpose]]`'s run-time judgment of an observed identifier | `declared()` |
 | `access.registry()`'s assertion on a declared key | `declared()` |
+| `[claims] declared_in` — a path claim the tree could not settle | `declared()` |
 
 ⚑ **`declared()` takes one identifier and nothing else, and that is a contract decision rather than
 an oversight.** A registry cannot see the other identifiers in a run, so it cannot answer *this is
@@ -264,7 +265,11 @@ import-free bootstrap module — had no declarative form. `only` names the files
 to, **read with the same whole-segment matcher as `exclude`**, so one rule governs every path
 fragment a config holds; every scan that reads a registry's files honors it through one predicate.
 A fragment matching no file the registry reads is refused, because a registry scoped to nothing
-checks nothing and reads green.
+checks nothing and reads green. **`[claims] declared_in` honors it too**: a registry settles a path
+claim only in a document its `only` reaches, so a name true in one document is still checked in
+every other. The scoping is the caller's, and that is what kept `declared()` to one identifier —
+the alternative proposed was to hand `declared()` the citing file, which is the protocol change the
+paragraph on `declared()` above declines.
 
 **`closed`** — kanibako's keyspace is closed: an undeclared key is not a key, and
 reading or setting one is an error that names it. Not every registry can start that way;
