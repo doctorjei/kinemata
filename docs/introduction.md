@@ -2327,6 +2327,12 @@ down, and the two shapes at the end are the findings that matter most.
   strings they hold, so `declared("boxes")` returns `False` against a
   :shown:`bootstrap.py`-shaped module carrying `BOXES_PATH = "boxes"`, and reaching for it is
   the wrong shape rather than a missing feature.
+- **accepted** · **A name declared through `[claims] declared_in` was settled in every
+  document.** Closed 2026-10-11: a registry answers only for the files its `[[registry]] only`
+  reaches. The predicate used to see the claim's text and never the file citing it, so a name
+  true in one document -- a release guide's :shown:`dist/`, a template's table of folder names -- could
+  be settled only by exempting the same spelling everywhere it might be wrong. `only` was already
+  the declaration of where a registry applies and `declared_in` was the one reader ignoring it.
 - **boundary** · **No mechanism settles a prose sentence false about behavior.** Six such
   sentences passed every gate on an adopting project's tree 2026-09-20: a signature given as
   `-> str | None` beside code saying `-> str`, a rationale paragraph inverted by its own diff,

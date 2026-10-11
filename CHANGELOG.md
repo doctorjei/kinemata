@@ -11,7 +11,18 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 ## Unreleased
 
-Nothing yet.
+**Changed**
+
+- **A registry named in `[claims] declared_in` answers only for the files its `[[registry]] only`
+  reaches.** It used to be asked with the claim text alone, so a name declared for one document
+  was settled in every document, including the ones where it was wrong. `only` is the existing
+  declaration of where a registry applies, read with the same segment matcher, so no new key: a
+  small registry scoped to a release guide can declare its build output directory there while the
+  same spelling anywhere else is still checked. `only` must still match a file the registry
+  reads, so a registry scoped to a document declares `suffixes = [".md"]`. A registry with no
+  `only` settles everywhere, as before. The `path_declared` predicate `claims.verify` takes is
+  now handed the whole `Claim`, as `elsewhere` is, rather than its text. Reported by an adopter
+  whose last four baseline records were each true in one file only.
 
 ## 0.5.4
 

@@ -1571,7 +1571,7 @@ def test_a_path_declared_by_a_registry_is_settled(tmp_path):
     write(tmp_path, "doc.md", "Stores live under `boxes/` and `channels/`.\n")
     registry = _FakeValuesRegistry(("boxes/", "channels/"))
 
-    assert verify(tmp_path, path_declared=registry.declared).broken == []
+    assert verify(tmp_path, path_declared=_asking(registry)).broken == []
 
 
 def test_an_undeclared_path_stays_a_finding(tmp_path):
@@ -1584,7 +1584,7 @@ def test_an_undeclared_path_stays_a_finding(tmp_path):
     write(tmp_path, "doc.md", "Stores live under `boxes/` and `elsewhere/`.\n")
     registry = _FakeValuesRegistry(("boxes/", "channels/"))
 
-    found = verify(tmp_path, path_declared=registry.declared)
+    found = verify(tmp_path, path_declared=_asking(registry))
     assert broken(found) == {("path", "elsewhere/")}
 
 
@@ -1600,7 +1600,7 @@ def test_a_python_constants_registry_does_not_settle_value_shaped_paths(tmp_path
     write(tmp_path, "doc.md", "Stores live under `boxes/`.\n")
     registry = _FakePythonConstantsRegistry({"BOXES_PATH": "boxes"})
 
-    found = verify(tmp_path, path_declared=registry.declared)
+    found = verify(tmp_path, path_declared=_asking(registry))
     assert broken(found) == {("path", "boxes/")}
 
 
@@ -1615,7 +1615,7 @@ def test_a_path_that_resolves_on_disk_is_not_asked_of_the_registry(tmp_path):
     write(tmp_path, "doc.md", "See `src/app.py`.\n")
     registry = _FakeValuesRegistry(())  # declares nothing
 
-    assert verify(tmp_path, path_declared=registry.declared).broken == []
+    assert verify(tmp_path, path_declared=_asking(registry)).broken == []
 
 
 def test_path_declared_does_not_settle_a_link_claim(tmp_path):
@@ -1628,7 +1628,7 @@ def test_path_declared_does_not_settle_a_link_claim(tmp_path):
     write(tmp_path, "doc.md", "[here](./real.md) and [gone](./missing.md)\n")
     registry = _FakeValuesRegistry(("./missing.md",))
 
-    found = verify(tmp_path, path_declared=registry.declared)
+    found = verify(tmp_path, path_declared=_asking(registry))
     assert broken(found) == {("link", "./missing.md")}
 
 
@@ -1701,6 +1701,57 @@ def test_declared_in_end_to_end_via_the_cli(tmp_path):
     assert status == 1  # `elsewhere/` is still a finding
     # And: a re-run after declaring `elsewhere` would settle it. We don't
     # assert that here -- it's what the unit tests above cover.
+
+
+def _scoped_release_paths(tmp_path, only='only = ["docs/RELEASING.md"]'):
+    write(tmp_path, "release-paths.toml", 'paths = ["dist/"]\n')
+    write(tmp_path, "kinemata.toml", textwrap.dedent(f"""\
+        [project]
+        root = "."
+
+        [claims]
+        suffixes = [".md"]
+        declared_in = ["release-paths"]
+
+        [[registry]]
+        name = "release-paths"
+        kind = "toml-value"
+        source = "release-paths.toml"
+        path = ["paths"]
+        suffixes = [".md"]
+        {only}
+        """).lstrip())
+    write(tmp_path, "docs/RELEASING.md", "The build writes `dist/`.\n")
+    write(tmp_path, "docs/OTHER.md", "Output lands in `dist/`.\n")
+    from kinemata.cli import main
+
+    return main(["claims", "--config", str(tmp_path / "kinemata.toml")])
+
+
+def test_a_declaration_scoped_by_only_settles_the_name_in_that_file_alone(
+    tmp_path, capsys
+):
+    """The adopter's case (2026-10-11): `dist/` is true in the release guide and
+    nowhere else, and their four last records were all that shape.
+
+    ``only`` is the registry's existing word for where it applies, so the claim
+    in ``docs/RELEASING.md`` is settled and the same spelling one directory over
+    is still a finding -- which a text-only predicate could not tell apart.
+    """
+    assert _scoped_release_paths(tmp_path) == 1
+    out = capsys.readouterr().out
+    assert "docs/OTHER.md:1: path does not resolve: dist/" in out
+    assert "docs/RELEASING.md" not in out
+
+
+def test_a_declaration_without_only_still_settles_the_name_everywhere(tmp_path):
+    """The 0.5.2 behavior is untouched for a registry nothing scopes."""
+    assert _scoped_release_paths(tmp_path, only="") == 0
+
+
+def _asking(registry):
+    """The predicate ``verify`` takes, asking a fake registry about the claim."""
+    return lambda claim: registry.declared(claim.text)
 
 
 class _FakeValuesRegistry:

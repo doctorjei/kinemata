@@ -60,7 +60,7 @@ from .bypass import (
     unused,
 )
 from .citations import citations, index
-from .claims import CLAIMS_REGISTRY, ClaimsError, Verification, verify
+from .claims import CLAIMS_REGISTRY, Claim, ClaimsError, Verification, verify
 from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
 from .confirm import ConfirmError, apply, dating, plan, redate
 from .context import measure
@@ -1445,12 +1445,20 @@ def _verify(args: argparse.Namespace, settings: Settings) -> Verification:
 
 def _path_declared_predicate(
     settings: Settings,
-) -> Callable[[str], bool] | None:
-    """``(path) -> bool`` for the registries :attr:`Settings.declared_in` names.
+) -> Callable[[Claim], bool] | None:
+    """``(claim) -> bool`` for the registries :attr:`Settings.declared_in` names.
 
     Refuses rather than silently matches nothing when a name has no matching
     ``[[registry]]``: a config that points at nothing is asking for a check it
     is not getting, which is the same shape ``resolve_in`` refuses on.
+
+    **A registry answers only for the files its** ``only`` **reaches**, the one
+    declaration of where a registry applies, read with the one segment matcher.
+    Asked with the claim text alone, a name declared for one document was
+    settled in every document: an adopter's last four records (2026-10-11) were
+    each true in a single file -- a release guide's build output, a template's
+    table of folder names -- and the only declaration that could settle them
+    exempted the same spelling everywhere else it could be wrong.
     """
     if not settings.declared_in:
         return None
@@ -1463,10 +1471,17 @@ def _path_declared_predicate(
             f"[[registry]] block (known: "
             f"{sorted(available) if available else 'none declared'})."
         )
-    chosen = [available[name] for name in settings.declared_in]
+    chosen = [
+        (available[name], member(available[name], "only"))
+        for name in settings.declared_in
+    ]
 
-    def declared(path: str) -> bool:
-        return any(registry.declared(path) for registry in chosen)
+    def declared(claim: Claim) -> bool:
+        return any(
+            registry.declared(claim.text)
+            for registry, only in chosen
+            if not only or excluded(claim.path, only)
+        )
 
     return declared
 
