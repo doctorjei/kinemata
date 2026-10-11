@@ -130,7 +130,9 @@ where = { id_matches = "_FILE$" }
 # with the same segment matcher as `exclude`. An import discipline is a finding
 # in one module and the ordinary shape of every other. A fragment matching no
 # file the registry reads is refused -- a registry scoped to nothing checks
-# nothing and reads green.
+# nothing and reads green. Named in `[claims] declared_in`, it settles a path
+# claim only in those files, so a name true in one document is still checked
+# in every other.
 [[registry]]
 name = "bootstrap-imports"
 kind = "code-patterns"
@@ -222,6 +224,21 @@ external = true                    # check cited URLs; off by default, and the
                                    # number skipped is printed when it is off
 oracle_timeout = 600               # seconds an oracle may run before it is
                                    # killed and reported as a failure
+external_timeout = 10              # seconds a cited URL may take to answer
+file_suffixes = [".conf"]          # extensions that make a backticked bare
+                                   # filename a path claim, ADDED to the
+                                   # built-in set rather than replacing it
+resolve_in = ["../sibling"]        # further trees a path claim may resolve
+                                   # against. Refused if one is not a
+                                   # directory: every claim it was to settle
+                                   # would go unchecked and still read clean
+commits_in = ["../other-repo"]     # further repositories whose commits may be
+                                   # cited; refused if one is not a repository
+declared_in = ["store-layout"]     # registries asked about a path claim the
+                                   # tree and `resolve_in` could not settle --
+                                   # runtime names that live on a user's
+                                   # machine. A registry with `only` answers
+                                   # only for the documents its `only` names
 
 # Something deferred, and the date the deferral lapses. `path` for a file the
 # project will produce; `what` for anything else. `until` is required on both.
