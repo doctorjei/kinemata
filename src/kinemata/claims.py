@@ -855,11 +855,15 @@ def _negated(line: str, start: int, end: int, previous: str = "") -> Negation | 
     # "no `src/gone.py`". Bounded by the clause for the same reason.
     # From *after* the claim. Starting at it lets a path spell its own
     # negation: `src/gone.py` contains "gone", and reported itself exempt.
-    ahead = line[end:end + NEGATION_WINDOW]
+    # One character beyond the window decides whether its final letters are a
+    # whole negation word. Without it, a window ending at ``not`` in ``notebook``
+    # supplied a synthetic word boundary and withdrew an earlier claim.
+    ahead = line[end:end + NEGATION_WINDOW + 1]
     boundary = CLAUSE_BOUNDARY.search(ahead)
-    clause = ahead[:boundary.start()] if boundary else ahead
-    found = NEGATION.search(clause)
-    if found:
+    limit = boundary.start() if boundary else NEGATION_WINDOW
+    clause = ahead[:limit]
+    found = NEGATION.search(ahead[:limit + 1])
+    if found and found.end() <= len(clause):
         return Negation(
             word=found.group(0).lower(),
             direction="after",

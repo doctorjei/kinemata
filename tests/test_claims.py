@@ -248,6 +248,20 @@ def test_negation_may_follow_the_claim(tmp_path):
     assert verify(tmp_path).broken == []
 
 
+def test_not_inside_notebook_does_not_withdraw_an_earlier_claim(tmp_path):
+    """kanibako's exact 0.6.0 report: a truncated lookahead made ``not`` real."""
+    write(
+        tmp_path,
+        "doc.md",
+        "The build writes `dist/`, the box holds `.kanibako.lock`, and the "
+        "notebook keeps `archives/` and `temp/`.\n",
+    )
+    found = verify(tmp_path)
+    assert broken(found) == {("path", "dist/"), ("path", ".kanibako.lock"),
+                              ("path", "archives/"), ("path", "temp/")}
+    assert found.negated == 0
+
+
 def test_a_claim_does_not_negate_itself(tmp_path):
     """The lookahead starts after the claim.
 

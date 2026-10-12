@@ -11,7 +11,12 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 ## Unreleased
 
-Nothing yet.
+**Fixed**
+
+- **`claims` no longer turns a truncated prefix of a word into a negation.** A
+  look-ahead ending after the `not` in `notebook` fabricated a word boundary and
+  withdrew an earlier path claim in kanibako's reported sentence. One extra
+  character now decides the word boundary without widening the declared window.
 
 ## 0.6.0
 
