@@ -2516,7 +2516,9 @@ def cmd_boundary(args: argparse.Namespace) -> int:
         path = rule.artifact_path(settings.root)
         if args.record:
             fresh = save_artifact(path, result, result.findings)
-            print(f"Recorded {len(fresh.findings)} accepted finding(s) in {path}.")
+            sites = sum(fresh.findings.values())
+            print(f"Recorded {len(fresh.findings)} record(s) covering {sites} "
+                  f"finding(s) in {path}.")
             return 0
         if not path.is_file():
             raise BoundaryError(f"{path}: no boundary ratchet exists to prune")

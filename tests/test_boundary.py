@@ -187,6 +187,95 @@ def test_a_clean_run_with_no_unjudged_sites_reports_the_plain_result(tmp_path, c
     assert "unjudged:" not in out
 
 
+def test_adding_one_comment_line_above_a_finding_does_not_fail_the_rule(tmp_path, capsys):
+    """Reported by an adopter on the dev wheel, 2026-10-12: one comment line at
+    the top of a module left only 37 of 110 accepted findings matching, and the
+    rule failed.
+
+    Every edit above a finding shifts its line, so keying on one makes an
+    unrelated change look like new debt — and re-recording on every unrelated
+    edit is how a ratchet gets waved through. The enclosing scope takes the
+    line's place: a lazy import inside `def resolve` stays inside `resolve`
+    however far the code above it moves.
+    """
+    write(tmp_path, "pkg/m.py", "import alpha\nimport beta\n")
+    cfg = config(tmp_path, RULE.format(
+        extra="", until="2099-01-01",
+    ).replace('imports = ["private_layer"]',
+              'imports = ["alpha", "beta", "gamma"]').replace(
+        "private-layer", "layer"))
+    assert main(["boundary", "-c", str(cfg)]) == 1
+    assert main(["boundary", "-c", str(cfg), "--rule", "layer", "--record"]) == 0
+    capsys.readouterr()
+
+    write(tmp_path, "pkg/m.py", "# a comment\nimport alpha\nimport beta\n")
+    assert main(["boundary", "-c", str(cfg)]) == 0
+    assert "policy holds" in capsys.readouterr().out
+
+
+def test_a_second_occurrence_in_one_scope_is_an_increase_not_a_duplicate(tmp_path):
+    """A set cannot tell the second occurrence from the first.
+
+    The same import twice in the same scope has to read as a count, or removing
+    one and adding one is invisible -- which is the difference between a ratchet
+    and a snapshot.
+    """
+    write(tmp_path, "pkg/m.py", "import alpha\nimport alpha\n")
+    cfg = config(tmp_path, """
+        [[boundary]]
+        name = "layer"
+        kind = "imports"
+        imports = ["alpha"]
+        [boundary.ratchet]
+        until = "2099-01-01"
+        """)
+    assert main(["boundary", "-c", str(cfg)]) == 1
+    assert main(["boundary", "-c", str(cfg), "--rule", "layer", "--record"]) == 0
+    recorded = json.loads(
+        (tmp_path / ".kinemata/ratchets/layer.json").read_text()
+    )["findings"]
+    assert len(recorded) == 1
+    assert list(recorded.values()) == [2]      # one key, counted twice
+
+
+def test_the_same_import_in_two_functions_is_two_sites(tmp_path):
+    """The scope replaces the line, so it has to actually distinguish."""
+    write(tmp_path, "pkg/m.py", "def a():\n    import alpha\n\ndef b():\n    import alpha\n")
+    cfg = config(tmp_path, """
+        [[boundary]]
+        name = "layer"
+        kind = "imports"
+        imports = ["alpha"]
+        [boundary.ratchet]
+        until = "2099-01-01"
+        """)
+    assert main(["boundary", "-c", str(cfg)]) == 1
+    assert main(["boundary", "-c", str(cfg), "--rule", "layer", "--record"]) == 0
+    recorded = json.loads(
+        (tmp_path / ".kinemata/ratchets/layer.json").read_text()
+    )["findings"]
+    assert sorted(recorded.values()) == [1, 1]  # each keyed on its own function
+
+
+def test_a_finding_moved_to_another_function_is_a_new_site(tmp_path):
+    """The scope replaces the line, so it must actually distinguish."""
+    write(tmp_path, "pkg/m.py", "def a():\n    import alpha\n")
+    cfg = config(tmp_path, """
+        [[boundary]]
+        name = "layer"
+        kind = "imports"
+        imports = ["alpha"]
+        [boundary.ratchet]
+        until = "2099-01-01"
+        """)
+    assert main(["boundary", "-c", str(cfg), "--rule", "layer", "--record"]) == 0
+    write(tmp_path, "pkg/m.py", "def b():\n    import alpha\n")
+    settings = load(cfg)
+    [rule] = settings.boundaries
+    from kinemata.boundary import survey
+    assert survey(tmp_path, rule, settings.exclude).unjudged is False
+
+
 RULE = """
     [[boundary]]
     name = "private-layer"
@@ -364,7 +453,7 @@ def test_rule_owned_record_and_prune_never_touch_the_project_baseline(tmp_path, 
     assert main(["boundary", "-c", str(cfg), "--rule", "private-layer", "--prune"]) == 0
     write(tmp_path, "pkg/consumer.py", "pass\n")
     assert main(["boundary", "-c", str(cfg), "--rule", "private-layer", "--prune"]) == 0
-    assert '"findings": []' in sidecar.read_text()
+    assert json.loads(sidecar.read_text())["findings"] == {}
     assert baseline.read_text() == original
     assert "Recorded" in capsys.readouterr().out
 

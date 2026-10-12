@@ -21,15 +21,15 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   inferred notion of which `shutil` calls mutate. An optional `[boundary.ratchet]`
   creates one managed, expiry-bound sidecar per rule under
   `:shown:`.kinemata/ratchets/`. The artifact locks its owner, kind, expiry, the file
-  list it covered, and a fingerprint of the policy itself, alongside accepted finding
-  fingerprints. Editing the declaration — `only` and `exclude` included, so a narrowed
-  source scope — is refused until re-recorded; adding or deleting a source file is not,
-  since those are data rather than declaration, and a file that goes away leaves stale
-  records for an explicit prune. Full `kinemata boundary` runs inventory all sidecars;
-  selected `--rule NAME --record` and `--prune` touch only their owner and never the
-  existing project-wide baseline. Blocked, vacuous, orphaned, expired or mismatched
-  states fail rather than silently accepting findings, and a call whose receiver cannot
-  be followed is counted as `unjudged:` on every run without failing — measured, since
+  list it covered, and a fingerprint of the policy itself, alongside accepted findings
+  keyed by enclosing scope and counted per key. Editing the declaration — `only` and
+  `exclude` included, so a narrowed source scope — is refused until re-recorded; adding or
+  deleting a source file is not, since those are data rather than declaration, and a file
+  that goes away leaves stale records for an explicit prune. Full `kinemata boundary` runs
+  inventory all sidecars; selected `--rule NAME --record` and `--prune` touch only their
+  owner and never the existing project-wide baseline. Blocked, vacuous, orphaned, expired or
+  mismatched states fail rather than silently accepting findings, and a call whose receiver
+  cannot be followed is counted as `unjudged:` on every run without failing — measured, since
   failing on one made a `Path.write_text` policy report 191 unresolvable sites and no
   findings, which is a rule nobody can keep.
 

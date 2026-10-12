@@ -859,6 +859,11 @@ selector declares the family the project means.
 A rule may carry `[boundary.ratchet] until = "YYYY-MM-DD"`. Its accepted findings and
 the file list it covered are stored in `:shown:`.kinemata/ratchets/` under the rule's
 safe name, beside its owner, kind, expiry, and a fingerprint of the **policy itself**.
+**A finding is keyed by its file and enclosing scope, not by its line number**, and a
+repeated one in the same scope is stored as a count. That is the project baseline's own
+contract: every edit above a finding shifts its line, and a key that moves is an
+exemption granted by a diff — reported by an adopter adding one comment line, which left
+73 of 110 accepted findings unmatched and the rule red until a re-record.
 An ordinary full run inventories every managed sidecar; a missing, orphaned, unreadable,
 expired, or mismatched one cannot accept findings. Editing the declaration — including
 `only` or `exclude`, so a narrowed source scope — changes that fingerprint and is refused

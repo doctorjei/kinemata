@@ -295,10 +295,16 @@ homes = ["src/pkg/files.py"]
 A boundary may own a short-lived acceptance artifact without entering the existing
 project-wide `kinemata baseline` file. Put an expiry beside the rule, then use the
 selected writer. Its artifact lives in `:shown:`.kinemata/ratchets/` and carries the
-owner, kind, expiry, the file list it covered, the accepted finding fingerprints, and a
-fingerprint of the policy itself. A normal `kinemata boundary` inventories that
-directory, so a malformed or orphaned sidecar fails rather than becoming invisible
+owner, kind, expiry, the file list it covered, the accepted findings keyed by enclosing
+scope, and a fingerprint of the policy itself. A normal `kinemata boundary` inventories
+that directory, so a malformed or orphaned sidecar fails rather than becoming invisible
 state.
+
+**A finding is identified by its file and enclosing scope, never by its line number.** Every
+edit above a finding shifts its line, so keying on one makes an unrelated change look like
+new debt — reported by an adopter adding a single comment line, which invalidated 73 of 110
+accepted findings on their boundary. A repeated import in one scope is recorded as a count,
+so the next one is an increase rather than an indistinguishable duplicate.
 
 ```toml
 [boundary.ratchet]
@@ -573,7 +579,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **1409 tests**, and
+The companion guard is a number with an oracle. This suite is **1413 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 

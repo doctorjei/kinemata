@@ -13,7 +13,7 @@ import fnmatch
 import hashlib
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -23,9 +23,15 @@ from .bypass import _walk as _project_files
 from .exclusion import excluded
 
 RATCHET_DIRECTORY = Path(".kinemata") / "ratchets"
-RATCHET_VERSION = 1
+#: 2 keys a finding by its enclosing scope rather than its line, and carries a
+#: multiplicity per key. Version 1 was unreleased and is refused rather than
+#: migrated: its records are keyed on line numbers, which is the defect.
+RATCHET_VERSION = 2
 BOUNDARY_KINDS = ("imports", "calls")
 TYPE_CHECKING_POLICIES = ("include", "ignore")
+#: What a finding at module level is scoped to. Spelled rather than empty so a
+#: module-level record and a function-level one never share a key by accident.
+MODULE_SCOPE = "<module>"
 _RULE_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_-]*\Z")
 
 
@@ -81,6 +87,7 @@ class ImportSite:
     module: str
     symbol: str | None
     type_checking: bool
+    scope: str = MODULE_SCOPE
 
     @property
     def target(self) -> str:
@@ -93,6 +100,7 @@ class CallSite:
     line: int
     target: str
     expression: str
+    scope: str = MODULE_SCOPE
 
 
 @dataclass(frozen=True)
@@ -113,14 +121,30 @@ class Finding:
     line: int
     subject: str
     detail: str
+    scope: str = MODULE_SCOPE
 
     @property
     def fingerprint(self) -> str:
+        """Identify this finding across commits.
+
+        ⚑ **The line number is deliberately absent**, and an adopter found out
+        why the day this shipped: adding **one comment line** at the top of a
+        module shifted every accepted import below it, so 37 of 110 records
+        stopped matching and the rule failed. Re-recording on every unrelated
+        edit is how a ratchet gets waved through.
+
+        This is :class:`kinemata.baseline.Accepted`'s contract, deliberately: it
+        keys on scope, subject, path and the matched spelling, and says why in
+        its own docstring. **The enclosing scope replaces the line** rather than
+        going with it — a lazy import inside ``def resolve`` stays inside
+        ``resolve`` however far the code above it moves, while a module-level
+        import and the same import inside a function are still two sites.
+        """
         return _fingerprint({
             "rule": self.rule,
             "kind": self.kind,
             "path": self.path,
-            "line": self.line,
+            "scope": self.scope,
             "subject": self.subject,
             "detail": self.detail,
         })
@@ -198,7 +222,13 @@ class Artifact:
     rule: str
     files: tuple[str, ...]
     until: date
-    findings: frozenset[str]
+    #: Fingerprint -> how many of them. **The count because identical sites
+    #: recur**: a module may import the same name in two functions, or the same
+    #: literal three times over, and a set cannot tell a second occurrence from
+    #: the first. Recording the multiplicity is what makes the next one an
+    #: increase instead of an indistinguishable duplicate -- the same reason
+    #: :class:`kinemata.baseline.Accepted` carries a ``count``.
+    findings: Mapping[str, int]
 
     def validate(self, boundary: Boundary) -> None:
         if self.owner != boundary.name:
@@ -314,10 +344,17 @@ class _Visitor(ast.NodeVisitor):
         self.path = path
         self.module = module
         self.scopes: list[dict[str, str]] = [{}]
+        #: The enclosing def/class chain, which is what a finding keys on in
+        #: place of its line -- stable however far the code above it moves.
+        self.enclosing: list[str] = []
         self.type_checking = False
         self.imports: list[ImportSite] = []
         self.calls: list[CallSite] = []
         self.dynamic: list[Unsupported] = []
+
+    @property
+    def scope(self) -> str:
+        return ".".join(self.enclosing) if self.enclosing else MODULE_SCOPE
 
     def _resolved(self, node: ast.AST) -> str | None:
         if isinstance(node, ast.Name):
@@ -341,7 +378,7 @@ class _Visitor(ast.NodeVisitor):
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
             self.imports.append(ImportSite(
-                self.path, node.lineno, alias.name, None, self.type_checking
+                self.path, node.lineno, alias.name, None, self.type_checking, self.scope
             ))
             # A TYPE_CHECKING import is evidence for an import policy, but it is
             # not a runtime binding. Letting it resolve a later call would turn a
@@ -360,11 +397,11 @@ class _Visitor(ast.NodeVisitor):
                 # Star imports cannot identify a later bare call. The import still
                 # belongs to an import-layer policy; no inferred aliases follow.
                 self.imports.append(ImportSite(
-                    self.path, node.lineno, module, "*", self.type_checking
+                    self.path, node.lineno, module, "*", self.type_checking, self.scope
                 ))
                 continue
             self.imports.append(ImportSite(
-                self.path, node.lineno, module, alias.name, self.type_checking
+                self.path, node.lineno, module, alias.name, self.type_checking, self.scope
             ))
             if not self.type_checking:
                 self.scopes[-1][alias.asname or alias.name] = f"{module}.{alias.name}"
@@ -383,7 +420,9 @@ class _Visitor(ast.NodeVisitor):
         resolved = self._resolved(node.func)
         expression = _expression(node.func)
         if resolved:
-            self.calls.append(CallSite(self.path, node.lineno, resolved, expression))
+            self.calls.append(
+                CallSite(self.path, node.lineno, resolved, expression, self.scope)
+            )
         self.generic_visit(node)
 
     def visit_If(self, node: ast.If) -> None:
@@ -397,14 +436,24 @@ class _Visitor(ast.NodeVisitor):
         for item in node.orelse:
             self.visit(item)
 
-    def _scoped(self, node: ast.AST) -> None:
+    def _scoped(self, node: ast.AST, name: str | None = None) -> None:
         self.scopes.append({})
+        self.enclosing.append(name or type(node).__name__)
         self.generic_visit(node)
+        self.enclosing.pop()
         self.scopes.pop()
 
-    visit_FunctionDef = _scoped
-    visit_AsyncFunctionDef = _scoped
-    visit_Lambda = _scoped
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._scoped(node, node.name)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._scoped(node, node.name)
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self._scoped(node, node.name)
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        self._scoped(node, "lambda")
 
 
 def _files(root: Path, boundary: Boundary, exclude: Iterable[str] = ()) -> tuple[Path, ...]:
@@ -450,7 +499,8 @@ def _imports(boundary: Boundary, found: Iterable[ImportSite]) -> list[Finding]:
         if not permitted:
             suffix = f" import {item.target!r} is outside the declared surface"
             findings.append(Finding(
-                boundary.name, boundary.kind, item.path, item.line, item.target, suffix
+                boundary.name, boundary.kind, item.path, item.line, item.target,
+                suffix, item.scope,
             ))
     return findings
 
@@ -469,6 +519,7 @@ def _calls(boundary: Boundary, found: Iterable[CallSite]) -> list[Finding]:
             item.line,
             item.target,
             f" call through {item.expression!r} is outside its declared home",
+            item.scope,
         ))
     return findings
 
@@ -540,6 +591,29 @@ def _shown_version(raw: object) -> object:
     return raw.get("version") if isinstance(raw, dict) else None
 
 
+def _read_tally(raw: object, path: Path) -> Mapping[str, int]:
+    """Fingerprint -> count, read strictly. A damaged tally is never an empty one."""
+    if not isinstance(raw, dict) or not all(
+        isinstance(key, str)
+        and isinstance(value, int)
+        and not isinstance(value, bool)
+        and value > 0
+        for key, value in raw.items()
+    ):
+        raise BoundaryError(
+            f"{path}: boundary ratchet findings must map a fingerprint to a count; "
+            "re-record it"
+        )
+    return dict(raw)
+
+
+def _tally(findings: Iterable[Finding]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in findings:
+        counts[item.fingerprint] = counts.get(item.fingerprint, 0) + 1
+    return counts
+
+
 def load_artifact(path: Path) -> Artifact:
     """Read one evidence file strictly; a damaged ratchet is never empty."""
     try:
@@ -561,17 +635,14 @@ def load_artifact(path: Path) -> Artifact:
         isinstance(item, str) for item in raw["files"]
     ):
         raise BoundaryError(f"{path}: boundary ratchet files must be paths; re-record it")
-    if not isinstance(raw["findings"], list) or not all(
-        isinstance(item, str) for item in raw["findings"]
-    ):
-        raise BoundaryError(f"{path}: boundary ratchet findings must be fingerprints; re-record it")
+    tally = _read_tally(raw["findings"], path)
     try:
         until = date.fromisoformat(raw["until"])
     except ValueError as exc:
         raise BoundaryError(f"{path}: boundary ratchet expiry is not YYYY-MM-DD") from exc
     return Artifact(
         owner=raw["owner"], kind=raw["kind"], rule=raw["rule"],
-        files=tuple(raw["files"]), until=until, findings=frozenset(raw["findings"]),
+        files=tuple(raw["files"]), until=until, findings=tally,
     )
 
 
@@ -586,7 +657,7 @@ def save_artifact(path: Path, result: BoundaryResult, findings: Iterable[Finding
         rule=boundary.semantic_fingerprint(),
         files=result.files,
         until=boundary.ratchet.until,
-        findings=frozenset(item.fingerprint for item in findings),
+        findings=_tally(findings),
     )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({
@@ -596,7 +667,7 @@ def save_artifact(path: Path, result: BoundaryResult, findings: Iterable[Finding
         "rule": artifact.rule,
         "files": list(artifact.files),
         "until": artifact.until.isoformat(),
-        "findings": sorted(artifact.findings),
+        "findings": dict(sorted(artifact.findings.items())),
     }, indent=2) + "\n")
     return artifact
 
