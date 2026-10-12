@@ -136,6 +136,57 @@ def test_instance_method_without_dataflow_is_explicitly_unjudged(tmp_path):
     ]
 
 
+def test_an_unresolvable_receiver_counts_rather_than_failing_the_gate(tmp_path, capsys):
+    """Failing here made the rule impossible to pass, so nobody keeps it.
+
+    Measured on an adopter's tree: a family of module functions gave 59 real
+    findings beside 71 unknown-receiver sites, because `tmp.replace` shares its
+    last segment with `os.replace` and `str.replace` is everywhere. The gate
+    counts them; the *writer* still refuses, because an unmeasured call cannot
+    earn an accepted finding.
+    """
+    write(tmp_path, "pkg/caller.py", """
+        import os
+
+        def rewrite(tmp, dst):
+            os.replace(tmp, dst)
+            return tmp.replace("a", "b")
+        """)
+    cfg = config(tmp_path, """
+        [[boundary]]
+        name = "mutators-home"
+        kind = "calls"
+        only = ["pkg/"]
+        calls = ["os.replace"]
+        homes = ["pkg/files.py"]
+        """)
+    assert main(["boundary", "-c", str(cfg)]) == 1
+    out, err = capsys.readouterr()
+    assert "pkg/caller.py:4: os.replace" in out       # the real finding
+    assert "unjudged: 1 call(s)" in out               # counted, not failed
+    assert "tmp.replace" in err                       # and named, with a reason
+    # The same run may not author evidence for what it could not measure.
+    assert main(["boundary", "-c", str(cfg), "--rule", "mutators-home",
+                 "--record"]) == 2
+
+
+def test_a_clean_run_with_no_unjudged_sites_reports_the_plain_result(tmp_path, capsys):
+    """The `unjudged:` line is on every run that has them, and only those."""
+    write(tmp_path, "pkg/caller.py", "import os\n")
+    cfg = config(tmp_path, """
+        [[boundary]]
+        name = "mutators-home"
+        kind = "calls"
+        only = ["pkg/"]
+        calls = ["os.replace"]
+        homes = ["pkg/caller.py"]
+        """)
+    assert main(["boundary", "-c", str(cfg)]) == 0
+    out = capsys.readouterr().out
+    assert "policy holds" in out
+    assert "unjudged:" not in out
+
+
 RULE = """
     [[boundary]]
     name = "private-layer"

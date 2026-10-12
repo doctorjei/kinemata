@@ -2426,35 +2426,48 @@ def _boundary_rule(settings: Settings, name: str | None):
 
 def _print_boundary_result(result, accepted: frozenset[str] = frozenset(),
                            recorded: Sequence[str] = ()) -> int:
-    """Render one policy and return the failures it independently creates."""
+    """Render one policy and return the failures it independently creates.
+
+    \u26d1 **An unresolvable receiver is counted, not failed** \u2014 measured on an
+    adopter's tree, where a fully resolvable family of module functions gave 59
+    real findings beside 71 unknown-receiver sites (``tmp.replace`` sharing its
+    last segment with ``os.replace``), and a ``Path.write_text`` policy gave 191
+    and none. A rule that could never pass teaches its reader to delete it. The
+    count is on every run, so the coverage stays visibly partial; the *writer*
+    still refuses, since an unmeasured call cannot earn an accepted finding.
+    """
     rule = result.rule
     failed = 0
     print(f"# {rule.name} ({rule.kind})")
     if result.blocked:
         for why in result.blocked:
             print(f"  BLOCKED: {why}", file=sys.stderr)
-        failed += len(result.blocked)
+            failed += len(result.blocked)
     if result.vacuous:
         print("  VACUOUS: its declared source scope contains no Python file", file=sys.stderr)
         failed += 1
-    for item in result.unsupported:
-        print(
-            f"  UNJUDGED: {item.path}:{item.line}: {item.expression} -- {item.reason}",
-            file=sys.stderr,
-        )
-    failed += len(result.unsupported)
     live = [item for item in result.findings if item.fingerprint not in accepted]
     for item in live:
         print(f"  {item}")
     if accepted:
         print(f"  ratchet: {len(result.findings) - len(live)} finding(s) accepted here")
+    if result.unsupported:
+        print(f"  unjudged: {len(result.unsupported)} call(s) whose receiver this "
+              "resolver cannot follow; not checked, and not findings")
+        for item in result.unsupported:
+            print(
+                f"    {item.path}:{item.line}: {item.expression} -- {item.reason}",
+                file=sys.stderr,
+            )
     # A file leaving the population is a data change: its records are stale and
     # `--prune` drops them. Narrowing the *declaration* is refused above, by the
     # rule fingerprint, which carries `only` and `exclude`.
     for gone in result.lost(recorded):
         print(f"  not examined now: {gone} (`--prune` drops its records)")
-    if not result.unjudged and not live:
+    if not result.unsupported and not live:
         print(f"  {len(result.files)} Python file(s) examined, policy holds.")
+    elif not result.unsupported:
+        print(f"  {len(result.files)} Python file(s) examined.")
     return failed + len(live)
 
 

@@ -276,9 +276,13 @@ A call policy resolves direct imports, `import module as alias`, `from module im
 callable as alias`, relative imports, function-local imports, and aliases assigned
 from those names. It does not guess through a receiver's data flow: an instance call
 such as `path.write_text(...)`, a dynamic lookup, plugin dispatch, or a callback is
-reported as **unjudged**, and the gate fails rather than treating it as clean.
-Selectors are exact names or explicit wildcard families, so `shutil.*` means exactly
-what its author wrote; kinemata does not infer that every `shutil` member mutates.
+**counted and named, not failed** — `unjudged: N` is on every run, so a partial
+coverage reads as partial rather than clean. Failing on it instead would have made
+the rule impossible to pass: measured on a real tree, a `Path.write_text` policy
+produced 191 unresolvable sites and no findings at all. Recording and pruning still
+refuse while any call went unmeasured. Selectors are exact names or explicit wildcard
+families, so `shutil.*` means exactly what its author wrote; kinemata does not infer
+that every `shutil` member mutates.
 
 ```toml
 [[boundary]]
@@ -569,7 +573,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **1407 tests**, and
+The companion guard is a number with an oracle. This suite is **1409 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 

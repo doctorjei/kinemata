@@ -813,7 +813,7 @@ does not want this.
 | `kinemata parity` | membership gate, ratcheted — what a registry declares, against the set an oracle says the code produces. Both directions: produced and declared by nothing, declared and produced by nothing. With `field`, **also** each entry's declared value against what the oracle prints for it | a disagreement in any of the three directions that the baseline does not already accept, an oracle that could not answer, or a declared value no oracle could be expected to print. Refuses outright (exit 2) if no `[[parity]]` is declared |
 | `kinemata shape` | declaration gate, ratcheted — the one check whose subject is a declaration rather than the code, so it reads no tree and takes no path. A rule is a **guard** and a **claim**, and either may be a predicate the project names | a rule an entry does not satisfy that the baseline does not already accept, a rule that could not be evaluated, or **a rule that examined no entry at all**. Refuses outright (exit 2) if no `[[shape]]` is declared |
 | `kinemata probe` | behavior gate, ratcheted — a declared corpus of inputs against what the project's code **accepts and refuses**. The one check that calls the project's own code; it reads no tree and takes no path, because the corpus comes from the project | a case the code answers otherwise that the baseline does not already accept, a probe that could not be evaluated, or **a corpus carrying only one polarity**. Refuses outright (exit 2) if no `[[probe]]` is declared |
-| `kinemata boundary` | AST import-layer and resolved call-home gate; an optional ratchet belongs to the one named rule rather than to `baseline` | a policy violation not accepted by its valid sidecar, a blocked/vacuous/unjudged scan, or an orphaned, expired, malformed, wrong-owner, or **changed-rule** sidecar. Refuses outright (exit 2) if no `[[boundary]]` is declared |
+| `kinemata boundary` | AST import-layer and resolved call-home gate; an optional ratchet belongs to the one named rule rather than to `baseline` | a policy violation not accepted by its valid sidecar, a blocked or vacuous scan, or an orphaned, expired, malformed, wrong-owner, or **changed-rule** sidecar. Calls whose receiver cannot be followed are **counted** (`unjudged:`) rather than failed — the writer still refuses on them. Refuses outright (exit 2) if no `[[boundary]]` is declared |
 | `kinemata context` | session-load gate | measured bytes exceed `budget` |
 | `kinemata baseline` | shows accepted findings; `--record --until`, `--prune` | — |
 | `kinemata stamp` | mints a citation stamp, or decodes one; reads no config | the text given is not a stamp |
@@ -844,10 +844,17 @@ An imports rule selects modules with `imports`, permits its declared surface wit
 
 A calls rule selects canonical resolved targets through `calls` (exact names or explicit
 wildcard families) and permits them only in `homes`. Static aliases are supported;
-instance receivers and dynamic/data-flow dispatch are not guessed. A potentially
-relevant unsupported call is emitted as **unjudged** and fails the rule, so it cannot
-read as a clean call-home policy. This deliberately does not decide which `shutil.*`
-members are mutations: the selector declares the family the project means.
+instance receivers and dynamic/data-flow dispatch are not guessed. A call whose receiver
+this resolver cannot follow is **counted and named, not failed**, and the count is on
+every run: the coverage is partial and the run says so rather than reading clean. This
+is measured, not a preference — on an adopter's tree a family of module functions gave
+59 real findings beside 71 unknown-receiver sites, because `tmp.replace` shares its last
+segment with `os.replace` and `str.replace` is everywhere; a `Path.write_text` policy
+gave 191 and none. Failing on the second would make the rule impossible to pass, and a
+rule nobody can pass is a rule somebody deletes. `--record` and `--prune` still refuse
+while any call went unmeasured, because an unmeasured call cannot earn an accepted
+finding. This deliberately does not decide which `shutil.*` members are mutations: the
+selector declares the family the project means.
 
 A rule may carry `[boundary.ratchet] until = "YYYY-MM-DD"`. Its accepted findings and
 the file list it covered are stored in `:shown:`.kinemata/ratchets/` under the rule's
@@ -1851,6 +1858,29 @@ limit is closed, in the same commit that closes it.**
   **On sparse documentation, staleness is prose, and the tree-side claim kinds have little to
   find.** What would move this entry is a third shape of project: one whose documentation names
   its own files heavily, measured the same way.
+
+### Found on the first adopter's tree, 2026-10-12
+
+Written when `kinemata boundary` was built for a request that was explicit about what it did *not*
+need, and measured against that tree rather than a fixture.
+
+- **boundary** · **A call rule follows a receiver it can prove and reports the ones it cannot.**
+  Import rules resolve every lexical binding the AST carries — aliases, relative and function-local
+  imports, `TYPE_CHECKING` blocks — but a call on a receiver this resolver cannot follow is not
+  evidence of anything, and reaching it is data-flow analysis rather than a larger AST walk.
+  **What would revive it:** a declared receiver type (an annotation, a `module:attribute` naming a
+  class), which would make the site checkable the way a probe already is. Measured, so the boundary
+  is stated as a fact about the instrument rather than a guess: on that tree a `Path.write_text`
+  policy found **0** findings and **191** unresolvable sites, while a family of module functions
+  found **59** beside **71**. ⚑ **The second number is the one that shaped the gate**: those 191
+  are counted and named rather than failed, because a rule nobody can pass is a rule somebody
+  deletes. The writer still refuses while anything went unmeasured.
+
+- **boundary** · **Plugin and callback dispatch is outside a call rule entirely.** A target class
+  loaded by entry point, an argument assembled with `getattr`, and a parser-assigned `args.func`
+  are resolved at run time, and which callables they reach is a fact about the run rather than
+  about the source. `[[interpose]]` and `[[probe]]` observe and exercise a project *at run time*;
+  a boundary rule is static by construction, because its subject is the import graph.
 
 ### Found by the first outside audit, 2026-09-09
 

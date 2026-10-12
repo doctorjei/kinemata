@@ -143,6 +143,28 @@ class BoundaryResult:
 
     @property
     def unjudged(self) -> bool:
+        """Did part of the scan fail to measure anything at all?
+
+        **This governs the *writer*, not the gate.** A run that could not measure
+        must not author the evidence file, because an exemption written from a
+        scan that examined nothing is exactly the failure the ratchet exists to
+        prevent -- so ``--record`` and ``--prune`` refuse while this holds.
+
+        It deliberately does **not** make the gate fail, and that split is the
+        measured part. A call on a receiver this resolver cannot follow is **not
+        evidence of a violation**. Failing on it makes the mechanism unusable
+        rather than honest: on an adopter's tree a fully resolvable family of
+        module functions produced **59** real findings beside **71** sites with
+        an unknown receiver, because ``tmp.replace`` shares its last segment with
+        ``os.replace`` and ``str.replace`` is everywhere; a ``Path.write_text``
+        policy produced **191** such sites and **0** findings, a rule that could
+        never pass, which teaches its reader to delete it.
+
+        So the gate counts and prints them the way ``negated:`` and ``set-valued:``
+        count theirs -- the coverage is partial and the number is on every run --
+        while the writer still refuses, because an unmeasured call cannot earn an
+        accepted finding.
+        """
         return bool(self.blocked or self.vacuous or self.unsupported)
 
     @property
