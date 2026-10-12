@@ -213,6 +213,9 @@ kinemata probe       # the gate, for what the project's own code accepts and
                      # corpus carrying only one polarity, which a callable that
                      # refuses everything would satisfy. Refuses without a
                      # [[probe]].
+kinemata boundary    # the AST gate for declared import layers and resolved call
+                     # homes. Its optional ratchets are owned per rule, never by
+                     # the project-wide baseline.
 kinemata baseline    # what the gates already accept. --record to change it;
                      # runs every scan that feeds it, being the one that writes.
 kinemata context     # the gate, for what a session loads. Exits 1 over the ceiling.
@@ -248,6 +251,69 @@ documentation checked.
 
 See `examples/ci-github-actions.yml` — including why a workflow file alone is
 still a reminder, and what promotes it to a catch.
+
+## AST boundaries: import layers and call homes
+
+A `[[boundary]]` is a source policy, not a registry: it parses every selected Python
+file, reports the importing or calling file and line, and applies a policy to the
+resolved static name. An import policy selects a module family with `imports` and
+permits only its declared `allow` surface. `only` and `exclude` select importing
+files; `type_checking = "ignore"` leaves imports inside an explicit `TYPE_CHECKING`
+block out of that policy (the default is `"include"`).
+
+```toml
+[[boundary]]
+name = "settings-surface"
+kind = "imports"
+only = ["src/pkg/"]
+exclude = ["src/pkg/settings/"]
+imports = ["pkg.settings"]
+allow = ["pkg.settings.api"]
+type_checking = "ignore"
+```
+
+A call policy resolves direct imports, `import module as alias`, `from module import
+callable as alias`, relative imports, function-local imports, and aliases assigned
+from those names. It does not guess through a receiver's data flow: an instance call
+such as `path.write_text(...)`, a dynamic lookup, plugin dispatch, or a callback is
+reported as **unjudged**, and the gate fails rather than treating it as clean.
+Selectors are exact names or explicit wildcard families, so `shutil.*` means exactly
+what its author wrote; kinemata does not infer that every `shutil` member mutates.
+
+```toml
+[[boundary]]
+name = "file-mutations-live-here"
+kind = "calls"
+calls = ["os.remove", "os.rename", "shutil.move", "builtins.open"]
+homes = ["src/pkg/files.py"]
+```
+
+A boundary may own a short-lived acceptance artifact without entering the existing
+project-wide `kinemata baseline` file. Put an expiry beside the rule, then use the
+selected writer. Its artifact lives in `:shown:`.kinemata/ratchets/` and carries the
+owner, kind, expiry, the file list it covered, the accepted finding fingerprints, and a
+fingerprint of the policy itself. A normal `kinemata boundary` inventories that
+directory, so a malformed or orphaned sidecar fails rather than becoming invisible
+state.
+
+```toml
+[boundary.ratchet]
+until = "2026-12-01"
+```
+
+```bash
+kinemata boundary --rule file-mutations-live-here --record
+kinemata boundary --rule file-mutations-live-here --prune
+```
+
+`--record` and `--prune` run the named policy across its full declared scope and
+read/write only that policy's sidecar. They refuse a blocked, vacuous, or unjudged
+run; they never read or modify the global baseline or another boundary rule's
+artifact. A changed policy — including `only` or `exclude`, so a narrowed source scope
+— wrong owner/schema, or an expired sidecar cannot accept a finding. The source files
+themselves are data rather than declaration: adding a module does not block the gate,
+and a file that goes away is reported as no longer examined, leaving its records stale
+for an explicit `--prune`.
 
 ## Adopting it on a codebase that already fails
 
@@ -503,7 +569,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **1389 tests**, and
+The companion guard is a number with an oracle. This suite is **1407 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 

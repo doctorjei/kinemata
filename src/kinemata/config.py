@@ -60,6 +60,7 @@ from .adapters.patterns import CodePatterns
 from .adapters.substitutions import Substitutions
 from .adapters.values import ValueRegistry
 from .baseline import BASELINE_NAME
+from .boundary import BOUNDARY_KINDS, TYPE_CHECKING_POLICIES, Boundary, Ratchet, validate_name
 from .bypass import MODE_FILTERS, _is_home_file, git_ignored
 from .bypass import _walk as _files
 from .citations import DEFAULT_ACCOMPANY_MAX
@@ -255,6 +256,9 @@ class Settings:
     #: project's code -- which is the same contract every ``module:attribute``
     #: in this file already carries.
     probes: tuple[Probe, ...] = ()
+    #: Static import-layer and call-home policies, each independent of the
+    #: project-wide baseline. Their optional ratchets live under :shown:`.kinemata/`.
+    boundaries: tuple[Boundary, ...] = ()
     #: Each ``[[registry]]`` and ``[[probe]]`` table's fingerprint, by
     #: coverage source. The coverage lock compares these with the ones it
     #: recorded, to tell a row a declaration dropped from one the data did
@@ -865,6 +869,14 @@ PROBE_KEYS = frozenset(
     {"name", "target", "cases", "outcome", "refusal", "accepted", "exact"}
 )
 
+#: One AST policy, rather than a registry: imports and calls are source relations,
+#: not a project vocabulary. `only`/`exclude` scope its importing/calling files.
+BOUNDARY_KEYS = frozenset({
+    "name", "kind", "only", "exclude", "imports", "allow", "calls", "homes",
+    "type_checking", "ratchet",
+})
+RATCHET_KEYS = frozenset({"until"})
+
 #: Every table a ``kinemata.toml`` may declare. ⚑ **The root was the last table
 #: that absorbed silently, and the worst one to.** A top-level ``[[gates]]`` --
 #: the plural typo -- loaded without complaint and declared no gates at all, so
@@ -875,7 +887,7 @@ PROBE_KEYS = frozenset(
 ROOT_KEYS = frozenset(
     {
         "project", "registry", "count", "parity", "shape", "interpose", "gate",
-        "probe", "claims", "context", "citations", "promise", "command",
+        "probe", "boundary", "claims", "context", "citations", "promise", "command",
         "distinct",
     }
 )
@@ -1233,6 +1245,7 @@ def load(path: str | Path) -> Settings:
         "[[shape]]": bool(raw.get("shape")),
         "[[interpose]]": bool(raw.get("interpose")),
         "[[probe]]": bool(raw.get("probe")),
+        "[[boundary]]": bool(raw.get("boundary")),
         "[[gate]]": bool(raw.get("gate")),
         "[claims]": raw.get("claims") is not None,
         "[context]": raw.get("context") is not None,
@@ -1430,6 +1443,7 @@ def load(path: str | Path) -> Settings:
         shapes=_build_shapes(raw.get("shape", []), path,
                              [built.name for built in registries]),
         probes=_build_probes(raw.get("probe", []), path),
+        boundaries=_build_boundaries(raw.get("boundary", []), path),
         populations={
             **{registry_source(str(spec.get("name", ""))): fingerprint(spec)
                for spec in declarations},
@@ -2726,6 +2740,97 @@ def _build_probes(
                 ),
             )
         )
+    return tuple(built)
+
+
+def _build_boundaries(
+    declarations: list[dict[str, Any]], path: Path
+) -> tuple[Boundary, ...]:
+    """``[[boundary]]`` AST policies, each with a named, closed surface.
+
+    Import layers and call homes share source traversal but not semantics. A
+    generic registry would turn either into an identifier vocabulary and obscure
+    the policy its evidence is allowed to accept, so these remain their own
+    declaration family and their optional artifacts cannot enter `baseline`.
+    """
+    built: list[Boundary] = []
+    names: set[str] = set()
+    for index, spec in enumerate(declarations):
+        where = f"{path}: [[boundary]] {index}"
+        _reject_unknown(spec, BOUNDARY_KEYS, where, absorbs=True)
+        name = spec.get("name")
+        if not isinstance(name, str) or not validate_name(name):
+            raise ConfigError(
+                f"{where} needs name as letters, numbers, '_' or '-' beginning "
+                "with a letter. That name is its managed ratchet filename."
+            )
+        if name in names:
+            raise ConfigError(
+                f"{where} is named {name!r}, which another [[boundary]] already "
+                "uses. A rule-owned artifact needs one unambiguous owner."
+            )
+        names.add(name)
+        kind = spec.get("kind")
+        if kind not in BOUNDARY_KINDS:
+            raise ConfigError(
+                f"{where} kind {kind!r} is not one of {', '.join(BOUNDARY_KINDS)}"
+            )
+        only = _strings(spec.get("only", ()), f"{where} only")
+        excluded = _strings(spec.get("exclude", ()), f"{where} exclude")
+        imports = _strings(spec.get("imports", ()), f"{where} imports")
+        allowed = _strings(spec.get("allow", ()), f"{where} allow")
+        calls = _strings(spec.get("calls", ()), f"{where} calls")
+        homes = _strings(spec.get("homes", ()), f"{where} homes")
+        type_checking = spec.get("type_checking", "include")
+        if type_checking not in TYPE_CHECKING_POLICIES:
+            raise ConfigError(
+                f"{where} type_checking {type_checking!r} is not one of "
+                f"{', '.join(TYPE_CHECKING_POLICIES)}"
+            )
+        if kind == "imports":
+            if not imports:
+                raise ConfigError(f"{where} imports policy needs a non-empty imports list")
+            if calls or homes:
+                raise ConfigError(
+                    f"{where} is an imports policy; calls and homes belong only "
+                    "to kind = 'calls'"
+                )
+        else:
+            if not calls or not homes:
+                raise ConfigError(
+                    f"{where} calls policy needs non-empty calls and homes lists"
+                )
+            if imports or allowed:
+                raise ConfigError(
+                    f"{where} is a calls policy; imports and allow belong only "
+                    "to kind = 'imports'"
+                )
+            if "type_checking" in spec:
+                raise ConfigError(
+                    f"{where} type_checking applies to imports, not calls"
+                )
+        ratchet = None
+        raw_ratchet = spec.get("ratchet")
+        if raw_ratchet is not None:
+            if not isinstance(raw_ratchet, dict):
+                raise ConfigError(f"{where} [boundary.ratchet] is a table, not {raw_ratchet!r}")
+            _reject_unknown(raw_ratchet, RATCHET_KEYS, f"{where} [boundary.ratchet]")
+            raw_until = raw_ratchet.get("until")
+            try:
+                until = (
+                    raw_until if isinstance(raw_until, date)
+                    else date.fromisoformat(str(raw_until))
+                )
+            except ValueError as exc:
+                raise ConfigError(
+                    f"{where} [boundary.ratchet] needs until = 'YYYY-MM-DD'"
+                ) from exc
+            ratchet = Ratchet(until=until)
+        built.append(Boundary(
+            name=name, kind=kind, only=only, exclude=excluded, imports=imports,
+            allow=allowed, calls=calls, homes=homes, type_checking=type_checking,
+            ratchet=ratchet,
+        ))
     return tuple(built)
 
 

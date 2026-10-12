@@ -39,7 +39,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -48,6 +48,9 @@ from . import coverage as coverage_of
 from . import stamps
 from .adapters.bibliography import EXTERNAL, Bibliography, undeclared_key
 from .baseline import Baseline, BaselineError, Split, record
+from .boundary import BoundaryError, load_artifact, save_artifact
+from .boundary import inventory as boundary_inventory
+from .boundary import survey as boundary_survey
 from .bypass import (
     SKIP_DIRS,
     Bypass,
@@ -1658,6 +1661,7 @@ def cmd_claims(args: argparse.Namespace) -> int:
             "parity": bool(settings.parities),
             "shape": bool(settings.shapes),
             "probe": bool(settings.probes),
+            "boundary": bool(settings.boundaries),
             "context": settings.context is not None,
         }
         for spelling in uncovered(settings.gates, declared):
@@ -2405,6 +2409,142 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 1 if split.new or narrowed else 0
 
 
+def _boundary_rule(settings: Settings, name: str | None):
+    """The named writer's one owner, refusing ambiguity before it can write."""
+    if not name:
+        raise BoundaryError(
+            "--record and --prune need --rule NAME; a rule-owned ratchet never chooses an owner"
+        )
+    matches = [rule for rule in settings.boundaries if rule.name == name]
+    if not matches:
+        raise BoundaryError(
+            f"no [[boundary]] is named {name!r} (known: "
+            f"{', '.join(rule.name for rule in settings.boundaries) or 'none'})"
+        )
+    return matches[0]
+
+
+def _print_boundary_result(result, accepted: frozenset[str] = frozenset(),
+                           recorded: Sequence[str] = ()) -> int:
+    """Render one policy and return the failures it independently creates."""
+    rule = result.rule
+    failed = 0
+    print(f"# {rule.name} ({rule.kind})")
+    if result.blocked:
+        for why in result.blocked:
+            print(f"  BLOCKED: {why}", file=sys.stderr)
+        failed += len(result.blocked)
+    if result.vacuous:
+        print("  VACUOUS: its declared source scope contains no Python file", file=sys.stderr)
+        failed += 1
+    for item in result.unsupported:
+        print(
+            f"  UNJUDGED: {item.path}:{item.line}: {item.expression} -- {item.reason}",
+            file=sys.stderr,
+        )
+    failed += len(result.unsupported)
+    live = [item for item in result.findings if item.fingerprint not in accepted]
+    for item in live:
+        print(f"  {item}")
+    if accepted:
+        print(f"  ratchet: {len(result.findings) - len(live)} finding(s) accepted here")
+    # A file leaving the population is a data change: its records are stale and
+    # `--prune` drops them. Narrowing the *declaration* is refused above, by the
+    # rule fingerprint, which carries `only` and `exclude`.
+    for gone in result.lost(recorded):
+        print(f"  not examined now: {gone} (`--prune` drops its records)")
+    if not result.unjudged and not live:
+        print(f"  {len(result.files)} Python file(s) examined, policy holds.")
+    return failed + len(live)
+
+
+def cmd_boundary(args: argparse.Namespace) -> int:
+    """Gate declared AST import layers and resolved call homes.
+
+    This deliberately does not call :mod:`kinemata.baseline`: each optional
+    ratchet has one selected owner and a managed evidence path. A full read audits
+    every sidecar; a writer reads and changes its selected rule alone.
+    """
+    settings = _settings(args)
+    if not settings.boundaries:
+        print(
+            "error: no [[boundary]] declared: no import layer or call-home policy "
+            "has been stated. Declare one, or do not run this.",
+            file=sys.stderr,
+        )
+        return 2
+    if args.record and args.prune:
+        print("error: --record and --prune do different things; pick one", file=sys.stderr)
+        return 2
+    if args.rule and not (args.record or args.prune):
+        print(
+            "error: --rule is only for --record or --prune; "
+            "an ordinary boundary run audits every rule",
+            file=sys.stderr,
+        )
+        return 2
+
+    if args.record or args.prune:
+        rule = _boundary_rule(settings, args.rule)
+        if rule.ratchet is None:
+            raise BoundaryError(
+                f"boundary {rule.name!r} declares no [boundary.ratchet], so it has "
+                "no rule-owned artifact to write"
+            )
+        result = boundary_survey(settings.root, rule, settings.exclude)
+        _print_boundary_result(result)
+        if result.unjudged:
+            print(
+                "error: refusing to rewrite this boundary ratchet while its scan is "
+                "blocked, vacuous, or unjudged; no finding has earned an exemption",
+                file=sys.stderr,
+            )
+            return 2
+        path = rule.artifact_path(settings.root)
+        if args.record:
+            fresh = save_artifact(path, result, result.findings)
+            print(f"Recorded {len(fresh.findings)} accepted finding(s) in {path}.")
+            return 0
+        if not path.is_file():
+            raise BoundaryError(f"{path}: no boundary ratchet exists to prune")
+        artifact = load_artifact(path)
+        artifact.validate(rule)
+        kept = [item for item in result.findings if item.fingerprint in artifact.findings]
+        fresh = save_artifact(path, result, kept)
+        dropped = len(artifact.findings) - len(fresh.findings)
+        print(f"Dropped {dropped} record(s) no longer present from {path}.")
+        return 0
+
+    failures = 0
+    for error in boundary_inventory(settings.root, settings.boundaries):
+        print(f"ORPHANED: {error}", file=sys.stderr)
+        failures += 1
+    for rule in settings.boundaries:
+        result = boundary_survey(settings.root, rule, settings.exclude)
+        accepted: frozenset[str] = frozenset()
+        recorded: tuple[str, ...] = ()
+        if rule.ratchet is not None:
+            path = rule.artifact_path(settings.root)
+            if path.is_file():
+                try:
+                    artifact = load_artifact(path)
+                    artifact.validate(rule)
+                except BoundaryError as exc:
+                    print(f"# {rule.name} ({rule.kind})")
+                    print(f"  BLOCKED: {exc}", file=sys.stderr)
+                    failures += 1
+                    # A mismatched artifact cannot accept even a matching
+                    # fingerprint; show current findings as live evidence.
+                else:
+                    accepted = artifact.findings
+                    recorded = artifact.files
+        failures += _print_boundary_result(result, accepted, recorded)
+    if failures:
+        print(f"\nFAIL: {failures} boundary policy issue(s).", file=sys.stderr)
+        return 1
+    return 0
+
+
 def cmd_baseline(args: argparse.Namespace) -> int:
     """Show what is accepted; ``--record`` and ``--prune`` change it.
 
@@ -2754,6 +2894,16 @@ def build_parser() -> argparse.ArgumentParser:
     chk.add_argument("path", nargs="?", help="limit the scan to this path")
     chk.set_defaults(func=cmd_check)
 
+    bnd = sub.add_parser("boundary", parents=[common],
+                         help="gate: declared AST import layers and call homes")
+    bnd.add_argument("--rule", metavar="NAME",
+                     help="the one rule whose local ratchet --record/--prune changes")
+    bnd.add_argument("--record", action="store_true",
+                     help="record this rule's current findings in its own ratchet")
+    bnd.add_argument("--prune", action="store_true",
+                     help="drop this rule's ratchet findings no longer present")
+    bnd.set_defaults(func=cmd_boundary)
+
     ctx = sub.add_parser("context", parents=[common],
                          help="gate: what a session loads, against its ceiling")
     ctx.set_defaults(func=cmd_context)
@@ -2816,12 +2966,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     for attr in ("path", "strict", "record", "prune", "until", "by", "note",
-                 "token", "keys", "where"):
+                 "token", "keys", "where", "rule"):
         if not hasattr(args, attr):
             setattr(args, attr, None)
     try:
         return args.func(args)
-    except (ClaimsError, ConfigError, BaselineError, StampError,
+    except (ClaimsError, ConfigError, BaselineError, BoundaryError, StampError,
             ConfirmError, ProvenanceError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

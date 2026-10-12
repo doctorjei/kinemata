@@ -61,6 +61,9 @@ jobs:
       # dependency, in the job whose whole purpose is running the gates.
       - run: pip install -e ".[dev]"
       - run: kinemata check
+      # Static import layers and call homes are separate AST policies, with
+      # optional rule-owned ratchets rather than the shared project baseline.
+      - run: kinemata boundary
       # Documentation is a registry of claims about this tree.
       - run: kinemata claims
       # The closed-world catch. It began gating here on 2026-09-10, when the

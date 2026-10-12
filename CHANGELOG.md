@@ -11,6 +11,25 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 ## Unreleased
 
+**New**
+
+- **`[[boundary]]` declares AST-checked import layers and resolved call homes.** Import
+  policies see relative, aliased, function-local and `TYPE_CHECKING` imports, with an
+  explicit `type_checking` policy; call policies resolve direct imported names and
+  lexical aliases, while dynamic or data-flow calls are named as unjudged rather than
+  guessed clean. A call family is exactly the configured names or wildcards — no
+  inferred notion of which `shutil` calls mutate. An optional `[boundary.ratchet]`
+  creates one managed, expiry-bound sidecar per rule under
+  `:shown:`.kinemata/ratchets/`. The artifact locks its owner, kind, expiry, the file
+  list it covered, and a fingerprint of the policy itself, alongside accepted finding
+  fingerprints. Editing the declaration — `only` and `exclude` included, so a narrowed
+  source scope — is refused until re-recorded; adding or deleting a source file is not,
+  since those are data rather than declaration, and a file that goes away leaves stale
+  records for an explicit prune. Full `kinemata boundary` runs inventory all sidecars;
+  selected `--rule NAME --record` and `--prune` touch only their owner and never the
+  existing project-wide baseline. Blocked, vacuous, unjudged, orphaned, expired or
+  mismatched states fail rather than silently accepting findings.
+
 **Fixed**
 
 - **`claims` no longer turns a truncated prefix of a word into a negation.** A

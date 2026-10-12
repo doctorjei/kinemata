@@ -813,6 +813,7 @@ does not want this.
 | `kinemata parity` | membership gate, ratcheted — what a registry declares, against the set an oracle says the code produces. Both directions: produced and declared by nothing, declared and produced by nothing. With `field`, **also** each entry's declared value against what the oracle prints for it | a disagreement in any of the three directions that the baseline does not already accept, an oracle that could not answer, or a declared value no oracle could be expected to print. Refuses outright (exit 2) if no `[[parity]]` is declared |
 | `kinemata shape` | declaration gate, ratcheted — the one check whose subject is a declaration rather than the code, so it reads no tree and takes no path. A rule is a **guard** and a **claim**, and either may be a predicate the project names | a rule an entry does not satisfy that the baseline does not already accept, a rule that could not be evaluated, or **a rule that examined no entry at all**. Refuses outright (exit 2) if no `[[shape]]` is declared |
 | `kinemata probe` | behavior gate, ratcheted — a declared corpus of inputs against what the project's code **accepts and refuses**. The one check that calls the project's own code; it reads no tree and takes no path, because the corpus comes from the project | a case the code answers otherwise that the baseline does not already accept, a probe that could not be evaluated, or **a corpus carrying only one polarity**. Refuses outright (exit 2) if no `[[probe]]` is declared |
+| `kinemata boundary` | AST import-layer and resolved call-home gate; an optional ratchet belongs to the one named rule rather than to `baseline` | a policy violation not accepted by its valid sidecar, a blocked/vacuous/unjudged scan, or an orphaned, expired, malformed, wrong-owner, or **changed-rule** sidecar. Refuses outright (exit 2) if no `[[boundary]]` is declared |
 | `kinemata context` | session-load gate | measured bytes exceed `budget` |
 | `kinemata baseline` | shows accepted findings; `--record --until`, `--prune` | — |
 | `kinemata stamp` | mints a citation stamp, or decodes one; reads no config | the text given is not a stamp |
@@ -831,6 +832,39 @@ Each is accepted **on either side of the subcommand** — `kinemata -c x.toml ch
 
 **Defaults:** projection budget `16384` B. Frequency suppression at `20` sites per
 (entry, antipattern).
+
+### AST boundary rules
+
+`[[boundary]]` declares either `kind = "imports"` or `kind = "calls"`. Both parse
+Python rather than matching source text, traverse nested and function-local imports,
+resolve direct and relative aliases, and report the importing/calling source line.
+An imports rule selects modules with `imports`, permits its declared surface with
+`allow`, and makes `TYPE_CHECKING` handling explicit with `type_checking = "include"`
+(the default) or `"ignore"`. `only` and `exclude` scope the source files that import.
+
+A calls rule selects canonical resolved targets through `calls` (exact names or explicit
+wildcard families) and permits them only in `homes`. Static aliases are supported;
+instance receivers and dynamic/data-flow dispatch are not guessed. A potentially
+relevant unsupported call is emitted as **unjudged** and fails the rule, so it cannot
+read as a clean call-home policy. This deliberately does not decide which `shutil.*`
+members are mutations: the selector declares the family the project means.
+
+A rule may carry `[boundary.ratchet] until = "YYYY-MM-DD"`. Its accepted findings and
+the file list it covered are stored in `:shown:`.kinemata/ratchets/` under the rule's
+safe name, beside its owner, kind, expiry, and a fingerprint of the **policy itself**.
+An ordinary full run inventories every managed sidecar; a missing, orphaned, unreadable,
+expired, or mismatched one cannot accept findings. Editing the declaration — including
+`only` or `exclude`, so a narrowed source scope — changes that fingerprint and is refused
+until somebody re-records deliberately. **The source files themselves are data, not
+declaration**: adding a module does not block the gate, and a file leaving is reported
+as no longer examined, leaving its records stale for an explicit `--prune`. That split is
+why an opaque hash over the covered file list was wrong here, and why it would block a
+routine commit.
+
+`kinemata boundary --rule NAME --record` and `--prune` operate on the selected rule only
+and refuse to write after a blocked, vacuous, or unjudged scan. These artifacts are
+intentionally outside `kinemata baseline`: a selected rule's writer never reads,
+rewrites, or deletes global-baseline records or another boundary rule's artifact.
 
 **Constant values are matched in three tiers**, by length:
 

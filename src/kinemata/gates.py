@@ -119,6 +119,7 @@ SECTION_COMMANDS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("parity", "[[parity]]", ("kinemata parity",)),
     ("shape", "[[shape]]", ("kinemata shape",)),
     ("probe", "[[probe]]", ("kinemata probe",)),
+    ("boundary", "[[boundary]]", ("kinemata boundary",)),
     ("context", "[context]", ("kinemata context",)),
 )
 

@@ -370,6 +370,19 @@ note = "a declaration against its own shape; refuses here, and the step pins it"
 command = "kinemata probe"
 note = "what the code accepts and refuses; refuses here, and the step pins it"
 
+[[gate]]
+command = "kinemata boundary"
+note = "AST import layers and resolved call homes"
+
+# `boundary.py` must stay independent of the project-wide baseline: its optional
+# evidence artifacts are per-rule sidecars, so importing that global writer
+# would collapse the boundary the command exists to enforce.
+[[boundary]]
+name = "boundary-without-global-baseline"
+kind = "imports"
+only = ["src/kinemata/boundary.py"]
+imports = ["kinemata.baseline"]
+
 # Two findings from `kinemata unused`, reviewed 2026-09-09 and set aside. This
 # is the second kind of promise -- not a file the project will produce, but a
 # question somebody answered and dated so the answer expires rather than
