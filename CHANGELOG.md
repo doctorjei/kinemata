@@ -9,20 +9,19 @@ a project outside this repository runs against kinemata and upgrades between pub
 Commits are in `git log`; the reasoning behind a design decision stays in the document that
 carries the decision. A changelog repeating either becomes a second carrier and goes stale.
 
-## Unreleased
+## 0.8.0
 
 **New**
 
 - **A rule can say where it applies, with `under` on a registry entry.** The **other direction**
   from `home`: `home` exempts the place a thing is declared, and `under` narrows the lines a match
-  counts on — a markdown heading's exact title text, and the lines between that heading and the
-  next of the **same or higher level**, which is markdown's own containment rule rather than one
-  invented here. Reported by kanibako 2026-10-13, whose task board carries a section whose rows
+  counts on — a markdown heading, and the lines between it and the next heading of the **same or
+  higher level**, which is markdown's own containment rule rather than one invented here. Nested by
+  level, so a `#` section owns the `##` ones beneath it. Reported by kanibako 2026-10-13, whose task board carries a section whose rows
   must carry a marker and one whose rows must not: written unscoped, each rule also fired on the
   other, and **the report was indistinguishable from a correct one** — five findings on a board
-  with two genuine misfiles and five on a board with none. Nested by level, so a `#` section owns
-  the `##` ones beneath it. Markdown only, and a registry reading any other suffix is **refused at
-  load** rather than matching nothing; a heading no file carries is **reported on every run**,
+  with two genuine misfiles and five on a board with none. Markdown only, and a registry reading
+  any other suffix is **refused at load** rather than matching nothing; a heading no file carries is **reported on every run**,
   carrying the string that did not match, and does not fail — a section is something the document
   has, so a tree that legitimately lacks one must stay green.
   `docs/introduction.md` [0TQG9FY-Pa0004] § Known limits carries the two gaps left open.
