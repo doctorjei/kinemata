@@ -1754,7 +1754,7 @@ def test_a_declaration_scoped_by_only_settles_the_name_in_that_file_alone(
     """
     assert _scoped_release_paths(tmp_path) == 1
     out = capsys.readouterr().out
-    assert "docs/OTHER.md:1: path does not resolve: dist/" in out
+    assert "docs/OTHER.md:1: path claim does not hold: dist/" in out
     assert "docs/RELEASING.md" not in out
 
 
@@ -1788,3 +1788,112 @@ class _FakePythonConstantsRegistry:
 
     def declared(self, name: str) -> bool:
         return name in self._names
+
+
+# -- `path:N`, a claim about a line rather than about a file -------------------
+
+
+def test_a_line_citation_inside_the_file_is_a_claim_and_holds(tmp_path):
+    """The shape was invisible, so a *correct* citation was never checked either.
+
+    `PurePosixPath("errors.py:5").suffix` is `".py:5"`, which is in no suffix
+    set, so the extractor dropped the token before anything examined it. That
+    is the under-reporting direction an adopting project found on 2026-10-13:
+    their fixture cites a file that does not exist and two citations whose
+    lines are past the end, and all three went unchecked.
+    """
+    write(tmp_path, "errors.py", "\n".join(f"x = {n}" for n in range(1, 11)) + "\n")
+    write(tmp_path, "doc.md", "The raise is at `errors.py:5`, or `errors.py:3-7`.\n")
+    result = verify(tmp_path)
+    assert result.broken == []
+    assert result.checked == 2
+
+
+def test_a_line_past_the_end_is_reported_as_a_line_not_as_a_missing_file(tmp_path):
+    """The message names what failed, or the reader goes looking in the wrong place.
+
+    The file is right there. `path does not resolve: errors.py:99999` sends a
+    reader hunting for a missing file they can already see, so the phrasing
+    says the *claim* did not hold and the reason follows it.
+    """
+    write(tmp_path, "errors.py", "\n".join(f"x = {n}" for n in range(1, 11)) + "\n")
+    write(tmp_path, "doc.md", "See `errors.py:99999`.\n")
+    (claim,) = verify(tmp_path).broken
+    assert claim.text == (
+        "errors.py:99999 -- line 99999 is past the end of the 10 lines it has"
+    )
+    assert str(claim) == (
+        "doc.md:1: path claim does not hold: " + claim.text
+    )
+
+
+def test_a_range_is_checked_at_its_end_not_its_start(tmp_path):
+    write(tmp_path, "errors.py", "\n".join(f"x = {n}" for n in range(1, 11)) + "\n")
+    write(tmp_path, "doc.md", "See `errors.py:8-99999`.\n")
+    (claim,) = verify(tmp_path).broken
+    assert claim.text == (
+        "errors.py:8-99999 -- lines 8-99999 are past the end of the 10 lines it has"
+    )
+
+
+def test_a_line_citation_of_a_file_that_is_absent_is_reported_once(tmp_path):
+    """The line half is asked only of a claim that already resolved.
+
+    Otherwise one wrong citation is two findings, one of which describes a file
+    that was never there.
+    """
+    write(tmp_path, "doc.md", "See `nothere.py:3`.\n")
+    assert broken(verify(tmp_path)) == {("path", "nothere.py:3")}
+
+
+def test_a_baseline_claim_of_two_files_is_falsified_by_neither(tmp_path):
+    """kanibako's open question, answered by the rule rather than by a spelling.
+
+    A bare basename routinely matches several files and the document did not
+    say which, so the claim is falsified only when *no* file it could name has
+    the lines cited. `errors.py:35` survives because one candidate has it.
+    """
+    write(tmp_path, "a/errors.py", "\n".join(f"x = {n}" for n in range(1, 11)) + "\n")
+    write(tmp_path, "b/errors.py", "\n".join(f"x = {n}" for n in range(1, 41)) + "\n")
+    write(tmp_path, "doc.md", "See `errors.py:35`.\n")
+    assert verify(tmp_path).broken == []
+
+
+def test_a_baseline_claim_of_two_short_files_names_both(tmp_path):
+    write(tmp_path, "a/errors.py", "\n".join(f"x = {n}" for n in range(1, 11)) + "\n")
+    write(tmp_path, "b/errors.py", "\n".join(f"x = {n}" for n in range(1, 21)) + "\n")
+    write(tmp_path, "doc.md", "See `errors.py:99999`.\n")
+    (claim,) = verify(tmp_path).broken
+    assert claim.text == (
+        "errors.py:99999 -- line 99999 is past the end of every file this "
+        "names (10, 20 lines)"
+    )
+
+
+def test_a_file_nobody_can_count_is_never_a_finding(tmp_path):
+    """Silence is the honest answer when the evidence is not there.
+
+    A binary file has no line 99999 and also has no line 5, and the tool cannot
+    tell those apart from not having looked. Reporting would be guessing, and
+    guessing against correct prose is how a checker loses its reader.
+    """
+    (tmp_path / "blob.dat").write_bytes(b"\x81\x8d\xff\xfe" * 40)
+    write(tmp_path, "doc.md", "See `blob.dat:99999`.\n")
+    assert verify(tmp_path, file_suffixes=[".dat"]).broken == []
+
+
+def test_line_zero_and_a_backwards_range_are_named_as_themselves(tmp_path):
+    """Neither is a line that moved; both are a mistake worth distinguishing."""
+    write(tmp_path, "errors.py", "\n".join(f"x = {n}" for n in range(1, 11)) + "\n")
+    write(tmp_path, "doc.md", "See `errors.py:0` and `errors.py:7-3`.\n")
+    found = {claim.text for claim in verify(tmp_path).broken}
+    assert found == {
+        "errors.py:0 -- line 0 cannot exist -- a file's lines are numbered from 1",
+        "errors.py:7-3 -- lines 7-3 runs backwards: it ends before it starts",
+    }
+
+
+def test_an_ssh_remote_is_not_a_line_citation(tmp_path):
+    """`git@host:22` would be a line claim if the remote were not checked first."""
+    write(tmp_path, "doc.md", "Clone `git@github.com:owner/repo.git` to read it.\n")
+    assert verify(tmp_path).broken == []

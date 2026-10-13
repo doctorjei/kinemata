@@ -1232,7 +1232,7 @@ They have no path and line to fingerprint, and accepting one would build the thi
 
 | Claim kind | Settled against |
 |---|---|
-| `path` | the filesystem |
+| `path` | the filesystem. **`` `file.py:12` `` and `` `file.py:3-7` `` are claims about lines**, and are checked as such — a citation of line 99999 in a ten-line file fails, and a citation of a line that is there passes |
 | `link` | link targets |
 | `commit` | `git cat-file` (skipped, and reported as skipped, outside a repository) |
 | `url` | the web, **opt-in** via `external = true`. `404`/`410` fails; anything ambiguous — a timeout, a 5xx, a `403` from a bot-hostile host — is reported by name and never fails |
@@ -2413,6 +2413,20 @@ down, and the two shapes at the end are the findings that matter most.
   strings they hold, so `declared("boxes")` returns `False` against a
   :shown:`bootstrap.py`-shaped module carrying `BOXES_PATH = "boxes"`, and reaching for it is
   the wrong shape rather than a missing feature.
+- **accepted** · **A `path:N` citation is checked against every file its path could name, and
+  passes if any one of them would.** A bare basename routinely matches several files and the
+  document did not say which, so :shown:`errors.py:99999` is reported only when *no* candidate is
+  that long — one wrong citation in a document citing a generic filename goes unchecked rather
+  than falsely reported. The alternative is a tie-break this does not have and `resolves` already
+  declines to have, for the same reason: guessing which of three `errors.py` a reader had in mind
+  reports correct prose as wrong. **What it would take:** an anchor that says which file — a
+  repository-relative path the tree holds exactly once, or a declared `resolve_in` root — at which
+  point the check is exact. Reported by kanibako 2026-10-13, whose fixture also turned up the
+  reason this is worth a limit rather than a note: **the defect this check closes failed in the
+  opposite direction, silently, for the shape's whole life.** `PurePosixPath("nothere.py:3").suffix`
+  is the string `".py:3"`, in no suffix set, so every line citation fell out of the extractor
+  before anything examined it — a nonexistent file passed. A line citation that is now checked
+  and comes back clean is a *checked* claim; this entry is about the ones that stay ambiguous.
 - **accepted** · **A name declared through `[claims] declared_in` was settled in every
   document.** Closed 2026-10-11: a registry answers only for the files its `[[registry]] only`
   reaches. The predicate used to see the claim's text and never the file citing it, so a name

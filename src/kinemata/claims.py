@@ -58,7 +58,7 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from pathlib import Path, PurePosixPath
 
@@ -209,6 +209,26 @@ SCHEME = "://"
 
 #: Marks an SSH remote: ``git@github.com:owner/repo.git`` is an address.
 REMOTE_MARKER = "@"
+
+#: A trailing ``:N`` or ``:N-M`` on a path: a claim about a line or a span of one
+#: rather than about the file. :func:`_line_span` reads it.
+#:
+#: **This shape was invisible until now, and the direction it failed in is the
+#: expensive one.** ``PurePosixPath("errors.py:3").suffix`` is ``".py:3"``, which
+#: is in no suffix set, so every backticked line citation fell out of
+#: :func:`_path_claims` before anything examined it -- a nonexistent file passed,
+#: and a citation of line 99999 in a ten-line file reported as agreement. An
+#: adopting project found it on 2026-10-13; their fixture documents citing a file
+#: that does not exist alongside two citations whose lines are past the end, and
+#: ``claims`` checked none of them. Resolution was never the broken half --
+#: :func:`_resolve_path` has always split on ``:`` -- so the extractor and the
+#: resolver disagreed about what a path claim is, and only the extractor was
+#: consulted.
+#:
+#: The same class as the :shown:`src/`-layout module-name defect a week earlier: a
+#: token shape that vanishes before anything looks at it, which no gate can see
+#: because a claim that was never made leaves nothing to fail on.
+LINE_CLAIM = re.compile(r"^(?P<path>.+?):(?P<first>\d+)(?:-(?P<last>\d+))?$")
 
 #: Extensions that make a bare filename a claim about a file. Without an
 #: allowlist, ``config.data`` and ``system.agent`` read as filenames.
@@ -364,7 +384,13 @@ class Claim:
     source: str = ""
 
     def __str__(self) -> str:
-        return f"{self.path}:{self.line}: {self.kind} does not resolve: {self.text}"
+        # **"does not resolve" was a cause this could not always know, and a
+        # line citation made it visible.** ``path:N`` names a file that is
+        # present and a line that is not, so `path does not resolve:
+        # errors.py:99999` sent the reader looking for a missing file they can
+        # see, while the real failure followed the colon. The claim itself is
+        # what failed, whichever half it was: say that.
+        return f"{self.path}:{self.line}: {self.kind} claim does not hold: {self.text}"
 
     @property
     def entry_id(self) -> str:
@@ -422,6 +448,25 @@ class Withdrawal:
     cause: Negation
 
 
+def _anchor(claim: str) -> str:
+    """The path a claim spells, with what the prose leaves on it removed.
+
+    Split out of :meth:`Tree.resolves` so the reader of a line citation and the
+    check of its existence cannot drift -- ``_within_path`` asks the same
+    question of the file half, and two spellings of "which file" would each be
+    wrong on its own.
+    """
+    target = claim.strip().rstrip("/.,;:")
+    # `./name` anchors to the document's own directory. Stripping it lets
+    # the fallbacks answer: httpie's packaging README cites
+    # `extras/packaging/linux/get_release_artifacts.sh` [0TMVXHC-Px0002]
+    # with a leading dot-slash, the file sits beside the README, and this
+    # reported it dead because the prefix survived into every lookup.
+    if target.startswith("./"):
+        target = target[2:]
+    return target
+
+
 @dataclass
 class Tree:
     """What the claims are checked against."""
@@ -464,37 +509,53 @@ class Tree:
         notion of which ignored trees shadow tracked ones -- and guessing would
         trade a quiet miss for a loud false report on prose that is correct.
         """
-        target = claim.strip().rstrip("/.,;:")
-        # `./name` anchors to the document's own directory. Stripping it lets
-        # the fallbacks below answer: httpie's packaging README cites
-        # `extras/packaging/linux/get_release_artifacts.sh` [0TMVXHC-Px0002]
-        # with a leading dot-slash, the file sits beside the README, and this
-        # reported it dead because the prefix survived into every lookup.
-        if target.startswith("./"):
-            target = target[2:]
+        target = _anchor(claim)
         if not target:
             return True
-        # On disk beats the index. Exclusions say which documents to *read*;
-        # they must not decide what exists. :shown:`corpus/` is gitignored here
-        # and 39 MB of it is sitting right there, so a note describing it is
-        # telling the truth -- and reporting that is how a checker loses its
-        # reader. The role marks it: naming it as a claim would make this
-        # comment resolve in this tree and fail in every clone, which is what it
-        # did until 2026-09-15.
-        if any((base / target).exists() for base in self.roots or (self.root,)):
-            return True
+        return bool(self.candidates(target))
+
+    def candidates(self, claim: str) -> set[Path]:
+        """Every path in the tree this claim could name, however it anchored it.
+
+        The same five fallbacks :meth:`resolves` has always walked, in the same
+        order and answering the same question, **returning what they found rather
+        than whether they found it** -- a line citation has to be measured
+        against a file, and "the path resolves" is not a file.
+
+        The disk pass short-circuits the way ``any`` did, so the ordinary case --
+        a path spelled exactly -- costs one ``exists`` per root and no walk of
+        the index at all.
+        """
+        target = _anchor(claim)
+        if not target:
+            return set()
+        found: set[Path] = set()
+        # On disk beats the index. Exclusions say which documents to *read* they
+        # must not decide what exists. :shown:`corpus/` is gitignored here and
+        # 39 MB of it is sitting right there, so a note describing it is telling
+        # the truth -- and reporting that is how a checker loses its reader. The
+        # role marks it: naming it as a claim would make this comment resolve in
+        # this tree and fail in every clone, which is what it did until
+        # 2026-09-15.
+        for base in self.roots or (self.root,):
+            hit = base / target
+            if hit.exists():
+                found.add(hit)
+        if found:
+            return found
         everything = self.files | self.directories
-        if target in everything:
-            return True
         suffix = "/" + target
-        if any(known.endswith(suffix) for known in everything):
-            return True
         prefix = target + "/"
-        if any(known.startswith(prefix) for known in everything):
-            return True
-        if "/" not in target:
-            return any(PurePosixPath(known).name == target for known in self.files)
-        return False
+        basename = "/" not in target
+        for known in everything:
+            if (
+                known == target
+                or known.endswith(suffix)
+                or known.startswith(prefix)
+                or (basename and PurePosixPath(known).name == target)
+            ):
+                found.add(self.root / known)
+        return found
 
 
 @dataclass
@@ -872,6 +933,23 @@ def _negated(line: str, start: int, end: int, previous: str = "") -> Negation | 
     return None
 
 
+def _line_span(token: str) -> tuple[str, int, int] | None:
+    """The file a ``path:N`` or ``path:N-M`` claim names, and the lines it cites.
+
+    ``None`` for a plain path, so the caller can branch once. The **whole token
+    is what gets yielded as the claim**, span included: :func:`_resolve_path`
+    splits on the same ``:`` and the baseline record's fingerprint is the text
+    the document actually wrote, so a citation edited from ``:99999`` to
+    ``:99998`` is a new finding rather than a silent continuation.
+    """
+    match = LINE_CLAIM.match(token)
+    if match is None:
+        return None
+    first = int(match.group("first"))
+    last = match.group("last")
+    return match.group("path"), first, int(last) if last is not None else first
+
+
 def _path_claims(
     line: str,
     previous: str = "",
@@ -885,6 +963,12 @@ def _path_claims(
             continue
         if WINDOWS_SEPARATOR in token:
             continue
+        # A line citation is shaped like a path with a suffix nobody declares,
+        # so the shape tests below read the **file** half and the whole token is
+        # what gets yielded. Testing `errors.py:5` as written is what dropped
+        # every line citation there was; see :data:`LINE_CLAIM`.
+        span = _line_span(token)
+        target = span[0] if span is not None else token
         # The last clause: a suffix the *project* declared is one it has already
         # said names a file, so the collision this rule guards against cannot
         # arise. Without it a container definition carrying a dotted project
@@ -892,14 +976,16 @@ def _path_claims(
         # bought nothing -- which is how an adopter's two content files stayed
         # invisible after the knob for them was added.
         if (
-            ATTRIBUTE_REFERENCE.match(token)
-            and not token.endswith(ATTRIBUTE_EXEMPT_SUFFIXES)
-            and PurePosixPath(token).suffix in FILE_SUFFIXES
+            ATTRIBUTE_REFERENCE.match(target)
+            and not target.endswith(ATTRIBUTE_EXEMPT_SUFFIXES)
+            and PurePosixPath(target).suffix in FILE_SUFFIXES
         ):
             continue
-        if any(character in token for character in PATTERN_CHARACTERS):
+        if any(character in target for character in PATTERN_CHARACTERS):
             continue
-        # A remote, not a path: `git@host:owner/repo.git`.
+        # A remote, not a path: `git@host:owner/repo.git`. Ahead of the span
+        # test for the ordinary case -- `owner/repo.git` has no digits after its
+        # colon, so it never was one -- and because a remote's `:22` is a port.
         if REMOTE_MARKER in token:
             continue
         # A token with no extension and no trailing slash is only a path claim
@@ -907,9 +993,9 @@ def _path_claims(
         # and `owner/project` is a sentence; reporting them teaches readers to
         # skim the report. The cost is a dead *directory* reference going
         # unnoticed, which is the direction worth losing in.
-        if not token.endswith("/") and PurePosixPath(token).suffix not in file_suffixes:
+        if not target.endswith("/") and PurePosixPath(target).suffix not in file_suffixes:
             continue
-        if PLACEHOLDER.search(token) or EXAMPLE_STEM.search(token):
+        if PLACEHOLDER.search(target) or EXAMPLE_STEM.search(target):
             continue
         negation = _negated(line, match.start(), match.end(), previous)
         if negation:
@@ -1007,6 +1093,76 @@ def _url_claims(
 
 def _resolve_path(text: str, tree: Tree, document: Path) -> bool:
     return tree.resolves(text.split(":", 1)[0])
+
+
+def _line_count(path: Path) -> int | None:
+    """How many lines a reader would find in this file, or ``None`` if nobody can say.
+
+    Raw, not reduced the way a *document* is read: a citation names a line a
+    person will open the file and look at, so "docstrings and comments removed"
+    would be a different question from the one being asked.
+
+    ``None`` covers the two ways there is no answer -- a file that is not text,
+    and one that cannot be read -- and both mean the same thing to the caller,
+    which is that nothing here may be called wrong on this evidence.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    return len(text.splitlines())
+
+
+def _within_path(text: str, tree: Tree) -> str:
+    """What is wrong with a ``path:N`` citation of a file that is there, else ``""``.
+
+    Asked only of a claim that already resolved, so a nonexistent file is
+    reported once, as a missing path, rather than twice and once of them as a
+    lie about a line.
+
+    **A file that cannot be counted is never a finding.** The rule is one
+    falsification, not a second verdict: the claim is wrong only when *no* file
+    the path could name has the lines cited. That matters because a bare
+    basename routinely matches several -- :shown:`errors.py` in three packages -- and
+    the document did not say which. Reporting there would be guessing, and
+    guessing against prose that is correct is how a checker loses its reader
+    (:meth:`Tree.resolves` makes the same call about which file it means). So
+    one candidate is the exact check, several is "the document survives if any
+    of them would", and none readable is silence.
+
+    A registry or a promise does not get to answer this one. Both stand for
+    *the file exists* -- ``path_declared`` is asked only after resolution has
+    already failed -- and neither says anything about what is on line 900.
+    """
+    span = _line_span(text)
+    if span is None:
+        return ""
+    target, first, last = span
+    cited = f"line {first}" if first == last else f"lines {first}-{last}"
+    if first < 1:
+        # Lines are numbered from one. `:0` is not a line that moved; it is a
+        # line that cannot exist, which is a different mistake worth naming.
+        return f"{cited} cannot exist -- a file's lines are numbered from 1"
+    if last < first:
+        return f"{cited} runs backwards: it ends before it starts"
+    counts = {
+        count
+        for count in (_line_count(c) for c in tree.candidates(target))
+        if count is not None
+    }
+    if not counts:
+        return ""
+    if any(first <= count and last <= count for count in counts):
+        return ""
+    verb = "is" if first == last else "are"
+    if len(counts) == 1:
+        only = next(iter(counts))
+        noun = "line" if only == 1 else "lines"
+        have = f"the {only} {noun} it has"
+    else:
+        listed = ", ".join(str(count) for count in sorted(counts))
+        have = f"every file this names ({listed} lines)"
+    return f"{cited} {verb} past the end of {have}"
 
 
 def _resolve_link(text: str, tree: Tree, document: Path) -> bool:
@@ -1311,11 +1467,27 @@ class ClaimKind:
     #: question nobody answered. One extra function per kind, rather than a
     #: second resolver that would eventually disagree with the first.
     settled: Callable[[str, Tree, Path], bool] | None = None
+    #: A question asked **after** the claim resolves: does the thing it named
+    #: hold up on the detail it *also* named? Returns why not, or ``""``.
+    #:
+    #: Separate from :attr:`resolve` because a claim can be half wrong in a way
+    #: that is not "this does not exist". ``path:N`` names a file that is
+    #: present and a line that is not, and reporting that as a dead path would
+    #: tell the reader to go looking for a missing file they can see.
+    #:
+    #: The reason rides in the claim's text rather than in a new field, which is
+    #: what :meth:`Claim.finding` fingerprints -- the same move
+    #: :func:`_verify_counts` makes with "actually 597". **The cost is the same
+    #: one that move already accepted**: a record keys on the disagreement, so
+    #: when the file grows past the line the record goes stale and the claim
+    #: comes back as new. An exemption that outlived what somebody looked at is
+    #: the thing this project exists to prevent.
+    within: Callable[[str, Tree], str] | None = None
 
 
 #: Adding a kind is a row here. The verification loop never learns their names.
 CLAIM_KINDS: tuple[ClaimKind, ...] = (
-    ClaimKind("path", _path_claims, _resolve_path),
+    ClaimKind("path", _path_claims, _resolve_path, within=_within_path),
     ClaimKind("link", _link_claims, _resolve_link),
     ClaimKind(
         "commit", _commit_claims, _resolve_commit,
@@ -1794,6 +1966,17 @@ def verify(
             if kind.settled is not None and \
                     not kind.settled(text, tree, root / claim.path):
                 found.unsettled.append(claim)
+                continue
+            if kind.within is not None:
+                problem = kind.within(text, tree)
+                if problem:
+                    # Broken, and the reason is in the text the record
+                    # fingerprints, so the baseline holds the disagreement
+                    # rather than the bare target. See `ClaimKind.within`.
+                    found.broken.append(
+                        replace(claim, text=f"{text} -- {problem}")
+                    )
+                    continue
             continue
         # Asked only once the tree has failed to settle it. A citation that
         # resolves here is about here, whatever a key beside it says -- so a

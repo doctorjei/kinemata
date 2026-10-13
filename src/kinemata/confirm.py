@@ -676,7 +676,7 @@ class Listing:
 #: tested for one at a time, so a later bucket of claims-this-run-did-not-settle
 #: costs a row here instead of a branch nobody remembers to add.
 BLOCKING: tuple[tuple[str, str, str], ...] = (
-    ("broken", GONE, "does not resolve"),
+    ("broken", GONE, "does not hold"),
     ("unsettled", UNSETTLED, "could not be settled by this run"),
     ("deferred", UNSETTLED, "is held open by a promise"),
     ("elsewhere", UNSETTLED, "is declared to be in another repository"),

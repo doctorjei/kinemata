@@ -203,7 +203,7 @@ def test_a_new_dead_reference_still_fails(project, capsys):
     out, err = capsys.readouterr()
     assert "src/writer.py" in out
     assert "src/loader.py" not in out  # accepted, so not reported again
-    assert "1 of" in err and "new claim(s) do not resolve" in err
+    assert "1 of" in err and "new claim(s) do not hold" in err
 
 
 def test_one_file_holds_both_kinds(tmp_path, capsys):

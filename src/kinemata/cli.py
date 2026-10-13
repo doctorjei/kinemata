@@ -1780,7 +1780,7 @@ def cmd_claims(args: argparse.Namespace) -> int:
         if gated.broken:
             label = "new claim(s)" if baseline.exists else "claim(s)"
             parts.append(
-                f"{len(gated.broken)} of {found.checked} {label} do not resolve"
+                f"{len(gated.broken)} of {found.checked} {label} do not hold"
             )
         if found.kept:
             parts.append(

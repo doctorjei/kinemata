@@ -11,7 +11,22 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 ## Unreleased
 
-Nothing yet.
+**Fixed**
+
+- **A line citation is checked instead of dropped.** `` `path:N` `` and `` `path:N-M` `` are
+  claims about a line or a span of one. `PurePosixPath("nothere.py:3").suffix` is `".py:3"`, which
+  is in no suffix set, so every backticked line citation fell out of the extractor before anything
+  examined it: a citation of a file that does not exist passed, and so did a citation of line
+  99999 in a ten-line file. Reported by kanibako 2026-10-13. A citation's file must exist and its
+  lines must be within it; the finding names the line rather than calling the path dead, because
+  a reader sent looking for a missing file they can see is reading the wrong sentence. A bare
+  basename matching several files is falsified only when none of them has the lines cited —
+  `docs/introduction.md` [0TQG9FY-Pa0004] § Known limits carries the disposition.
+
+**Changed**
+
+- **A broken claim reports that it "does not hold" rather than "does not resolve".** The old
+  wording asserted a cause, which a line citation falsified on the same run that introduced it.
 
 ## 0.7.0
 
