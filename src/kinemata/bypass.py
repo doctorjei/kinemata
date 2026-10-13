@@ -247,7 +247,6 @@ def _scoped(
 
 def _inert_regions(
     registry: BaseRegistry,
-    scoped: Mapping[str, tuple[str, ...]],
     seen: set[tuple[str, str]],
 ) -> list[str]:
     """Entries whose ``under`` named a heading no document in the walk carries.
@@ -634,7 +633,7 @@ def scan(
                         )
                     )
     if inert is not None and scoped:
-        inert.extend(_inert_regions(registry, scoped, seen))
+        inert.extend(_inert_regions(registry, seen))
     return found
 
 
