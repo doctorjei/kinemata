@@ -31,6 +31,7 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 
+from . import regions
 from .contract import BaseRegistry, Entry, member, undeclared
 from .exclusion import excluded
 from .prose import (
@@ -210,6 +211,74 @@ def _blanked(text: str, spans: tuple[tuple[int, int], ...]) -> str:
 
 def _inside(line: int, spans: tuple[tuple[int, int], ...]) -> bool:
     return any(start <= line <= end for start, end in spans)
+
+
+def _headings_of(
+    suffix: str, source: str
+) -> tuple[tuple[int, int, str], ...]:
+    """This file's headings, or none when nothing here can read its format.
+
+    Empty rather than an error, because :func:`scan` is called without a config
+    in tests and by anything holding a registry directly. The **load-time
+    refusal** in :func:`kinemata.config._check_regions` is where an ``under`` on
+    an unreadable format is caught; an empty reading here would silently narrow
+    a rule to nothing, which is exactly what that refusal exists to prevent.
+    """
+    read = regions.reader(suffix)
+    return () if read is None else read(source)
+
+
+def _scoped(
+    entry: Entry,
+    headings: Sequence[tuple[int, int, str]],
+    last: int,
+) -> tuple[tuple[int, int], ...] | None:
+    """The lines ``entry``'s rule reaches, or ``None`` for all of them.
+
+    ``None`` rather than "every line" for an entry with no ``under``, so the
+    caller's question stays *is this line in scope* and a registry written before
+    this existed takes the same branch it always did.
+    """
+    under = member(entry, "under")
+    if not under:
+        return None
+    return regions.spans(headings, frozenset(under), last)
+
+
+def _inert_regions(
+    registry: BaseRegistry,
+    scoped: Mapping[str, tuple[str, ...]],
+    seen: set[tuple[str, str]],
+) -> list[str]:
+    """Entries whose ``under`` named a heading no document in the walk carries.
+
+    **Reported, never a failure, and the reason is not timidity.** A heading is
+    something the *document* has, so a tree that legitimately does not have that
+    section -- a fresh clone, a project that has not written the board yet -- must
+    not go red for it. That is the failure ``kinemata init --ci`` is written
+    against: a red first CI run for a project that has done nothing wrong.
+
+    What it costs is that a misspelt heading is a warning rather than a stop,
+    so the line names **the headings that are there**. An inert ``under`` that
+    cannot be diagnosed from the message is a check that quietly stopped
+    checking, which is the thing this package exists to refuse.
+    """
+    lines: list[str] = []
+    for entry in registry.entries():
+        under = tuple(member(entry, "under"))
+        if not under:
+            continue
+        missing = [title for title in under if (entry.id, title) not in seen]
+        if not missing:
+            continue
+        named = ", ".join(repr(title) for title in missing)
+        lines.append(
+            f"unscoped: registry {registry.name!r} entry {entry.id!r} names a "
+            f"section no file it reads carries ({named}), so its antipattern "
+            f"matches nothing. Sections are a markdown heading's exact title "
+            f"text."
+        )
+    return lines
 
 
 @dataclass(frozen=True)
@@ -401,6 +470,7 @@ def scan(
     code_only: bool | None = None,
     strings_only: bool | None = None,
     partners: Mapping[str, tuple[str, ...]] | None = None,
+    inert: list[str] | None = None,
 ) -> list[Bypass]:
     """Every bypass of ``registry``'s entries under ``root``.
 
@@ -420,6 +490,12 @@ def scan(
         antipattern is a *value*: without it, ``box_data`` also matches the
         identifier ``box_data``, and those lines usually use the constant
         correctly.
+    :param inert: a sink for entries whose ``under`` named no heading anywhere
+        it was looked for. Passed rather than returned because the headings are
+        read on this walk and nowhere else -- the same shape
+        :func:`kinemata.claims._path_claims` uses for a withdrawn claim, and for
+        the same reason: the walk happens once and the report must not be a
+        second one.
     """
     root = Path(root)
     project_exclusions = tuple(exclude)
@@ -451,6 +527,16 @@ def scan(
 
     found: list[Bypass] = []
     only = tuple(member(registry, "only"))
+    # Every entry that scopes itself, and every heading it named that was found
+    # somewhere. Both are collected across the whole walk rather than per file,
+    # because "this heading is not in that document" is not the finding --
+    # "this heading is in none of them" is, and only the walk can say so.
+    scoped = {
+        entry.id: tuple(member(entry, "under"))
+        for entry in registry.entries()
+        if member(entry, "under")
+    }
+    seen: set[tuple[str, str]] = set()
     for path in _walk(root, suffixes, Path(within) if within else None):
         rel = str(path.relative_to(root))
         try:
@@ -482,13 +568,27 @@ def scan(
             entry.id: _exempt(rel, entry, source, partners)
             for entry, _, _ in applicable
         }
+        # Regions are read once per file and shared by every entry that names
+        # one, because two entries scoped to two sections of the same document
+        # are the ordinary case -- kanibako's board has exactly that shape, and
+        # re-reading the headings per entry would be a second walk of a document
+        # the first walk already read.
+        headings = _headings_of(path.suffix, source)
+        present = {title for _, _, title in headings}
+        for entry, _, _ in applicable:
+            seen.update((entry.id, title) for title in member(entry, "under")
+                        if title in present)
+        last = len(source.splitlines())
         extractor = LITERAL_EXTRACTORS.get(path.suffix) if strings_only else None
         if extractor is not None:
             literals = extractor(source)
             for entry, pattern, rx in applicable:
                 if own[entry.id] == _WHOLE_FILE:
                     continue
+                scope = _scoped(entry, headings, last)
                 for number, content, line_text in literals:
+                    if scope is not None and not _inside(number, scope):
+                        continue
                     if _inside(number, own[entry.id]):
                         continue
                     if rx.fullmatch(content):
@@ -519,7 +619,10 @@ def scan(
         for entry, pattern, rx in applicable:
             if own[entry.id] == _WHOLE_FILE:
                 continue
+            scope = _scoped(entry, headings, last)
             for number, text in enumerate(lines, start=1):
+                if scope is not None and not _inside(number, scope):
+                    continue
                 if rx.search(text) and not _inside(number, own[entry.id]):
                     found.append(
                         Bypass(
@@ -530,6 +633,8 @@ def scan(
                             text=text,
                         )
                     )
+    if inert is not None and scoped:
+        inert.extend(_inert_regions(registry, scoped, seen))
     return found
 
 

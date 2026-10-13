@@ -587,6 +587,20 @@ def _report_silent(settings: Settings) -> None:
         )
 
 
+def _report_unscoped(reports: Sequence[tuple[str, Report]]) -> None:
+    """Entries whose ``under`` named a section no document carries.
+
+    Not suppressed by ``--quiet``, on the same rule the silent, exemption, gate
+    and promise counts follow: **a count the reader did not ask for is the only
+    way they learn the check is smaller than it looks.** An ``under`` naming a
+    misspelt or renamed heading matches nothing at all, and the run still reads
+    green.
+    """
+    for _, report in reports:
+        for line in report.unscoped:
+            print(line)
+
+
 def _report_unreadable(settings: Settings) -> None:
     """How many lines a ``strings`` registry could not read, when any.
 
@@ -668,6 +682,7 @@ def cmd_review(args: argparse.Namespace) -> int:
         if not args.quiet:
             print("Nothing already declared looks re-derived here.")
         _report_silent(settings)
+        _report_unscoped(reports)
         _report_unreadable(settings)
         _report_exclusions(settings)
         _report_resources(settings, found)
@@ -680,6 +695,7 @@ def cmd_review(args: argparse.Namespace) -> int:
             f"Route through them rather than re-deriving."
         )
     _report_silent(settings)
+    _report_unscoped(reports)
     _report_unreadable(settings)
     _report_exclusions(settings)
     _report_resources(settings, found)
@@ -2342,6 +2358,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     ]
     _print_reports(settings, filtered, verbose=args.verbose)
     _report_silent(settings)
+    _report_unscoped(reports)
     _report_unreadable(settings)
     _report_exclusions(settings)
     _report_resources(settings, found)

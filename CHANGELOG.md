@@ -11,6 +11,22 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 ## Unreleased
 
+**New**
+
+- **A rule can say where it applies, with `under` on a registry entry.** The **other direction**
+  from `home`: `home` exempts the place a thing is declared, and `under` narrows the lines a match
+  counts on — a markdown heading's exact title text, and the lines between that heading and the
+  next of the **same or higher level**, which is markdown's own containment rule rather than one
+  invented here. Reported by kanibako 2026-10-13, whose task board carries a section whose rows
+  must carry a marker and one whose rows must not: written unscoped, each rule also fired on the
+  other, and **the report was indistinguishable from a correct one** — five findings on a board
+  with two genuine misfiles and five on a board with none. Nested by level, so a `#` section owns
+  the `##` ones beneath it. Markdown only, and a registry reading any other suffix is **refused at
+  load** rather than matching nothing; a heading no file carries is **reported on every run**,
+  carrying the string that did not match, and does not fail — a section is something the document
+  has, so a tree that legitimately lacks one must stay green.
+  `docs/introduction.md` [0TQG9FY-Pa0004] § Known limits carries the two gaps left open.
+
 **Fixed**
 
 - **A line citation is checked instead of dropped.** `` `path:N` `` and `` `path:N-M` `` are

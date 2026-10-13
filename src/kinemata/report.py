@@ -60,6 +60,13 @@ class Report:
     suppressed: tuple[Suppressed, ...] = ()
     scanned: int = 0
     entries: int = 0
+    #: Entries whose ``under`` named a section no file the registry reads
+    #: carries, so their antipattern matched nothing. **Not findings and not a
+    #: failure** -- a section is something the document has, so a tree that
+    #: legitimately lacks one must stay green -- but a check that quietly
+    #: stopped checking, which is why it is carried on the report rather than
+    #: dropped at the scan's edge. See :func:`kinemata.bypass._inert_regions`.
+    unscoped: tuple[str, ...] = ()
 
     @property
     def strong(self) -> tuple[Bypass, ...]:
@@ -135,6 +142,7 @@ def review(
     :param max_sites: suppression threshold; ``None`` disables suppression.
     :param partners: ``[[distinct]]`` homes, passed through to :func:`scan`.
     """
+    unscoped: list[str] = []
     raw = scan(
         registry,
         root,
@@ -143,13 +151,15 @@ def review(
         within=within,
         strings_only=strings_only,
         partners=partners,
+        inert=unscoped,
     )
 
     entries = len(list(registry.entries()))
     scanned = len({hit.path for hit in raw})
 
     if max_sites is None:
-        return Report(bypasses=tuple(raw), scanned=scanned, entries=entries)
+        return Report(bypasses=tuple(raw), scanned=scanned, entries=entries,
+                      unscoped=tuple(unscoped))
 
     counts = Counter((hit.entry_id, hit.antipattern) for hit in raw)
     # An absence rule has no canonical home: every match is a finding, no matter
@@ -175,4 +185,5 @@ def review(
         suppressed=suppressed,
         scanned=scanned,
         entries=entries,
+        unscoped=tuple(unscoped),
     )

@@ -129,7 +129,9 @@ class Entry:
     Only ``id``, ``clauses`` and ``antipatterns`` are part of the contract.
     Everything else a project cares about rides along in ``extra`` and is never
     interpreted here -- kanibako's entries carry ``scope``/``type``/``default``;
-    a capability registry's would carry something else entirely.
+    a capability registry's would carry something else entirely. ``home`` and
+    ``under`` are the two exceptions, and they are read by the scans rather than
+    by this module: they say *where a thing is* and *where its rule reaches*.
     """
 
     id: str
@@ -148,6 +150,17 @@ class Entry:
     #: A fragment names a whole file, or -- written ``path.py::NAME`` -- only
     #: the statement binding ``NAME`` in it (:mod:`kinemata.sites`).
     home: tuple[str, ...] = ()
+
+    #: **Where the rule applies, which is the other direction**: ``home`` exempts
+    #: the place a thing is declared, and ``under`` narrows the lines a match
+    #: counts on. A heading's title text, exactly; the region runs to the next
+    #: heading of the same or higher level (:mod:`kinemata.regions`).
+    #:
+    #: Empty means every line, which is what every entry written before this
+    #: meant -- so an entry with no ``under`` is not a rule that was quietly
+    #: narrowed. The two are not opposites: an entry may have both, exempting
+    #: its own definition *inside* the section it is scoped to.
+    under: tuple[str, ...] = ()
 
 
 #: What a path reached nothing at. Distinct from a declared ``None``, which a

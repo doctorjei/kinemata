@@ -83,11 +83,12 @@ class CodePatterns(BaseRegistry):
                     id=str(identifier),
                     antipatterns=strings(antipatterns, f"entry {identifier!r}: antipatterns"),
                     home=strings(spec.get("home", ()), f"entry {identifier!r}: home"),
+                    under=strings(spec.get("under", ()), f"entry {identifier!r}: under"),
                     clauses=strings(spec.get("clauses", ()), f"entry {identifier!r}: clauses"),
                     extra={
                         k: v
                         for k, v in spec.items()
-                        if k not in {"id", "antipatterns", "home", "clauses"}
+                        if k not in {"id", "antipatterns", "home", "under", "clauses"}
                     },
                 )
             )

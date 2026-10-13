@@ -53,6 +53,7 @@ from datetime import date
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from . import regions
 from .adapters.bibliography import Bibliography, duplicate_keys
 from .adapters.constants import PythonConstants
 from .adapters.mapping import MappingRegistry
@@ -1381,6 +1382,10 @@ def load(path: str | Path) -> Settings:
 
     _check_deferrals(registries, path)
     _check_sites(registries, root, path)
+    _check_regions(
+        registries, path,
+        _strings(project.get("suffixes", (".py",)), f"{path}: [project] suffixes"),
+    )
     _check_scopes(
         registries, root,
         _strings(project.get("suffixes", (".py",)), f"{path}: [project] suffixes"),
@@ -1967,6 +1972,49 @@ def _check_scopes(
                     "registry would check nothing. A fragment names whole path "
                     "segments, never part of a name."
                 )
+
+
+def _check_regions(
+    registries: Sequence[Registry], path: Path, suffixes: Sequence[str]
+) -> None:
+    """Every ``under`` names a file kind this package can read regions in.
+
+    Refused at **load**, and refused rather than reported, because the failure
+    this prevents is silent and permanent rather than loud: an entry scoped to a
+    section of a document kind nothing here can read sections of matches nothing,
+    on every file, forever, and a scan that examines nothing reads exactly like
+    a scan that passed. One layer in from :func:`_check_scopes`, which refuses the
+    same shape for a fragment naming a file the registry never opens.
+
+    **Markdown only, so this refuses more than a reader table usually would.**
+    An entry scoped to a section of a ``.py`` file is refused rather than
+    quietly matched against nothing: "where the rule applies" has no meaning
+    outside a format that states its own containment, and inventing one for
+    Python would be a guess about a language rather than a reading of a document.
+    """
+    for registry in registries:
+        for entry in registry.entries():
+            under = member(entry, "under")
+            if not under:
+                continue
+            reads = member(registry, "suffixes") or suffixes
+            unreadable = sorted(read for read in reads if regions.reader(read) is None)
+            if not unreadable:
+                continue
+            readable = sorted(read for read in reads if regions.reader(read))
+            scope = ", ".join(unreadable)
+            known = (
+                f"; {', '.join(readable)} can be read"
+                if readable
+                else "; no suffix this registry reads has a region reader"
+            )
+            raise ConfigError(
+                f"{path}: registry {registry.name!r} entry {entry.id!r} scopes "
+                f"itself with 'under', which names a document section -- but "
+                f"{scope} has no region reader{known}. Move the entry to a "
+                f"registry reading markdown, or drop 'under' and scope the "
+                f"antipattern itself."
+            )
 
 
 def _home_files(root: Path, fragment: str, walked: dict[str, list[str]]) -> list[str]:

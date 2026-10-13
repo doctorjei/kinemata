@@ -52,6 +52,7 @@ when the default is wrong for the data model.
 | `clauses` | `tuple[str, ...]` | text projected to agents |
 | `antipatterns` | `tuple[str, ...]` | regexes whose match means the entry was bypassed |
 | `home` | `tuple[str, ...]` | where the entry is defined; matches there are canonical use, not duplication. A path fragment names a whole file; `path.py::NAME` names only the module-level statement binding `NAME`, so a re-spelling beside it in the same file is still reported. `python-constants` records the statement for every entry |
+| `under` | `tuple[str, ...]` | **the other direction**: a markdown heading's exact title text, and the rule counts only on lines between that heading and the next one of the **same or higher level**. `home` exempts where a thing is declared; `under` narrows where its rule fires. A `#` section therefore owns the `##` ones under it — nesting is markdown's, not this tool's. Markdown only: a registry reading any other suffix is **refused at load**, and a heading no file carries is **reported on every run** rather than matching nothing silently |
 | `extra` | `Mapping[str, Any]` | project payload, never interpreted |
 
 **Antipattern examples:**
@@ -2413,6 +2414,20 @@ down, and the two shapes at the end are the findings that matter most.
   strings they hold, so `declared("boxes")` returns `False` against a
   :shown:`bootstrap.py`-shaped module carrying `BOXES_PATH = "boxes"`, and reaching for it is
   the wrong shape rather than a missing feature.
+- **accepted** · **A rule can be scoped to a document section, and only in markdown.** `under`
+  on an entry narrows it to the lines between a heading and the next of the same or higher level —
+  built 2026-10-13 for kanibako, whose task board has one section whose rows must carry a marker
+  and one whose rows must not, and whose unscoped run reported **5** on a correct board and on one
+  with two misfiles alike. Two gaps, both left rather than guessed at. **Markdown only:** a
+  registry reading any other suffix is *refused at load*, because reStructuredText headings are
+  underline-delimited and a reader for them is a second parser, and a rule about "where this
+  applies" is a question only a format that states its own containment can answer. And `under` is
+  a `code-patterns` entry key: a `substitutions` registry builds its entries from a word map, so
+  **it cannot be scoped to a section at all** — a spelling only forbidden in one part of a
+  document is still forbidden everywhere. **What it would take:** for the second, a registry-level
+  `under` applying to every entry it holds, which the per-entry form cannot express because there
+  is no per-entry form to put it on; for the first, a second reader in the table
+  (`kinemata.regions.READERS`) rather than a branch at each call site.
 - **accepted** · **A `path:N` citation is checked against every file its path could name, and
   passes if any one of them would.** A bare basename routinely matches several files and the
   document did not say which, so :shown:`errors.py:99999` is reported only when *no* candidate is
