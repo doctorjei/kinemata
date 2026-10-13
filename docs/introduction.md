@@ -2429,15 +2429,19 @@ down, and the two shapes at the end are the findings that matter most.
   is no per-entry form to put it on; for the first, a second reader in the table
   (`kinemata.regions.READERS`) rather than a branch at each call site.
 - **declined** · **`under` names a heading by its exact title, and a real heading carries a note.**
-  Declined 2026-10-13 (user, *"if they want cake, let them each cake"*), on the evidence rather than
-  on taste. `under` matches a heading's title **exactly**, and markdown gives nothing to separate a
-  heading's name from a note appended to it — kanibako's real board titles its section
+  Declined 2026-10-13 on the evidence, **by this box** — ⚑ **and the attribution this entry first
+  carried was wrong.** It cited a standing user decision, *"if they want cake, let them each cake"*,
+  as authority for declining this. **Those words were about kanibako's requested fenced-signature
+  check, not this.** Applying them here turned an unrequested idea into a ruled decision, and the
+  words are not on record anywhere for this one.
+  ⚑ `under` matches a heading's title **exactly**, and markdown gives nothing to separate a heading's
+  name from a note appended to it — kanibako's real board titles its section
   :shown:`🔴 HIS GATE — OPEN DECISIONS (🛑 no count here; …)`, so the declaration has to carry that
   whole parenthetical to name the section, and to carry it again whenever the note is edited.
   **Two of their nineteen headings carry trailing parentheticals.**
   ⚑ **The candidate was a pattern**, as :attr:`Entry.antipatterns` is a pattern for a line:
   :shown:`^🔴 HIS GATE` would name the section and survive an appended note, reusing machinery that
-  already exists rather than adding a matching mode. **It was not built, because no adopter asked for
+  already exists rather than adding a matching mode. **It is not built, because no adopter asked for
   it.** One adopter's board hit it once, a copy-paste costs them nothing measurable, and they were
   declaring the rule by hand in any case — **the cost was declaration length, not correctness.**
   ⚑ **So this is a decline on evidence, and a decline that cannot be reopened by evidence was never a
