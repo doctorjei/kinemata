@@ -26,6 +26,8 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   carrying the string that did not match, and does not fail — a section is something the document
   has, so a tree that legitimately lacks one must stay green.
   `docs/introduction.md` [0TQG9FY-Pa0004] § Known limits carries the two gaps left open.
+  `under` names a heading by its **exact** title; a heading carrying a note about itself
+  therefore has to be spelled in full, and that cost is dispositioned rather than designed away.
 
 **Fixed**
 
