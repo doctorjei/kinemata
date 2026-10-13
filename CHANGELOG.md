@@ -26,8 +26,13 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   carrying the string that did not match, and does not fail — a section is something the document
   has, so a tree that legitimately lacks one must stay green.
   `docs/introduction.md` [0TQG9FY-Pa0004] § Known limits carries the two gaps left open.
-  `under` names a heading by its **exact** title; a heading carrying a note about itself
-  therefore has to be spelled in full, and that cost is dispositioned rather than designed away.
+  A plain `under` string names a heading's title **exactly**; `re:` in front declares a
+  **pattern** matched against it, so a heading carrying a note about itself
+  (`## 🔴 HIS GATE — OPEN DECISIONS (🛑 no count here; …)`) can be named without copying the
+  note. A plain string is never compiled — compiling it would break a title holding parentheses
+  and stop silently — and a pattern that does not compile is **refused at load** rather than
+  becoming a section matching nothing on every file. Measured on the board that prompted it:
+  `re:^🔴 HIS GATE` gives the identical finding in 18 characters instead of 80.
 
 **Fixed**
 

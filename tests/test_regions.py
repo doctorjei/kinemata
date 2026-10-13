@@ -20,7 +20,7 @@ import pytest
 from kinemata import Entry, scan
 from kinemata.config import ConfigError, load
 from kinemata.contract import BaseRegistry
-from kinemata.regions import markdown_headings, spans
+from kinemata.regions import markdown_headings, matchers, spans
 
 
 class Scoped(BaseRegistry):
@@ -241,7 +241,96 @@ def test_a_closing_run_of_hashes_is_not_part_of_the_title():
 
 
 def test_spans_of_a_title_that_is_absent_is_empty():
-    assert spans(((1, 2, "A"),), frozenset({"B"}), 9) == ()
+    assert spans(((1, 2, "A"),), matchers(("B",)), 9) == ()
+
+
+# -- naming a section by pattern -----------------------------------------------
+
+
+def test_a_pattern_names_a_section_whose_title_carries_a_note(tmp_path):
+    """The cost this exists to remove: kanibako's real board titles its section
+    `## 🔴 HIS GATE — OPEN DECISIONS (🛑 no count here; …)`, so an exact `under`
+    has to copy a note about the heading rather than part of it, and copy it
+    again whenever the note is edited."""
+    write(tmp_path, "board.md", """
+        ## 🔴 HIS GATE — OPEN DECISIONS (🛑 no count here; it went stale)
+
+        - [ ] 🔭 **[HIS] correctly filed.**
+        ## 🔴 MINE
+
+        - [ ] 🔭 **[HIS] misfiled out of the gate.**
+        """)
+    registry = Scoped([{
+        "id": "row", "antipatterns": [r"\*\*\[HIS"], "under": ["re:^🔴 HIS GATE"],
+    }])
+    assert sites(registry, tmp_path) == {("row", 3)}
+
+
+def test_a_bare_string_is_a_title_and_not_a_pattern(tmp_path):
+    """Compiling every `under` would break the first real config there is.
+
+    A title holding parentheses is a regex reading them as a group, so a plain
+    string compiled as one stops matching the title it was copied from — and
+    stops silently. Same rule `field_path` argues for a string holding dots."""
+    write(tmp_path, "board.md", """
+        ## A (note)
+
+        - [ ] one
+        ## B
+
+        - [ ] two
+        """)
+    registry = Scoped([{"id": "row", "antipatterns": [r"^- \[ \]"], "under": ["A (note)"]}])
+    assert sites(registry, tmp_path) == {("row", 3)}
+
+
+def test_a_pattern_matching_no_heading_is_reported_like_any_other(tmp_path):
+    """The inert report has to name what was declared, pattern or not."""
+    write(tmp_path, "board.md", "## A\n\nnothing\n")
+    registry = Scoped([{
+        "id": "row", "antipatterns": [r"^- \[ \]"], "under": ["re:^B$"],
+    }])
+    inert: list[str] = []
+    assert read(registry, tmp_path, inert=inert) == []
+    assert "'re:^B$'" in inert[0]
+
+
+def test_a_pattern_that_does_not_compile_is_refused_at_load(tmp_path):
+    """Otherwise it is a section matching nothing on every file, forever."""
+    write(tmp_path, "kinemata.toml", """
+        [project]
+        root = "."
+
+        [[registry]]
+        name = "scoped"
+        kind = "code-patterns"
+        suffixes = [".md"]
+
+        [[registry.entry]]
+        id = "row"
+        antipatterns = ['forbidden']
+        under = ['re:^unclosed(']
+        """)
+    with pytest.raises(ConfigError, match="does not compile"):
+        load(tmp_path / "kinemata.toml")
+
+
+def test_two_sections_both_matched_are_two_regions(tmp_path):
+    """A pattern too broad names more than its author meant, which is a fact
+    about the declaration rather than a choice this makes for them."""
+    write(tmp_path, "board.md", """
+        ## A
+
+        - [ ] one
+        ## A again
+
+        - [ ] two
+        ## B
+
+        - [ ] three
+        """)
+    registry = Scoped([{"id": "row", "antipatterns": [r"^- \[ \]"], "under": ["re:^A"]}])
+    assert sites(registry, tmp_path) == {("row", 3), ("row", 6)}
 
 
 # -- refusing, and reporting ----------------------------------------------------

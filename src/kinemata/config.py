@@ -1997,6 +1997,12 @@ def _check_regions(
             under = member(entry, "under")
             if not under:
                 continue
+            try:
+                regions.matchers(under)
+            except regions.BadPattern as why:
+                raise ConfigError(
+                    f"{path}: registry {registry.name!r} entry {entry.id!r}: {why}"
+                ) from why
             reads = member(registry, "suffixes") or suffixes
             unreadable = sorted(read for read in reads if regions.reader(read) is None)
             if not unreadable:

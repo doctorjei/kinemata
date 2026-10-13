@@ -52,7 +52,7 @@ when the default is wrong for the data model.
 | `clauses` | `tuple[str, ...]` | text projected to agents |
 | `antipatterns` | `tuple[str, ...]` | regexes whose match means the entry was bypassed |
 | `home` | `tuple[str, ...]` | where the entry is defined; matches there are canonical use, not duplication. A path fragment names a whole file; `path.py::NAME` names only the module-level statement binding `NAME`, so a re-spelling beside it in the same file is still reported. `python-constants` records the statement for every entry |
-| `under` | `tuple[str, ...]` | **the other direction**: a markdown heading's exact title text, and the rule counts only on lines between that heading and the next one of the **same or higher level**. `home` exempts where a thing is declared; `under` narrows where its rule fires. A `#` section therefore owns the `##` ones under it — nesting is markdown's, not this tool's. Markdown only: a registry reading any other suffix is **refused at load**, and a heading no file carries is **reported on every run** rather than matching nothing silently |
+| `under` | `tuple[str, ...]` | **the other direction**: a markdown heading's title, and the rule counts only on lines between that heading and the next one of the **same or higher level**. A plain string is that title **exactly**, however many regex characters it holds; `re:` in front declares a **pattern** matched against the title, which is how a section carrying a note about itself is named without copying the note. `home` exempts where a thing is declared; `under` narrows where its rule fires. A `#` section therefore owns the `##` ones under it — nesting is markdown's, not this tool's. Markdown only: a registry reading any other suffix is **refused at load**, and a heading no file carries is **reported on every run** rather than matching nothing silently |
 | `extra` | `Mapping[str, Any]` | project payload, never interpreted |
 
 **Antipattern examples:**
@@ -2428,22 +2428,30 @@ down, and the two shapes at the end are the findings that matter most.
   `under` applying to every entry it holds, which the per-entry form cannot express because there
   is no per-entry form to put it on; for the first, a second reader in the table
   (`kinemata.regions.READERS`) rather than a branch at each call site.
-- **open** · **`under` names a heading by its exact title, and a real heading carries a note.**
-  **Asked, not decided.** ⚑ **This entry has been wrong twice and both corrections are in it.** It
-  first claimed a standing user decision, *"if they want cake, let them each cake"*, as authority for
-  declining this — **those words were about kanibako's requested fenced-signature check, not this.**
-  It then read as a decline this box had reached on its own evidence. **Neither stands.**
-  ⚑ `under` matches a heading's title **exactly**, and markdown gives nothing to separate a heading's
-  name from a note appended to it — kanibako's real board titles its section
-  :shown:`🔴 HIS GATE — OPEN DECISIONS (🛑 no count here; …)`, so the declaration has to carry that
-  whole parenthetical to name the section, and to carry it again whenever the note is edited.
-  **Two of their nineteen headings carry trailing parentheticals.**
-  ⚑ **The candidate is a pattern**, as :attr:`Entry.antipatterns` is a pattern for a line:
-  :shown:`^🔴 HIS GATE` would name the section and survive an appended note, reusing machinery that
-  already exists rather than adding a matching mode. **No adopter has asked for it** — this was found
-  by reading one board, and the cost it measures is declaration length rather than correctness. **On
-  the standing rule, an idea nobody asked for is not this box's to decline.** ⚑ **It is on its way to
-  our user as a question**, which is where an unrequested idea belongs.
+- **accepted** · ~~**`under` names a heading by its exact title, and a real heading carries
+  a note.**~~ **Closed 2026-10-13**, by giving `under` a pattern form rather than by teaching a
+  reader which part of a heading is its name. `re:` in front declares a regular expression matched
+  against the title; a plain string stays an exact title. **Found by reading one board** —
+  kanibako's real board titles a section :shown:`🔴 HIS GATE — OPEN DECISIONS (🛑 no count here; …)`,
+  where the declaration had to copy a *note about* the heading rather than part of it, and copy it
+  again whenever the note is edited.
+  ⚑ **A plain string is never compiled, and that is the whole safety of the change.** Compiling
+  every `under` would break the first real config there is: a title holding parentheses is a regex
+  reading them as a group, so the declaration would stop matching the title it was copied from, and
+  stop *silently*. One spelling of a literal and a deliberate second spelling for the other thing, as
+  :func:`kinemata.contract.field_path` argues for a string holding dots.
+  ⚑ **A pattern that does not compile is refused at load.** Otherwise it is a section matching
+  nothing on every file — the inert declaration this exists to prevent. **Two sections both matched
+  are two regions, not an ambiguity**: a pattern too broad names more than its author meant, which
+  is a fact about the declaration rather than a choice this makes for them, and unlike the `path:N`
+  basename case every heading it matched is visible in the document.
+  ⚑ **Measured on the board that prompted it**: :shown:`re:^🔴 HIS GATE` against the exact title
+  gives the identical finding — one row at :shown:`product.md:353` — in **18 characters instead of
+  80**. ⚑ **What this entry cost to get right:** it was first declined on a decision this box had no
+  authority to take, then marked open, and only then put to the user as the question it was — a
+  question whose premise had been mis-supplied, so the answer given did not apply to it. **Three
+  corrections, and the third is the one that mattered: an ambiguous answer is a question to ask, not
+  a decision to record.**
 - **accepted** · **A `path:N` citation is checked against every file its path could name, and
   passes if any one of them would.** A bare basename routinely matches several files and the
   document did not say which, so :shown:`errors.py:99999` is reported only when *no* candidate is

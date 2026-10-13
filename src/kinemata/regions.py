@@ -37,6 +37,9 @@ from collections.abc import Callable, Sequence
 
 from .prose import outside_fenced_blocks
 
+#: A test for one heading's title, built by :func:`matchers`.
+Matcher = Callable[[str], object]
+
 #: A reader for one file kind, answering ``(line, level, title)`` per heading in
 #: document order. Line numbers are the source file's, so they address a match
 #: the way :func:`kinemata.bypass._inside` already does.
@@ -97,24 +100,74 @@ def titles(headings: Sequence[tuple[int, int, str]]) -> tuple[str, ...]:
     return tuple(title for _, _, title in headings)
 
 
+#: Marks an ``under`` entry as a regular expression rather than a title.
+PATTERN = "re:"
+
+
+class BadPattern(ValueError):
+    """An ``under`` entry wrote ``re:`` and then not a regex.
+
+    Refused at load, like every other thing a config declares badly: a pattern
+    that does not compile would otherwise become a section matching nothing on
+    every file, which is the inert declaration this module exists to prevent.
+    """
+
+
+def matchers(wanted: Sequence[str]) -> tuple[Matcher, ...]:
+    """Compile each declared section name into a test for a heading's title.
+
+    **A string is a title however many regex characters it holds, and is never
+    compiled as one.** Compiling every ``under`` would break a declaration
+    silently rather than loudly, and the first config it would break is a real
+    one: kanibako titles their section
+    :shown:`🔴 HIS GATE — OPEN DECISIONS (🛑 no count here; ...)`, where a regex
+    reads the parentheses as a group and no longer matches the title it was
+    copied from.
+
+    That is the same rule :func:`kinemata.contract.field_path` argues for a
+    string holding dots -- **one spelling of a literal, and a deliberate second
+    spelling for the other thing** -- rather than a normalization that does not
+    fail.
+    """
+    built: list[Matcher] = []
+    for name in wanted:
+        if name.startswith(PATTERN):
+            try:
+                compiled = re.compile(name[len(PATTERN):])
+            except re.error as why:
+                raise BadPattern(
+                    f"{name!r} names a section by pattern and does not compile: {why}"
+                ) from why
+            built.append(compiled.search)
+        else:
+            built.append(lambda title, wanted=name: title == wanted)
+    return tuple(built)
+
+
 def spans(
     headings: Sequence[tuple[int, int, str]],
-    wanted: frozenset[str],
+    wanted: Sequence[Matcher],
     last: int,
 ) -> tuple[tuple[int, int], ...]:
-    """The lines of every region headed by a title in ``wanted``, inclusive.
+    """The lines of every region whose heading a matcher accepts, inclusive.
 
     A region runs **to the next heading of the same or higher level**, which is
     what makes ``## HIS GATE`` own a ``### subheading`` inside it and stop at the
-    next ``##`. Ending at the next heading of *any* level would leave a document
+    next ``##``. Ending at the next heading of *any* level would leave a document
     with a subsection unable to declare the section it belongs to.
 
     The heading's own line is inside its region: a heading that repeats a
     forbidden spelling is as reportable as the prose under it.
+
+    **Two sections both matched is two regions, not an ambiguity.** A pattern too
+    broad names more of the document than its author meant, which is a fact about
+    the declaration rather than a choice this function has to make for them --
+    and unlike the ``path:N`` basename case, every heading it matched is visible
+    in the document.
     """
     found: list[tuple[int, int]] = []
     for index, (line, level, title) in enumerate(headings):
-        if title not in wanted:
+        if not any(accepts(title) for accepts in wanted):
             continue
         end = last
         for other_line, other_level, _ in headings[index + 1:]:

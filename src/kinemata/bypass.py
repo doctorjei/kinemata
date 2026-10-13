@@ -228,6 +228,17 @@ def _headings_of(
     return () if read is None else read(source)
 
 
+def _wants(wanted: str, title: str) -> bool:
+    """Does one declared section name accept this heading's title?
+
+    Compiled per call rather than once per entry, which is deliberate: a file
+    names one or two headings against one or two declared sections, so the walk
+    pays nothing for it, and caching here would need an invalidation rule for a
+    saving nobody can measure.
+    """
+    return bool(regions.matchers((wanted,))[0](title))
+
+
 def _scoped(
     entry: Entry,
     headings: Sequence[tuple[int, int, str]],
@@ -242,7 +253,7 @@ def _scoped(
     under = member(entry, "under")
     if not under:
         return None
-    return regions.spans(headings, frozenset(under), last)
+    return regions.spans(headings, regions.matchers(under), last)
 
 
 def _inert_regions(
@@ -573,10 +584,10 @@ def scan(
         # re-reading the headings per entry would be a second walk of a document
         # the first walk already read.
         headings = _headings_of(path.suffix, source)
-        present = {title for _, _, title in headings}
         for entry, _, _ in applicable:
-            seen.update((entry.id, title) for title in member(entry, "under")
-                        if title in present)
+            for name in member(entry, "under"):
+                if any(_wants(name, title) for _, _, title in headings):
+                    seen.add((entry.id, name))
         last = len(source.splitlines())
         extractor = LITERAL_EXTRACTORS.get(path.suffix) if strings_only else None
         if extractor is not None:
