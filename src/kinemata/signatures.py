@@ -2,7 +2,7 @@
 
 The narrowest of the identifier questions, and the only one this project
 accepted: **a `def name(...)` line inside a fence is a claim about what
-the code is**, where a prose mention is not. ``docs/introduction.md``
+the code is**, where a prose mention is not. ``docs/introduction.md`` [0TQJ1J3-Pa0004]
 § Known limits records why the broad form was declined -- a backticked
 identifier is mostly not a symbol claim, so *every backticked identifier
 resolves* is a guesser with an opt-out -- and the narrow form is where
@@ -157,7 +157,7 @@ def documented_params(raw: str) -> tuple[tuple[str, str], ...]:
 
 
 def render_default(text: str) -> str:
-    """Normalise a default's spelling so ``""`` and ``''`` compare equal.
+    """Normalize a default's spelling so ``""`` and ``''`` compare equal.
 
     A quote style is not a claim, and ``ast.unparse`` rewrites one, so
     comparing the renderings is what stops a correct value being reported
