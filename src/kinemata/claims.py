@@ -225,9 +225,13 @@ REMOTE_MARKER = "@"
 #: resolver disagreed about what a path claim is, and only the extractor was
 #: consulted.
 #:
-#: The same class as the :shown:`src/`-layout module-name defect a week earlier: a
-#: token shape that vanishes before anything looks at it, which no gate can see
-#: because a claim that was never made leaves nothing to fail on.
+#: The same class as the :shown:`src/`-layout module-name defect **of 2026-10-12,
+#: the day before**: a token shape that vanishes before anything looks at it, which
+#: no gate can see because a claim that was never made leaves nothing to fail on.
+#: **The interval was written as "a week earlier" and read off a half-remembered
+#: one.** ``git log --date=iso-strict`` settles it. Named by its date rather than
+#: its hash because a commit of *this* repository has no bibliography entry -- every
+#: ``Cx`` key carries a ``repository``, and a local one has none to give.
 LINE_CLAIM = re.compile(r"^(?P<path>.+?):(?P<first>\d+)(?:-(?P<last>\d+))?$")
 
 #: Extensions that make a bare filename a claim about a file. Without an
