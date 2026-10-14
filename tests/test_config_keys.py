@@ -408,6 +408,14 @@ FLAGS = [
         """,
     ),
     (
+        "signatures",
+        """
+        [claims]
+        suffixes = [".md"]
+        signatures = "true"
+        """,
+    ),
+    (
         "exact",
         """
         [[probe]]

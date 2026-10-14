@@ -37,6 +37,7 @@ from kinemata.provenance import (
     CLOCKED,
     DEFAULT_STALE_AFTER,
     PROVENANCE_REGISTRY,
+    UNSTAMPABLE,
     ProvenanceError,
     survey,
 )
@@ -203,15 +204,22 @@ def test_the_unit_is_a_target_on_a_line(tmp_path):
 # -- no exemption list -------------------------------------------------------
 
 
-def test_every_citation_kind_can_be_placed():
+def test_every_citation_kind_can_be_placed_or_says_why_not():
     """Asked which kinds would be exempt, the answer was: which ones wouldn't.
 
     A kind with no locator is one this check passes over while reporting a
     clean tree, which is the shape of exemption the policy refuses. Checked
     against the claim table rather than trusted to stay in step, the way
     ``confirm``'s oracles are checked against the interpreted type codes.
+
+    **One kind cannot be placed, and it is declared with its reason** rather
+    than dropped: a fenced signature is one claim across as many lines as it
+    runs, and a stamp follows a claim on one line. The two sets are disjoint so
+    an exemption cannot shadow a locator somebody did write.
     """
-    assert set(_BY_KIND) == {kind.name for kind in CLAIM_KINDS}
+    assert set(_BY_KIND) | set(UNSTAMPABLE) == {kind.name for kind in CLAIM_KINDS}
+    assert not set(_BY_KIND) & set(UNSTAMPABLE)
+    assert all(UNSTAMPABLE.values())
 
 
 def test_a_commit_hash_is_not_exempt(tmp_path):

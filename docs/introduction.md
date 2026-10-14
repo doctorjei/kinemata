@@ -240,6 +240,12 @@ declared_in = ["store-layout"]     # registries asked about a path claim the
                                    # runtime names that live on a user's
                                    # machine. A registry with `only` answers
                                    # only for the documents its `only` names
+signatures = true                  # every `def`, `class` and call a Python
+                                   # (or untagged) fence shows must match the
+                                   # code's own declaration: names, order and
+                                   # default VALUES. Off by default. Refused
+                                   # as blocked if no document shows one, or
+                                   # no Python source is read to compare to
 
 # Something deferred, and the date the deferral lapses. `path` for a file the
 # project will produce; `what` for anything else. `until` is required on both.
@@ -2452,6 +2458,31 @@ down, and the two shapes at the end are the findings that matter most.
   question whose premise had been mis-supplied, so the answer given did not apply to it. **Three
   corrections, and the third is the one that mattered: an ambiguous answer is a question to ask, not
   a decision to record.**
+- **accepted** · **A fence showing code the reader writes is reported as a signature claim.**
+  `[claims] signatures` reads every `def`, `class` and call in a Python or untagged fence as a
+  claim about *this* project's code, and nothing in a fence says which of them are. Measured on the
+  tree that asked for the check (kanibako's, 2026-10-13): their LLM documentation pages give **2 findings
+  in 259**, one real and one a call written with keyword arguments, but their whole documentation
+  scope gives **8**, and the other six are two shapes, three each: an extension guide's
+  `class MyTarget(Target)` and its two example tests, which name things the reader is to write;
+  and calls shown with **values** — `load_common(_DEFAULTS_PACKAGE, _DEFAULTS_FILE)`, a path
+  literal passed to a real function, a template directive in an untagged fence — compared
+  against parameter names. **A call is read as a signature written call-style**, because that is what
+  their API pages do with it and it is how 27 of their calls agree, so a call written with real
+  arguments disagrees by construction. **What it would take:** a declared way for a fence to say
+  *this shows code you will write* — CommonMark gives an info string no vocabulary for that, and
+  inventing one is a convention every adopter would have to learn — or binding a call against
+  the signature instead of comparing it, which loses the default-value check on every call-style
+  signature. Until then the shared ratchet accepts them, and `exclude` or `historical` narrows a
+  document out. **What would revive the declared mark:** a second tree whose example fences
+  outnumber its claims, so accepting them stops being the cheap answer.
+  ⚑ **Also not compared, and named by the same adopter as the next misses: return annotations
+  and dataclass fields.** A constructor call is never read — a class's parentheses hold bases —
+  so a dataclass's fields have no claim to be checked against. **Python only**: the other side of
+  every comparison is a parsed declaration, and a fence naming another language is skipped rather
+  than read. **A signature claim carries no inline stamp** — it spans as many lines as it runs and
+  a stamp follows a claim on one line — so `Px`/`Cx` cannot mark one as another project's, and a
+  fence displaying another project's signatures is reported rather than exempted.
 - **accepted** · **A `path:N` citation is checked against every file its path could name, and
   passes if any one of them would.** A bare basename routinely matches several files and the
   document did not say which, so :shown:`errors.py:99999` is reported only when *no* candidate is
@@ -2492,6 +2523,12 @@ down, and the two shapes at the end are the findings that matter most.
     shorthand (`docs/design.md:109-111` vs `contract.py:213-215`, at every commit holding
     both). Semantic equivalence of type spellings is a type checker, which is a different
     instrument.
+    ⚑ **The fenced form is built and this sub-shape is about prose** (2026-10-14). A `def`
+    line inside a fence is not a guess — the fence says *this is code* — so `[claims]
+    signatures` checks every signature a Python or untagged fence shows, on names, order and
+    default **values**, and leaves the sentence above where it was: a signature stated in a
+    sentence is still undiscoverable, and **a return annotation is compared nowhere**, fenced
+    or not, for the shorthand reason given here.
   - **A per-sentence re-check is declarable today and is not the class.** One `[[count]]`
     block compares every value its pattern captures against one oracle value, so N sentences
     with N signatures need N blocks, each with a pattern tuned to one sentence and an oracle
@@ -2516,8 +2553,8 @@ down, and the two shapes at the end are the findings that matter most.
     its diff needs knowing what an argument is for; a version-annotated example needs
     knowing what a version printed, outside every tree; retypability needs round-trip
     semantics. The seventh reported shape — a documented symbol with zero hits anywhere —
-    is the identification problem again: `CLAIM_KINDS` settles paths, links, commits and
-    URLs, and a backticked identifier is mostly not a symbol claim (commands, values,
+    is the identification problem again: `CLAIM_KINDS` settles paths, links, commits, URLs
+    and — opt-in, inside a fence only — signatures, and a backticked identifier is mostly not a symbol claim (commands, values,
     placeholders), so *every backticked identifier resolves* is a guesser with an opt-out.
     Agreed with the reporter on all of them, who prefers *"not expressible"* over a guesser
     throughout.
@@ -2525,3 +2562,10 @@ down, and the two shapes at the end are the findings that matter most.
   code does, measured — ours argues 0 for 3 the other way, so one tree each makes it a
   property of prose style and two such trees make it worth spelling an assertion form.
   Nothing revives the executor half short of the architecture rule above falling.
+  ⚑ **The static half's condition was met for fences, and it was the adopter's tree that met
+  it**: of the 259 signatures their LLM documentation pages' fences show, **257 spell the code exactly** on
+  names, order and default values (kanibako's tree, 2026-10-13), while this repository's own
+  documentation still argues the other way — 0 of 5, three contract lines in shorthand and two
+  examples of somebody else's code, so the check is not armed here. **One tree each way is the
+  property-of-prose-style answer the condition predicted, and a fence is the assertion form it
+  asked for.**

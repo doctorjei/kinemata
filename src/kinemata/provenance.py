@@ -161,13 +161,47 @@ LOCATORS: tuple[Locator, ...] = (
 
 _BY_KIND: dict[str, Locator] = {locator.kind: locator for locator in LOCATORS}
 
-if set(_BY_KIND) != {kind.name for kind in CLAIM_KINDS}:
+#: Claim kinds the policy cannot place on a line, and **why** each one cannot.
+#:
+#: **There was no exemption list until a claim kind arrived that has no choice in
+#: the matter** (2026-10-14), and the guard below was rewritten rather than
+#: loosened. A stamp follows the claim it dates *on one line*: a ``path`` claim
+#: ends after its closing backtick, a ``link`` after its closing parenthesis, and
+#: both are single-line by construction -- which is why :attr:`Locator` is a
+#: pattern and not an offset table.
+#:
+#: A fenced signature is **one claim however many lines it runs**, and 16% of
+#: them run across lines on the tree that asked for this check. A pattern that
+#: placed the one-line ones would silently pass over the rest, which is the shape
+#: this module exists to refuse, and a locator generous enough to span lines
+#: would not be a line-oriented instrument at all. So the kind is exempt, said
+#: out loud: a claim of this kind cannot carry an inline stamp, and a
+#: bibliography entry cannot date one.
+#:
+#: **The cost is a false finding rather than a silent exemption**, which is the
+#: trade :func:`declared_elsewhere` already argues for and this table inherits:
+#: a signature claim about another project's code is reported, because nothing
+#: here can legitimately exempt it. The project's own escape is the one every
+#: claim kind has -- declare a narrower document scope, or accept the finding.
+#:
+#: It is also the only kind with no per-line reader, which is not a second
+#: reason but the same one: :func:`survey` walks a line at a time and could not
+#: read this kind's claims even if it wanted to.
+UNSTAMPABLE: dict[str, str] = {
+    "signature": (
+        "one claim spanning as many lines as it runs, and a stamp follows a "
+        "claim on one line"
+    ),
+}
+
+_PLACED_OR_EXEMPT = set(_BY_KIND) | set(UNSTAMPABLE)
+
+if _PLACED_OR_EXEMPT != {kind.name for kind in CLAIM_KINDS}:
     raise ImportError(
-        "the citation kinds and the locators that place them on a line have "
-        f"drifted apart: {sorted(set(_BY_KIND) ^ {k.name for k in CLAIM_KINDS})}. "
-        "Every citation kind requires a stamp and there is no exemption list, "
-        "so a kind this check cannot place is one it would pass over while "
-        "reporting a clean tree."
+        "the citation kinds and what the policy can place have drifted apart: "
+        f"{sorted(_PLACED_OR_EXEMPT ^ {k.name for k in CLAIM_KINDS})}. Every "
+        "citation kind is either given a locator or declared unstampable with "
+        "its reason, so a kind this check cannot place is one somebody chose."
     )
 
 #: A claim kind by the name a :class:`~kinemata.claims.Claim` records. The
@@ -380,7 +414,13 @@ def _placed(
     after it -- and a span in the wrong place is how a citation gets accused of
     being undated when it is not.
     """
-    locator = _BY_KIND[kind.name]
+    locator = _BY_KIND.get(kind.name)
+    if locator is None:
+        # An unstampable kind (see :data:`UNSTAMPABLE`) places nothing, so
+        # `declared_elsewhere` declines to exempt it. **A false finding rather
+        # than a silent exemption**, which is what that predicate argues for
+        # and what this line is here to keep.
+        return {}
     spans: dict[str, list[tuple[int, int]]] = {}
     for match in locator.pattern.finditer(line):
         named = [group for group in match.groups() if group in tokens]
@@ -535,6 +575,10 @@ def survey(
         for number, line in enumerate(source.splitlines(), start=1):
             marks = stamps.find(line)
             for kind in kinds:
+                if kind.name in UNSTAMPABLE:
+                    # Declared, not detected: this kind's claims are not on one
+                    # line, so this walk cannot read them and cannot stamp them.
+                    continue
                 tokens = set(kind.extract(line, previous, known))
                 if not tokens:
                     continue

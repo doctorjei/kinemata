@@ -66,6 +66,13 @@ from . import stamps
 from .bypass import GIT_DIR, Bypass, _tree, _walk, git_ignored
 from .exclusion import excluded
 from .prose import DOCUMENTATION_FILTERS, ILLUSTRATION, ILLUSTRATION_FILTERS
+from .signatures import (
+    SOURCE_SUFFIXES,
+    Index,
+    fenced_signatures,
+    index_source,
+    read_signature,
+)
 
 #: The name these findings travel under, so a baseline record says which check
 #: accepted it. Not a registry -- prose is not declared data -- but the ratchet
@@ -89,6 +96,11 @@ CLAIM_PREFIX = "claim:"
 #: Scoped rather than whole-line: an earlier version skipped the entire line and
 #: silently stopped checking lines that also asserted something.
 NEGATION_WINDOW = 45
+
+#: How many declarations of one name a signature finding will quote. The whole
+#: set is named when it fits, because a message naming one of three sends the
+#: reader to the wrong one, and the message is a report rather than a table.
+SIGNATURES_NAMED = 3
 
 #: Where a negated clause ends. Distance alone is not enough: in "there is no
 #: ``a.py``, but the loader is ``b.py``" the negation sits 36 characters before
@@ -485,6 +497,11 @@ class Tree:
     #: asked and unanswerable. The whole map is ``None`` when nothing was asked,
     #: which is the same distinction ``commits`` draws.
     reachable: dict[str, bool | None] | None = None
+    #: Every signature the project's own code declares, and ``None`` when the
+    #: signature check was not declared -- the same distinction the two above
+    #: draw, for the same reason: *not asked* and *asked and found nothing* are
+    #: different answers and only one of them is a failure.
+    signatures: Index | None = None
 
     def resolves(self, claim: str) -> bool:
         """Is this path in the tree, however the document chose to anchor it?
@@ -1435,12 +1452,69 @@ def actual_count(
     return found.group(1).strip(), ""
 
 
+def _signature_claims(source: str) -> Iterator[tuple[int, str]]:
+    """Every signature a fenced block of this document shows.
+
+    **The whole document, because a fence is a block and a signature is not a
+    line.** See :attr:`ClaimKind.document` for what that costs when it is read
+    the other way.
+
+    Each one is carried as the rendering a reader would recognize rather than as
+    the pieces, so a finding quotes the signature the document actually wrote.
+    """
+    for found in fenced_signatures(source):
+        yield found.line, str(found)
+
+
+def _resolve_signature(text: str, tree: Tree, document: Path) -> bool:
+    """Does the tree declare anything by this name?
+
+    **The narrow question, on purpose, and :func:`_within_signature` carries
+    the rest.** A signature that names a real symbol with the wrong parameters
+    is not a claim about something that is not there -- it is a claim about
+    something the reader can open -- and reporting it as one sends the reader
+    looking for a missing definition beside code they can see. That is the
+    ``path:N`` argument, on the same seam: the claim is broken either way, and
+    the disagreement is what belongs in the message.
+    """
+    written = read_signature(text)
+    if written is None or tree.signatures is None:
+        return False
+    return written.name in tree.signatures.by_name
+
+
+def _within_signature(text: str, tree: Tree) -> str:
+    """How the code declares it, when what the document wrote is not that.
+
+    Names **every** declaration rather than the first: a name may be overloaded
+    or redeclared, the index keeps them all for exactly this reason, and a
+    message naming one of three sends the reader to the wrong one. Bounded
+    anyway, because a name declared in thirty places is a finding about the
+    document and not a catalog.
+    """
+    written = read_signature(text)
+    if written is None or tree.signatures is None:
+        return ""
+    if tree.signatures.accepts(written):
+        return ""
+    declared = tree.signatures.by_name.get(written.name, ())
+    shown = "; ".join(str(one) for one in declared[:SIGNATURES_NAMED])
+    if len(declared) > SIGNATURES_NAMED:
+        shown += f"; and {len(declared) - SIGNATURES_NAMED} more"
+    return f"the code declares {shown}"
+
+
 @dataclass(frozen=True)
 class ClaimKind:
     """One sort of falsifiable assertion, and how to settle it."""
 
     name: str
-    extract: Callable[..., Iterator[str]]
+    #: How this kind reads a claim out of **one line**, or ``None`` when it has
+    #: no line-level form and reads the document instead (see :attr:`document`).
+    #: The two are shapes rather than kinds: no kind has both today, and the
+    #: loop asks the row rather than testing a name, so a fourth kind arriving
+    #: in either shape costs nothing here.
+    extract: Callable[..., Iterator[str]] | None
     resolve: Callable[[str, Tree, Path], bool]
     #: Kinds that report the tree's *current* state are wrong to run over
     #: superseded records: an archive cites what was true when it was written.
@@ -1487,6 +1561,24 @@ class ClaimKind:
     #: comes back as new. An exemption that outlived what somebody looked at is
     #: the thing this project exists to prevent.
     within: Callable[[str, Tree], str] | None = None
+    #: A claim whose unit is **the document**, not a span inside one line, and
+    #: so is read once per file from the whole reduced text. Yields
+    #: ``(line, text)``: the line is part of the claim because the reader
+    #: crosses lines to produce it.
+    #:
+    #: **Declared per kind rather than a second loop keyed by name**, for the
+    #: reason :data:`CLAIM_KINDS` exists at all. A signature wrapping three
+    #: lines is one claim, and reading it a line at a time -- which is all
+    #: :attr:`extract` can do -- reports half a signature as drift or misses it
+    #: silently. Measured on the adopting tree that found this: 16% of their
+    #: fenced signatures wrap, and both failure directions are quiet.
+    #:
+    #: A kind with one of these still resolves per claim like every other; what
+    #: changes is where its text comes from. :func:`verify` runs these only when
+    #: the project asked for them, because the population behind them is the
+    #: whole document and a check that runs unasked reads as one that was asked
+    #: for and answered.
+    document: Callable[[str], Iterator[tuple[int, str]]] | None = None
 
 
 #: Adding a kind is a row here. The verification loop never learns their names.
@@ -1514,6 +1606,30 @@ CLAIM_KINDS: tuple[ClaimKind, ...] = (
     # including both of the genuine 404s it had.
     ClaimKind("url", _url_claims, _resolve_url, current_only=False,
               needs_network=True, settled=_settled_url),
+    # The narrowest of the identifier questions, and the only one this project
+    # accepted: a `def name(...)` line **inside a fence** is a claim about what
+    # the code is, where a prose mention is not. `docs/introduction.md` [0TQK6YE-Pa0004] § Known
+    # limits records why the broad form was declined -- a backticked identifier
+    # is mostly not a symbol claim, so *every backticked identifier resolves* is
+    # a guesser with an opt-out -- and this is where that stops being true.
+    #
+    # **Opt-in, and the only kind that is.** Everything above settles from the
+    # tree a document already has to name; this one builds an index of the
+    # project's own code to compare against, and a project whose documents
+    # *display* other projects' signatures would pay findings for a check nobody
+    # asked for. Measured both ways, and the two trees disagree: the adopter's
+    # API pages spell their code almost exactly, while this repository's own
+    # documentation spells it in shorthand and shows other projects' code,
+    # which is why it is not armed here. The figures, and what the check costs,
+    # are in `docs/introduction.md` [0TQK6YE-Pa0004] § Known limits.
+    #
+    # `resolve` asks only whether the tree declares the name and `within`
+    # carries the disagreement, because a signature with the wrong parameters
+    # is a claim about something the reader can open.
+    ClaimKind(
+        "signature", extract=None, resolve=_resolve_signature,
+        within=_within_signature, document=_signature_claims,
+    ),
 )
 
 
@@ -1620,6 +1736,34 @@ def _index(root: Path, exclusions: Sequence[str]) -> tuple[set[str], set[str]]:
     return files, directories
 
 
+def _signature_index(root: Path, exclusions: Sequence[str]) -> Index:
+    """Every signature the project's own code declares, or none at all.
+
+    **The whole tree, not the documents' scope.** ``within`` narrows what is
+    read *as documentation* -- a claim is about the document holding it -- while
+    the code a document talks about is the project. A ``kinemata claims
+    docs/design.md`` run still compares against every module.
+
+    **Exclusions apply, and one of them decides this from being convenient to
+    being necessary.** :shown:`corpus/` here holds other projects' Python and is
+    gitignored, and a name read out of somebody else's tree would satisfy a
+    fenced signature -- hiding exactly the drift the check is for, in the one
+    direction a reader would never notice. So the same exclusions every other
+    check here reads decide what is this project's material.
+    """
+    index = Index()
+    for path in _walk(root, SOURCE_SUFFIXES):
+        rel = path.relative_to(root).as_posix()
+        if _excluded(rel, exclusions):
+            continue
+        try:
+            source = path.read_text(errors="ignore")
+        except OSError:
+            continue
+        index.update(index_source(source))
+    return index
+
+
 def _as_documentation(source: str, suffix: str) -> tuple[str, int]:
     """The part of a file that is prose, minus what that prose only shows.
 
@@ -1698,6 +1842,7 @@ def verify(
     file_suffixes: Iterable[str] = (),
     resolve_in: Iterable[str] = (),
     commits_in: Iterable[str] = (),
+    signatures: bool = False,
     elsewhere: Callable[[Claim], bool] | None = None,
     path_declared: Callable[[Claim], bool] | None = None,
     promised: Iterable[Promise] = (),
@@ -1736,6 +1881,22 @@ def verify(
         repository whose content is a container definition and a shell
         configuration is one the check cannot see at all -- measured on an
         adopter, four claims of twenty-seven, looking nearly green.
+    :param signatures: check the signatures the documents **show** against the
+        signatures the code declares. Off by default, and the only kind that is:
+        every other one settles from the tree a document already has to name,
+        while this builds an index of the project's own Python to compare
+        against, and a project whose documents display another project's
+        signatures would pay for a check nobody asked for. Measured both ways,
+        on the adopting tree that asked for it and on this one, and the two
+        disagree: ``docs/introduction.md`` [0TQK6YE-Pa0004] § Known limits holds
+        the figures and what the check costs.
+
+        **Two ways it declares and examines nothing are failures**, not notes,
+        because both leave a reader believing fenced signatures are checked: an
+        index with nothing in it (no Python under the root, or every file
+        excluded) and documents showing no fenced signature at all. The first
+        stops the walk rather than reporting every signature as drift, which
+        would be a wall of findings caused by the guard itself.
     :param commits_in: further repositories whose commits may be cited. Notes
         that review another project name its commits, and settling those
         against only this repository reports honest citations as dead.
@@ -1846,6 +2007,27 @@ def verify(
     # zero files and zero claims are different mistakes with different fixes.
     read: dict[str, int] = dict.fromkeys((str(s) for s in suffixes), 0)
     yielded: dict[str, int] = dict.fromkeys(read, 0)
+    signatures_shown = 0
+    # Built before the document walk and not during it, because an index with
+    # nothing in it has to be able to stop the walk rather than report every
+    # signature it finds as drift -- see the guard below.
+    index = _signature_index(root, exclusions) if signatures else None
+    tree.signatures = index
+    if signatures and not len(index):
+        found.blocked.append(
+            "signatures: the check is declared and no Python source was read "
+            "under the root, so there is nothing to compare a document's "
+            f"signatures against. Nothing was examined under {root}."
+        )
+    #: Which kinds read a whole document rather than a span of one line, and
+    #: may therefore run. **Opt-in, and gated on the comparison having somewhere
+    #: to compare against** -- the signature index is empty when the tree has no
+    #: Python, and reporting every signature in the documentation as drift then
+    #: would be a wall of findings that are all the guard's fault.
+    document_kinds = [
+        kind for kind in kinds
+        if kind.document is not None and signatures and len(index)
+    ]
 
     # Narrowed here and deliberately not at the count walk below: a claim is
     # about the document holding it, so reading fewer documents asks a smaller
@@ -1881,6 +2063,12 @@ def verify(
             for kind in kinds:
                 if historic and kind.current_only:
                     continue
+                if kind.extract is None:
+                    # A kind with no line-level form. Read below, where the
+                    # whole document is in hand -- asking the row rather than
+                    # testing its name is what keeps a second shape from
+                    # becoming a second loop that special-cases one kind.
+                    continue
                 for text in kind.extract(
                     line, previous, known_suffixes, muted=muted
                 ):
@@ -1892,9 +2080,42 @@ def verify(
                 for token, cause in muted
             )
             previous = line
+        lines = source.splitlines()
+        for kind in document_kinds:
+            if historic and kind.current_only:
+                continue
+            for number, text in kind.document(source):
+                # The line the signature **starts** on, which is where a reader
+                # opens the document and what a baseline record fingerprints --
+                # a wrapped signature's later lines are the same claim, not
+                # three.
+                here = lines[number - 1] if number <= len(lines) else ""
+                pending.append(
+                    (kind, text, Claim(kind.name, text, rel, number, here))
+                )
+                signatures_shown += 1
         yielded[path.suffix] += len(pending) - before
 
     _report_inert_suffixes(read, yielded, root, found)
+    if signatures and not signatures_shown and document_kinds:
+        # The other vacuity, and the one this check is likelier to hit: the
+        # documents were read, the fences were read, and none of them showed a
+        # signature. `_verify_counts` settles the identical question the
+        # identical way -- the oracle answered and nothing asked it -- and the
+        # reason it is a failure rather than a note is the same: a run that
+        # examined nothing leaves a reader believing fenced signatures are
+        # checked, which is the state this package exists to refuse.
+        #
+        # **Asked only of a run that actually read the fences.** An empty index
+        # stops the walk above, so this would otherwise report that no document
+        # showed a signature about a tree whose documents are full of them --
+        # a message that is simply false, and the inert-result shape this
+        # project's own rules warn about. The index's own guard is the answer
+        # for that tree, and it is the true one.
+        found.blocked.append(
+            "signatures: no document showed a fenced signature. The check was "
+            "declared and examined nothing, so it settles nothing."
+        )
 
     commit_roots = list(roots)
     for other in commits_in:

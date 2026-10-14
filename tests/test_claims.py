@@ -629,7 +629,9 @@ def test_edge_whitespace_does_not_decide_a_comparison(tmp_path):
 
 def test_kinds_are_a_table_not_a_hardcoded_sequence():
     """Adding a kind is a row, and the loop never learns their names."""
-    assert {kind.name for kind in CLAIM_KINDS} == {"path", "link", "commit", "url"}
+    assert {kind.name for kind in CLAIM_KINDS} == {
+        "path", "link", "commit", "url", "signature",
+    }
     (commit,) = [kind for kind in CLAIM_KINDS if kind.needs_git]
     assert commit.when_unavailable
     # The capability fields are what let a kind say it cannot run here, and a

@@ -195,6 +195,7 @@ class Settings:
             or self.counts
             or self.promised
             or self.provenance
+            or self.signatures
         )
 
     suffixes: tuple[str, ...] = (".py",)
@@ -227,6 +228,12 @@ class Settings:
     #: number of links it therefore skips is printed rather than assumed.
     external: bool = False
     external_timeout: float = EXTERNAL_TIMEOUT
+    #: Check the signatures the documents **show** against the ones the code
+    #: declares. Off by default: it is the only claim kind that builds an index
+    #: of the project's own code rather than settling from the tree a document
+    #: already has to name, and a project whose documents display somebody
+    #: else's signatures would pay findings for a check nobody asked for.
+    signatures: bool = False
     #: How long any declared oracle subprocess may run before it is killed and
     #: reported unreachable. See :data:`kinemata.claims.ORACLE_TIMEOUT`.
     oracle_timeout: float = ORACLE_TIMEOUT
@@ -842,7 +849,7 @@ CLAIMS_KEYS = frozenset(
     {
         "suffixes", "file_suffixes", "historical", "resolve_in", "commits_in",
         "declared_in", "external", "external_timeout", "oracle_timeout",
-        "promised",
+        "promised", "signatures",
     }
 )
 CONTEXT_KEYS = frozenset({"include", "external", "budget", "strip"})
@@ -1435,6 +1442,7 @@ def load(path: str | Path) -> Settings:
         declared_in=_strings(claims.get("declared_in", ()), f"{path}: [claims] declared_in"),
         commits_in=_strings(claims.get("commits_in", ()), f"{path}: [claims] commits_in"),
         external=_flag(claims, "external", f"{path}: [claims]"),
+        signatures=_flag(claims, "signatures", f"{path}: [claims]"),
         external_timeout=float(claims.get("external_timeout", EXTERNAL_TIMEOUT)),
         oracle_timeout=float(claims.get("oracle_timeout", ORACLE_TIMEOUT)),
         promised=_promised(raw.get("promise"), claims, path),

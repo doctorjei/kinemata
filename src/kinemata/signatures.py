@@ -60,6 +60,16 @@ HEAD = re.compile(r"^\s*(?:async\s+)?(?P<kind>def|class)\s+(?P<name>[A-Za-z_]\w*
 #: call -- two of one adopter's findings. Nobody writes a Python call that way.
 CALL = re.compile(r"^\s*(?:return\s+|=\s*|await\s+)?(?P<name>[a-z_]\w*)\(")
 
+#: The suffixes a signature is read out of. **Python only, because the other
+#: side of every comparison is a parsed declaration** -- and this package
+#: parses Python, as :mod:`kinemata.boundary` already does for the same reason
+#: and under the same limit. A language kinemata *reads* (a comment is nothing,
+#: a literal is strong) is a different question from a language it must parse,
+#: so nothing here is derived from the readers :data:`kinemata.prose.FILTERS`
+#: registers, and adding a language means writing a parser rather than
+#: declaring a suffix.
+SOURCE_SUFFIXES: tuple[str, ...] = (".py",)
+
 #: Parameter names a document would never write, filtered so a Python keyword
 #: or a call's first argument cannot read as a signature.
 NOT_A_SIGNATURE = frozenset({

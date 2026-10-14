@@ -32,6 +32,18 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   and stop silently — and a pattern that does not compile is **refused at load** rather than
   becoming a section matching nothing on every file. Measured on the board that prompted it:
   `re:^🔴 HIS GATE` gives the identical finding in 18 characters instead of 80.
+- **A signature a fence shows is checked against the code, with `[claims] signatures = true`.**
+  Every `def`, `class` and call inside a Python or untagged fence must match a declaration the
+  project's own Python makes: parameter names, their order, and **default values** — a
+  documented `= ""` where the code has `= UNSET` is a finding, which a check of names and order
+  would pass. Requested by kanibako 2026-10-13, three of whose documentation lanes came back for
+  exactly that. A signature wrapping across lines is **one** claim (16% of theirs wrap), and a
+  finding names how the code declares it. Off by default; a run that reads **no Python** to
+  compare against, or whose documents show **no fenced signature**, is blocked rather than
+  green. On their tree as of 2026-10-13, 257 of the 259 signatures their LLM documentation pages show agree.
+  `docs/introduction.md` [0TQK6YE-Pa0004] § Known limits carries what it does not compare —
+  return annotations, dataclass fields — and the fences it reports that show code the reader
+  writes.
 
 **Fixed**
 

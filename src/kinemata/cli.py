@@ -1454,6 +1454,7 @@ def _verify(args: argparse.Namespace, settings: Settings) -> Verification:
         resolve_in=settings.resolve_in,
         path_declared=_path_declared_predicate(settings),
         commits_in=settings.commits_in,
+        signatures=settings.signatures,
         elsewhere=declared_elsewhere(_elsewhere_keys(settings)),
         promised=settings.promised,
         external=settings.external,
