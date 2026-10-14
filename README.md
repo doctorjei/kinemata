@@ -651,6 +651,16 @@ the `403` a bot-hostile host returns to an unfamiliar client is reported by name
 and never gates — a check that goes red on weather teaches its reader to skim a
 red gate, which is the failure most of the mechanism here exists to prevent.
 
+**A signature a fence shows is a claim about the code.** `signatures = true`
+reads every `def`, `class` and call inside a Python or untagged fence and checks
+it against what the project's own Python declares: parameter names, their order,
+and **default values** — a documented `= ""` where the code says `= UNSET`
+fails, which a check of names alone would pass. A signature wrapped across lines
+is one claim. Off by default, being the only kind that indexes the project's
+code: a document showing somebody else's signatures would pay for a check
+nobody asked for. A run whose documents show no fenced signature, or that reads
+no Python to compare against, fails rather than passing on nothing.
+
 ### Paths a design has not built yet
 
 Point this at a design document and it prints six errors. It prints them again
