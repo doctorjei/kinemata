@@ -34,14 +34,16 @@ from __future__ import annotations
 import ast
 import re
 from collections.abc import Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
-#: An opening or closing fence, as :data:`kinemata.prose.FENCE` reads one.
-#: **Declared twice rather than imported**, because this module's subject is a
-#: fence's *contents* and prose's is what a fence filters out; the two would
-#: agree today and diverge the first time either is changed, which is the
-#: second carrier this project is built to report.
-FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
+from .prose import fenced
+
+#: Info strings that say a fence shows Python. **Empty is read too**, because
+#: most fences carry no language and an adopter's API pages are all of that
+#: kind; what is skipped is a fence that *names* another language. A shell
+#: function is written ``ok() {``, which reads as a call, and one adopter's
+#: plan documents carried six of them in ``bash`` fences.
+PYTHON_FENCES = frozenset({"", "python", "py", "python3", "py3", "pycon"})
 
 #: The head of a definition. **The parameter list is not here**, because it may
 #: run to several lines and only :func:`fenced_signatures` can see that far.
@@ -50,7 +52,13 @@ HEAD = re.compile(r"^\s*(?:async\s+)?(?P<kind>def|class)\s+(?P<name>[A-Za-z_]\w*
 #: A call, which is the same claim stated the other way: ``name(...)`` is
 #: unambiguous where a bare mention is not, and a document that shows how a
 #: function is called has made the same assertion about its parameters.
-CALL = re.compile(r"^\s*(?:return\s+|=\s*|await\s+)?(?P<name>[a-z_]\w*)\s*\(")
+#:
+#: **No space before the parenthesis**, where :data:`HEAD` allows one. A ``def``
+#: keyword says what follows is a signature; a bare word does not, and with a
+#: space allowed a fence showing terminal output (``notes      (empty)``) or an
+#: error message's parenthetical (``none (goose pins no provider…)``) read as a
+#: call -- two of one adopter's findings. Nobody writes a Python call that way.
+CALL = re.compile(r"^\s*(?:return\s+|=\s*|await\s+)?(?P<name>[a-z_]\w*)\(")
 
 #: Parameter names a document would never write, filtered so a Python keyword
 #: or a call's first argument cannot read as a signature.
@@ -83,7 +91,14 @@ class Signature:
             name if not default else f"{name} = {default}"
             for name, default in self.params
         )
-        return f"{self.kind} {self.name}({rendered})"
+        # **`kind` is a discriminator, not a keyword**, and rendering it was a
+        # defect the wiring found: a call came out as `call greet(name)`,
+        # which is text no document writes, so :func:`read_signature` could not
+        # read it back and every call in every tree reported as drift. `def` and
+        # `class` are keywords the document really writes; `call` names the
+        # shape and is spelled by the absence of one.
+        prefix = "" if self.kind == "call" else f"{self.kind} "
+        return f"{prefix}{self.name}({rendered})"
 
     @property
     def bare(self) -> tuple[str, ...]:
@@ -156,6 +171,21 @@ def documented_params(raw: str) -> tuple[tuple[str, str], ...]:
     return tuple(out)
 
 
+def documented_bases(raw: str) -> tuple[tuple[str, str], ...]:
+    """A class's bases as a document writes them, each rendered as the code's are.
+
+    **Read whole, never filtered to identifiers.** A base is an expression --
+    ``argparse.ArgumentParser``, ``Mapping[str, 'Collection[str]']`` -- and the
+    parameter reader drops anything that is not a bare name, so every class
+    whose base had a dot or a subscript read as having none and was reported as
+    drift. Twenty-four of them on one adopter's API pages, every one correct.
+    Rendered through :func:`render_default`, so ``ast.unparse``'s quotes are
+    not a disagreement either -- on this side only, the code's own bases
+    already being ``ast.unparse`` output.
+    """
+    return tuple((render_default(part), "") for part in _split_top(raw))
+
+
 def render_default(text: str) -> str:
     """Normalize a default's spelling so ``""`` and ``''`` compare equal.
 
@@ -189,6 +219,18 @@ class Index:
 
     def add(self, signature: Signature) -> None:
         self.by_name.setdefault(signature.name, []).append(signature)
+
+    def update(self, other: Index) -> None:
+        """Everything ``other`` declares, added to this.
+
+        A tree is many files and :func:`index_source` reads one, so the merge
+        is a named method rather than a loop at each call site -- two spellings
+        of *put this file's declarations in the index* is the duplication this
+        package exists to report, in its own source.
+        """
+        for declared in other.by_name.values():
+            for signature in declared:
+                self.add(signature)
 
     def __len__(self) -> int:
         return sum(len(seen) for seen in self.by_name.values())
@@ -242,28 +284,43 @@ def fenced_signatures(source: str) -> Iterator[Signature]:
 
     **Fences are the boundary, which is the whole premise.** Text outside one
     is prose, and prose about an identifier is the guesser this mechanism
-    exists not to be. A fence inside a fence is still shown, so a block
-    displaying another block is read as display.
+    exists not to be. Where a fence starts and ends is
+    :func:`kinemata.prose.fenced`'s to say, and this module asks rather than
+    keeping a copy -- see that function for what the copy got wrong.
+
+    A signature is read only within its own block, so one that never closes
+    cannot run on into the next fence's contents.
     """
-    inside = False
     lines = source.splitlines()
-    index = 0
-    while index < len(lines):
-        line = lines[index]
-        if FENCE.match(line):
-            inside = not inside
-            index += 1
+    blocks: list[list[int]] = []
+    previous = -2
+    for index, info in fenced(lines):
+        if info is None:
+            previous = -2
             continue
-        if not inside:
-            index += 1
+        if _language(info) not in PYTHON_FENCES:
             continue
-        found = _signature_at(lines, index)
-        if found is None:
-            index += 1
-            continue
-        end, signature = found
-        yield signature
-        index = end + 1
+        if index != previous + 1:
+            blocks.append([])
+        blocks[-1].append(index)
+        previous = index
+    for block in blocks:
+        body = [lines[index] for index in block]
+        at = 0
+        while at < len(body):
+            found = _signature_at(body, at)
+            if found is None:
+                at += 1
+                continue
+            end, signature = found
+            yield replace(signature, line=block[at] + 1)
+            at = end + 1
+
+
+def _language(info: str) -> str:
+    """The language a fence's info string names: its first word, lowercased."""
+    words = info.split(maxsplit=1)
+    return words[0].lower() if words else ""
 
 
 def _signature_at(lines: list[str], start: int) -> tuple[int, Signature] | None:
@@ -300,10 +357,30 @@ def _signature_at(lines: list[str], start: int) -> tuple[int, Signature] | None:
     return end, Signature(
         name=name,
         kind=kind,
-        params=documented_params(raw),
+        params=documented_bases(raw) if kind == "class" else documented_params(raw),
         line=start + 1,
         text=lines[start].strip(),
     )
+
+
+def read_signature(text: str) -> Signature | None:
+    """The signature one line writes, if it writes one.
+
+    **The round trip back from :meth:`Signature.__str__`**, and it goes
+    through :func:`_signature_at` rather than anything new: the reader that
+    took the text apart is the one that puts it back together, so a claim
+    carried as a string is compared by the same rules it was extracted by.
+    A claim is text everywhere else in this package -- that is what a baseline
+    record fingerprints -- and re-reading it here is the price of that.
+
+    **Only ever asked of a rendering**, which is why the round trip is safe:
+    :meth:`Signature.__str__` writes one line, so the wrapping this module
+    exists to survive is already behind us, and a default keeps its value
+    because ``_split_top`` reads it back at the same nesting depth it was
+    written.
+    """
+    found = _signature_at([text], 0)
+    return None if found is None else found[1]
 
 
 def index_source(source: str, *, suffix: str = ".py") -> Index:
@@ -329,7 +406,8 @@ def index_source(source: str, *, suffix: str = ".py") -> Index:
             bases = tuple(ast.unparse(base) for base in node.bases)
             index.add(Signature(
                 name=node.name, kind="class",
-                params=tuple((base, "") for base in bases), line=node.lineno,
+                params=tuple((base, "") for base in bases),
+                line=node.lineno,
             ))
     return index
 
@@ -350,11 +428,15 @@ def _declared_params(args: ast.arguments) -> tuple[tuple[str, str], ...]:
         offset = position - (len(named) - defaulted)
         default = args.defaults[offset] if offset >= 0 else None
         out.append((argument.arg, ast.unparse(default) if default else ""))
+    # **Where Python writes it: after the positional parameters and before the
+    # keyword-only ones**, which ``*args`` is what introduces. It was appended
+    # last, so ``def f(self, *args, config, **kwargs)`` -- spelled exactly as
+    # the code spells it -- read as drift against its own source.
+    if args.vararg:
+        out.append((args.vararg.arg, ""))
     for argument, default in zip(args.kwonlyargs, args.kw_defaults, strict=True):
         rendered = ast.unparse(default) if default is not None else ""
         out.append((argument.arg, rendered))
-    if args.vararg:
-        out.append((args.vararg.arg, ""))
     if args.kwarg:
         out.append((args.kwarg.arg, ""))
     return tuple(out)

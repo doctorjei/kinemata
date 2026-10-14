@@ -587,7 +587,31 @@ def outside_fenced_blocks(source: str) -> str:
     """
     lines = source.splitlines()
     kept = list(lines)
+    for index, _ in fenced(lines):
+        kept[index] = " " * len(lines[index])
+    return _rejoined(kept, source)
+
+
+def fenced(lines: list[str]) -> Iterator[tuple[int, str | None]]:
+    """Every line that belongs to a fenced block: ``(index, info)``.
+
+    ``info`` is the opener's info string, stripped, for a line **inside** the
+    block, and ``None`` for a fence line itself -- the opener and the closer --
+    so a reader that wants the contents and one that wants the whole block both
+    ask this and neither restates the rules :func:`outside_fenced_blocks`
+    documents.
+
+    **The one reading of a fence in this package.** :mod:`kinemata.signatures`
+    kept its own regex, on the argument that the two would agree today and
+    diverge the first time either changed. **They never agreed**: the copy
+    missed both CommonMark rules above, so a line *opening* with an inline span
+    -- :shown:`CONTINUE_MARKER` written in triple backticks mid-paragraph --
+    flipped it into a fence, and on one adopter's tree every prose line until
+    the next such span was read as code. That is twenty-six of its findings, all
+    prose, from a second carrier of a rule this module already had right.
+    """
     opener: str | None = None
+    info = ""
     for index, line in enumerate(lines):
         match = FENCE.match(line)
         if opener is None:
@@ -596,7 +620,8 @@ def outside_fenced_blocks(source: str) -> str:
             fence = match.group("fence")
             if fence[0] == BACKTICK and BACKTICK in match.group("info"):
                 continue
-            opener = fence
+            opener, info = fence, match.group("info").strip()
+            yield index, None
         elif (
             match is not None
             and match.group("fence")[0] == opener[0]
@@ -604,8 +629,9 @@ def outside_fenced_blocks(source: str) -> str:
             and not match.group("info").strip()
         ):
             opener = None
-        kept[index] = " " * len(line)
-    return _rejoined(kept, source)
+            yield index, None
+        else:
+            yield index, info
 
 
 #: The role that marks a span as shown rather than asserted. Declared once
