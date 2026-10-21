@@ -61,7 +61,14 @@ from .adapters.patterns import CodePatterns
 from .adapters.substitutions import Substitutions
 from .adapters.values import ValueRegistry
 from .baseline import BASELINE_NAME
-from .boundary import BOUNDARY_KINDS, TYPE_CHECKING_POLICIES, Boundary, Ratchet, validate_name
+from .boundary import (
+    BOUNDARY_KINDS,
+    RATCHET_DIRECTORY,
+    TYPE_CHECKING_POLICIES,
+    Boundary,
+    Ratchet,
+    validate_name,
+)
 from .bypass import MODE_FILTERS, SKIP_DIRS, _is_home_file, git_ignored
 from .bypass import _walk as _files
 from .citations import DEFAULT_ACCOMPANY_MAX
@@ -166,6 +173,12 @@ class Settings:
     #: and can be told they removed nothing, while reporting the same about a
     #: `.gitignore` entry would be noise about a file nobody was checking.
     declared_exclude: tuple[str, ...] = ()
+    #: kinemata's own files under the root -- the config that was loaded, the
+    #: baseline wherever ``[project] baseline`` put it, the ratchet directory --
+    #: as anchored fragments. Already in :attr:`exclude`; carried apart because
+    #: an absence rule overrides ``exclude`` and must not override these. See
+    #: :func:`_own_files` for what reading them cost.
+    own_files: tuple[str, ...] = ()
     #: Did the config declare ``[claims]`` at all? Every other mechanism refuses
     #: when nothing declares it and this one defaulted, which is how an adopter
     #: recorded a claims baseline under a registry-only config's excludes, into
@@ -1416,7 +1429,9 @@ def load(path: str | Path) -> Settings:
     # What git ignores is not this project's material, and every check here asks
     # that same question. Answered once, in the one place settings come from.
     declared_exclude = _strings(project.get("exclude", ()), f"{path}: [project] exclude")
-    exclude = declared_exclude + git_ignored(root)
+    baseline = root / project.get("baseline", BASELINE_NAME)
+    own_files = _own_files(root, (path, baseline, root / RATCHET_DIRECTORY))
+    exclude = declared_exclude + git_ignored(root) + own_files
     claim_suffixes = _strings(
         claims.get("suffixes", DEFAULT_CLAIM_SUFFIXES), f"{path}: [claims] suffixes"
     )
@@ -1431,6 +1446,7 @@ def load(path: str | Path) -> Settings:
         registries=registries,
         exclude=exclude,
         declared_exclude=declared_exclude,
+        own_files=own_files,
         claims_declared=raw.get("claims") is not None,
         suffixes=_strings(project.get("suffixes", (".py",)), f"{path}: [project] suffixes"),
         max_sites=_max_sites(project, path),
@@ -1463,7 +1479,7 @@ def load(path: str | Path) -> Settings:
             **{probe_source(str(spec.get("name", "")).strip()): fingerprint(spec)
                for spec in raw.get("probe", [])},
         },
-        baseline=root / project.get("baseline", BASELINE_NAME),
+        baseline=baseline,
         gates=_build_gates(raw.get("gate", []), path),
         distinct=_build_distinct(raw.get("distinct"), registries, root, path),
         unfitted=tuple(unfitted),
@@ -1954,6 +1970,32 @@ def _deferral(raw: Any, where: str) -> tuple[str, ...]:
             f"not {raw!r}."
         )
     return names
+
+
+def _own_files(root: Path, paths: Sequence[Path]) -> tuple[str, ...]:
+    """kinemata's own files under ``root``, as fragments anchored there.
+
+    **Not this project's material, for the same reason git-ignored paths are
+    not**, and a scan that reads them audits kinemata rather than the project.
+    Measured on a project whose suffixes reached ``.toml`` and ``.json``
+    (2026-10-21): ``check`` reported the config's own antipattern
+    declarations as bypasses, and once ``baseline --record`` had run it read
+    the baseline's copies of the findings it accepted -- 2 accepted findings
+    made 7 new ones, re-recording made 18, and the gate could never go green.
+
+    Read off the paths this load resolved, never a list of names, so a
+    baseline moved by ``[project] baseline`` is recognized where it went. A
+    path outside ``root`` is not something any scan here reads.
+    """
+    base = root.resolve()
+    own: list[str] = []
+    for candidate in paths:
+        try:
+            relative = candidate.resolve().relative_to(base)
+        except ValueError:
+            continue
+        own.append(f"/{relative.as_posix()}")
+    return tuple(own)
 
 
 def _check_scopes(

@@ -23,6 +23,12 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   large directory paid for a full walk before any command ran — kanibako measured 0.33 s becoming
   over 2 m 40 s with their home as the root (2026-10-14). A fragment is looked up at its path
   first, and the walk, when one is needed, stops once every fragment has matched.
+- **kinemata no longer audits its own files.** A project whose suffixes reached `.toml` or `.json`
+  had `check` report the config's own antipattern declarations as bypasses, and after
+  `baseline --record` the baseline's copies of the findings it had accepted: 2 accepted findings
+  made 7 new ones, re-recording made 18, and the gate could never go green. The config that was
+  loaded, the baseline wherever `[project] baseline` puts it, and the ratchet directory are now
+  out of every scan, absence rules included.
 
 ## 0.8.0
 

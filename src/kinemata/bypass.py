@@ -476,6 +476,7 @@ def scan(
     *,
     suffixes: Sequence[str] = (".py",),
     exclude: Iterable[str] = (),
+    own_files: Iterable[str] = (),
     within: str | Path | None = None,
     code_only: bool | None = None,
     strings_only: bool | None = None,
@@ -486,6 +487,9 @@ def scan(
 
     :param exclude: path fragments to skip -- tests that deliberately spell a
         literal, generated files, vendored code.
+    :param own_files: kinemata's own files, skipped even by an absence rule,
+        which overrides ``exclude`` -- see
+        :attr:`kinemata.config.Settings.own_files`.
     :param within: read only this part of the tree, reporting paths relative to
         ``root`` all the same. :func:`_walk` carries why the two are separate
         and what collapsing them cost.
@@ -509,7 +513,7 @@ def scan(
     """
     root = Path(root)
     project_exclusions = tuple(exclude)
-    git_exclusions = git_ignored(root)
+    git_exclusions = git_ignored(root) + tuple(own_files)
 
     # The registry chooses its own matching mode; an explicit argument wins.
     # Each parameter is resolved independently, so passing one does not silently

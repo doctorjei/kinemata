@@ -340,6 +340,7 @@ def _run_review(
                 _target(args, settings),
                 suffixes=member(registry, "suffixes") or settings.suffixes,
                 exclude=settings.exclude,
+                own_files=settings.own_files,
                 within=_within(args, settings),
                 max_sites=_max_sites(args, settings),
                 partners=settings.distinct,
