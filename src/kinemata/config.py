@@ -3,8 +3,10 @@
 A mechanism nobody can turn on is not a mechanism. This reads a ``kinemata.toml``
 so adopting the tool is a config file, not a subclass.
 
-TOML because ``tomllib`` is stdlib: the core takes no dependency. A registry
-whose source is YAML pulls PyYAML in only when that source is declared.
+TOML because ``tomllib`` is stdlib, chosen while the core took no dependency.
+Its one dependency now is ``yapyon``, the format kinemata's own files are moving
+to, starting with :mod:`kinemata.attestations`. A registry whose source is YAML
+pulls PyYAML in only when that source is declared.
 
 Example::
 
@@ -60,6 +62,8 @@ from .adapters.mapping import MappingRegistry
 from .adapters.patterns import CodePatterns
 from .adapters.substitutions import Substitutions
 from .adapters.values import ValueRegistry
+from .attestations import ATTESTATIONS_PATH, Attestation, AttestationError
+from .attestations import load as load_attestations
 from .baseline import BASELINE_NAME
 from .boundary import (
     BOUNDARY_KINDS,
@@ -179,6 +183,11 @@ class Settings:
     #: an absence rule overrides ``exclude`` and must not override these. See
     #: :func:`_own_files` for what reading them cost.
     own_files: tuple[str, ...] = ()
+    #: Findings the project declares correct, read from
+    #: :data:`kinemata.attestations.ATTESTATIONS_PATH` beside the config.
+    attestations: tuple[Attestation, ...] = ()
+    #: Where they were read from, whether or not the file exists.
+    attestations_path: Path | None = None
     #: Did the config declare ``[claims]`` at all? Every other mechanism refuses
     #: when nothing declares it and this one defaulted, which is how an adopter
     #: recorded a claims baseline under a registry-only config's excludes, into
@@ -1430,7 +1439,17 @@ def load(path: str | Path) -> Settings:
     # that same question. Answered once, in the one place settings come from.
     declared_exclude = _strings(project.get("exclude", ()), f"{path}: [project] exclude")
     baseline = root / project.get("baseline", BASELINE_NAME)
-    own_files = _own_files(root, (path, baseline, root / RATCHET_DIRECTORY))
+    # Beside the config rather than under the root: the declarations belong to
+    # the config that names the checks they answer, and two configs sharing a
+    # root must not share one list of what is correct.
+    attestations_path = path.parent / ATTESTATIONS_PATH
+    try:
+        attestations = load_attestations(attestations_path)
+    except AttestationError as why:
+        raise ConfigError(str(why)) from why
+    own_files = _own_files(
+        root, (path, baseline, root / RATCHET_DIRECTORY, attestations_path)
+    )
     exclude = declared_exclude + git_ignored(root) + own_files
     claim_suffixes = _strings(
         claims.get("suffixes", DEFAULT_CLAIM_SUFFIXES), f"{path}: [claims] suffixes"
@@ -1447,6 +1466,8 @@ def load(path: str | Path) -> Settings:
         exclude=exclude,
         declared_exclude=declared_exclude,
         own_files=own_files,
+        attestations=attestations,
+        attestations_path=attestations_path,
         claims_declared=raw.get("claims") is not None,
         suffixes=_strings(project.get("suffixes", (".py",)), f"{path}: [project] suffixes"),
         max_sites=_max_sites(project, path),
@@ -1982,6 +2003,8 @@ def _own_files(root: Path, paths: Sequence[Path]) -> tuple[str, ...]:
     declarations as bypasses, and once ``baseline --record`` had run it read
     the baseline's copies of the findings it accepted -- 2 accepted findings
     made 7 new ones, re-recording made 18, and the gate could never go green.
+    An attestations file is the same case at its sharpest: it quotes the
+    flagged line verbatim, so read as a document it would flag itself.
 
     Read off the paths this load resolved, never a list of names, so a
     baseline moved by ``[project] baseline`` is recognized where it went. A

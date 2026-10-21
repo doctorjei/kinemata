@@ -50,12 +50,16 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .bypass import Bypass, is_strays_scope
 from .coverage import Covered
 from .parity import VALUE_DIRECTION, is_parity_scope
 from .probe import is_probe_scope
 from .shape import is_shape_scope
+
+if TYPE_CHECKING:
+    from .attestations import Attestation
 
 #: Where a project's accepted findings live when it does not say otherwise.
 #: Dotted and in the project root: it belongs to the repository, not to a
@@ -212,6 +216,20 @@ class Split:
     #: size: a run that quietly ignored part of an exemption list reads exactly
     #: like a run that accounted for all of it.
     unscanned: tuple[Accepted, ...] = ()
+    #: Findings an attestation declares correct. Never gates, and never counted
+    #: as accepted: an accepted finding is debt with a date, and these are not
+    #: debt. See :mod:`kinemata.attestations`.
+    attested: tuple[tuple[str, Bypass], ...] = ()
+    #: Attestations this scan could judge that excused nothing -- the line was
+    #: edited, moved or fixed. **These fail**, unlike :attr:`stale`: a stale
+    #: baseline record is debt paid, while an attestation that matches nothing
+    #: is a claim of correctness about text that no longer exists.
+    unused: tuple[Attestation, ...] = ()
+
+    @property
+    def excused(self) -> tuple[tuple[str, Bypass], ...]:
+        """Every finding that does not gate: accepted as debt, or attested."""
+        return self.accepted + self.attested
 
     @property
     def reworded(self) -> tuple[tuple[Accepted, tuple[str, Bypass]], ...]:
@@ -311,6 +329,10 @@ class Baseline:
     #: and passes. Empty in a lock recorded before 2026-09-26, which is judged
     #: strictly, as it was then.
     populations: Mapping[str, str] = field(default_factory=dict)
+    #: The project's attestations, consulted by :meth:`split` before any record.
+    #: **Never written here** -- they live in their own hand-written file, and a
+    #: baseline that saved them would turn a statement of correctness into debt.
+    attestations: tuple[Attestation, ...] = ()
 
     def shrunk(
         self,
@@ -521,6 +543,15 @@ class Baseline:
             the only command that writes -- still drops them.
         """
         covered = None if scope is None else {str(name) for name in scope}
+        # Judged only inside the scope, for the reason records are: an
+        # attestation for a check this run did not perform excused nothing
+        # because nothing was looked at, not because its text is gone.
+        attesting = {
+            item.key: item for item in self.attestations
+            if covered is None or item.registry in covered
+        }
+        used: set[tuple[str, ...]] = set()
+        attested: list[tuple[str, Bypass]] = []
         remaining: Counter[tuple[str, ...]] = Counter()
         by_key: dict[tuple[str, ...], Accepted] = {}
         unscanned: list[Accepted] = []
@@ -542,6 +573,13 @@ class Baseline:
                     "cover."
                 )
             key = _record(registry, hit).key
+            # Before the records, so a finding both attested and still in the
+            # baseline leaves its record stale -- which is what `--prune` is for.
+            # Not consuming: identical text in one file is one statement.
+            if key in attesting:
+                used.add(key)
+                attested.append((registry, hit))
+                continue
             if remaining.get(key, 0) > 0:
                 remaining[key] -= 1
                 accepted.append((registry, hit))
@@ -565,6 +603,10 @@ class Baseline:
             accepted=tuple(accepted),
             stale=stale,
             unscanned=tuple(sorted(unscanned, key=lambda item: item.key)),
+            attested=tuple(attested),
+            unused=tuple(
+                item for key, item in sorted(attesting.items()) if key not in used
+            ),
         )
 
 

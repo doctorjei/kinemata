@@ -10,6 +10,9 @@
 # An sdist that carries the pointer and not the target is a broken reference in
 # the one file everybody opens first.
 include kinemata.toml
+# The config's attestations travel with it: without them, two README lines the
+# config's own `claims` vouches for read as dead commits away from this tree.
+include .config/kinemata/attestations.yap
 include AIPOLICY.md
 include CHANGELOG.md
 graft docs

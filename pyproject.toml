@@ -10,7 +10,7 @@ readme = "README.md"                 # without this a built distribution ships n
                                      # long description at all: the PyPI page and
                                      # `pip show` would both be the one line above.
 requires-python = ">=3.11"          # tomllib
-dependencies = []                    # core takes none, deliberately
+dependencies = ["yapyon>=0.4,<0.5"]  # kinemata reads its own files in yapyon; nothing else
 license = "GPL-3.0-only"
 authors = [{ name = "Jei Blanchard", email = "jjb@eng.ufl.edu" }]
 

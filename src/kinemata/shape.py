@@ -22,8 +22,9 @@ adopter's own suite calls these cases throughout, and it does not promise JSON
 Schema by increments. There is no expression syntax here, no coercion and no
 inference: two small tables of dull operators, and one escape to a predicate the
 project names. An expression language was declined **on its cost** -- it would
-re-derive a solved thing, the core takes no runtime dependency so none could be
-borrowed, and the result would be a second worse copy. Nothing in this design
+re-derive a solved thing, the core's one runtime dependency is its own file
+format (``yapyon``) so no expression engine could be borrowed, and the result
+would be a second worse copy. Nothing in this design
 forecloses one: ``docs/introduction.md`` [0TN7FP9-Pa0004] § Known limits carries
 the disposition and what would revive it.
 

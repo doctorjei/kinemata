@@ -2131,10 +2131,10 @@ down, and the two shapes at the end are the findings that matter most.
   an arithmetic bound, a condition joining two fields — reaches the one escape there is: a
   **predicate the project names**, which costs it a module to import and a function to maintain.
   **What it would take:** a syntax, a parser, and a defined semantic for every type a declaration
-  can hold. The core takes no runtime dependency, so nothing could be borrowed and it would be
-  written here — a second, worse copy of a solved thing, inside the package whose subject is code
-  that re-derives what is already declared. That is the whole of the argument, and it is an
-  argument about **cost**: no part of the design forecloses one.
+  can hold. The core's one runtime dependency is its own file format, `yapyon`, so nothing could
+  be borrowed and it would be written here — a second, worse copy of a solved thing, inside the
+  package whose subject is code that re-derives what is already declared. That is the whole of
+  the argument, and it is an argument about **cost**: no part of the design forecloses one.
   ⚑ **What would revive it: projects reaching for the predicate escape to express *relations
   between declared values* rather than models of their own data.** The escape exists for the
   second. A population using it for the first says the operator tables are the wrong **shape**
@@ -2363,6 +2363,16 @@ down, and the two shapes at the end are the findings that matter most.
   as a dead commit. Both true until 2026-09-09; the words are in the vocabulary and an all-digit
   run is skipped, because git does not mint all-decimal short hashes often enough to be worth the
   class of finding it produced.
+- **accepted** · **A pure-hex code span is read as a commit, even when it is data.** `claims`
+  reads a backticked span of 7 to 12 lowercase hex characters as a commit to resolve, and nothing
+  in the token separates a short hash from a value: :shown:`cbf43926` is a CRC as readily as a
+  commit. Measured 2026-10-21 across every tree here: 80 such spans, 79 of them commits, and the
+  one that was data a bytes-literal spec's value. **Data written as a literal is never read** — a
+  quoted span, a :shown:`0x` prefix, any notation inside the backticks — so the case left is
+  data shown bare, and the answer for it is an **attestation**, which says why the text is
+  correct and fails once it excuses nothing. **What would revive a rule instead:** a tree where
+  bare hex data in code spans is common enough that attesting each one stops being the cheap
+  answer.
 - **accepted** · **`historical` is a path axis, but a changelog's currency varies by section.** A
   live `[Unreleased]` entry and an honest historical record in one file cannot be separated by
   config. A finer axis is buildable and nobody has needed it; this project's own changelog is one

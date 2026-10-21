@@ -815,11 +815,11 @@ def cmd_undeclared(args: argparse.Namespace) -> int:
     behind = {id(hit): stray for (_, hit), stray
               in zip(gating, shown, strict=True)}
 
-    baseline = Baseline.load(settings.baseline)
+    baseline = _baseline(settings)
     split = baseline.split(
         gating, scope=[strays_scope(registry.name) for registry, _ in answered]
     )
-    exempt = {id(behind[id(hit)]) for _, hit in split.accepted}
+    exempt = {id(behind[id(hit)]) for _, hit in split.excused}
 
     failed = 0
     for registry, found in answered:
@@ -870,8 +870,9 @@ def cmd_undeclared(args: argparse.Namespace) -> int:
             "declares. Declare it, or open the registry deliberately.",
             file=sys.stderr,
         )
+    unattested = _report_attested(split, args, settings)
     _narrowed_fail(narrowed)
-    return 1 if failed or narrowed else 0
+    return 1 if failed or narrowed or unattested else 0
 
 
 def _set_valued(result: Parity, args: argparse.Namespace) -> None:
@@ -1025,12 +1026,12 @@ def cmd_parity(args: argparse.Namespace) -> int:
         for item in result.reports():
             paired.append((item.scope, item.finding(), item))
 
-    baseline = Baseline.load(settings.baseline)
+    baseline = _baseline(settings)
     split = baseline.split(
         [(scope, hit) for scope, hit, _ in paired],
         scope=[name for result in results for name in result.scopes()],
     )
-    exempt = {id(hit) for _, hit in split.accepted}
+    exempt = {id(hit) for _, hit in split.excused}
     # Keyed off the pairing built above rather than by asking each result for
     # its disagreements again: those are fresh objects every call, so a second
     # ask would match nothing against the exemptions just resolved.
@@ -1095,8 +1096,9 @@ def cmd_parity(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
     # Not a disagreement: both sides may agree perfectly about what is left.
+    unattested = _report_attested(split, args, settings)
     _narrowed_fail(narrowed)
-    return 1 if failed or narrowed else 0
+    return 1 if failed or narrowed or unattested else 0
 
 
 def _shape(args: argparse.Namespace, settings: Settings) -> list[Shaped]:
@@ -1153,12 +1155,12 @@ def cmd_shape(args: argparse.Namespace) -> int:
         for item in result.violations
     ]
 
-    baseline = Baseline.load(settings.baseline)
+    baseline = _baseline(settings)
     split = baseline.split(
         [(scope, hit) for scope, hit, _ in paired],
         scope=[name for result in results for name in result.scopes()],
     )
-    exempt = {id(hit) for _, hit in split.accepted}
+    exempt = {id(hit) for _, hit in split.excused}
     live: dict[str, list[Violation]] = {}
     for _, hit, item in paired:
         if id(hit) not in exempt:
@@ -1212,8 +1214,9 @@ def cmd_shape(args: argparse.Namespace) -> int:
             f"\nFAIL: {failed} rule(s) a declaration does not satisfy.",
             file=sys.stderr,
         )
+    unattested = _report_attested(split, args, settings)
     _narrowed_fail(narrowed)
-    return 1 if failed or narrowed else 0
+    return 1 if failed or narrowed or unattested else 0
 
 
 def _probe(args: argparse.Namespace, settings: Settings) -> list[Probed]:
@@ -1263,12 +1266,12 @@ def cmd_probe(args: argparse.Namespace) -> int:
         for item in result.mismatches
     ]
 
-    baseline = Baseline.load(settings.baseline)
+    baseline = _baseline(settings)
     split = baseline.split(
         [(scope, hit) for scope, hit, _ in paired],
         scope=[name for result in results for name in result.scopes()],
     )
-    exempt = {id(hit) for _, hit in split.accepted}
+    exempt = {id(hit) for _, hit in split.excused}
     live: dict[str, list[Mismatch]] = {}
     for _, hit, item in paired:
         if id(hit) not in exempt:
@@ -1320,8 +1323,9 @@ def cmd_probe(args: argparse.Namespace) -> int:
         if unanswered:
             said.append(f"{unanswered} probe(s) that did not answer")
         print(f"\nFAIL: {', '.join(said)}.", file=sys.stderr)
+    unattested = _report_attested(split, args, settings)
     _narrowed_fail(narrowed)
-    return 1 if mismatched or unanswered or narrowed else 0
+    return 1 if mismatched or unanswered or narrowed or unattested else 0
 
 
 def cmd_unused(args: argparse.Namespace) -> int:
@@ -1507,6 +1511,48 @@ def _path_declared_predicate(
     return declared
 
 
+def _baseline(settings: Settings) -> Baseline:
+    """The project's baseline, carrying its attestations.
+
+    One loader for every gate, so no gate can consult the debt list and forget
+    the list of what is correct -- the two are separate files and separate
+    meanings, and both have to reach the split.
+    """
+    return replace(Baseline.load(settings.baseline),
+                   attestations=settings.attestations)
+
+
+def _report_attested(split: Split, args: argparse.Namespace, settings: Settings) -> int:
+    """Say how many findings were attested correct; fail on attestations unused.
+
+    **The count is not suppressed by --quiet**, on the baseline's rule: a list
+    of exemptions nobody reads the size of is how one rots, and an attestation
+    is an exemption with a reason attached.
+
+    **An unused attestation fails**, where a stale baseline record does not. A
+    stale record is debt paid; an attestation that excuses nothing vouches for
+    text that is no longer there, and left in place it would vouch for whatever
+    text arrives with that key next. Judged only on an unnarrowed run, for the
+    reason stale records are: under a path or ``--registry`` an attestation
+    outside the narrowing is absent, not unused.
+
+    :return: how many attestations failed this run
+    """
+    where = (settings.attestations_path.name
+             if settings.attestations_path else "attestations")
+    if split.attested:
+        print(f"attested: {len(split.attested)} finding(s) declared correct "
+              f"in {where}")
+    if not split.unused or _narrowed(args):
+        return 0
+    print(f"\nFAIL: {len(split.unused)} attestation(s) in {where} excuse "
+          "nothing -- the text they vouch for changed or is gone. Remove them, "
+          "or attest the new text:", file=sys.stderr)
+    for item in split.unused:
+        print(f"  {item}", file=sys.stderr)
+    return len(split.unused)
+
+
 def _report_stale(split: Split, *, quiet: bool = False) -> None:
     """Say how many accepted records nothing matched, and why one is a rewrite.
 
@@ -1647,7 +1693,7 @@ def cmd_claims(args: argparse.Namespace) -> int:
     found = _verify(args, settings)
     inventory = enforced(settings.root, settings.gates)
 
-    baseline = Baseline.load(settings.baseline)
+    baseline = _baseline(settings)
     # A `Bypass` is what the ratchet fingerprints; a `Claim` is what a reader
     # should be shown. Paired by position, because `findings()` is the one place
     # the tagging lives and re-spelling it here to get the pairing would be a
@@ -1774,6 +1820,7 @@ def cmd_claims(args: argparse.Namespace) -> int:
         ),
         coverage_of.owned_by("claims"),
     )
+    unattested = _report_attested(split, args, settings)
 
     # A lapsed baseline fails here for the reason it fails `check`: the date is
     # the whole mechanism, and exemptions still in force that nobody has decided
@@ -1829,7 +1876,7 @@ def cmd_claims(args: argparse.Namespace) -> int:
         else:
             print(f"{found.checked} documentation claim(s) checked, all resolve.")
     _narrowed_fail(narrowed)
-    return 1 if narrowed else 0
+    return 1 if narrowed or unattested else 0
 
 
 #: The starter config. Documentation-only by default, because that is the
@@ -2340,7 +2387,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     command that never looked for it, under a line recommending ``--prune``.
     """
     settings, reports, found = _run_review(args)
-    baseline = Baseline.load(settings.baseline)
+    baseline = _baseline(settings)
     split = baseline.split(_strong(reports), scope=[name for name, _ in reports])
 
     new_by_registry: dict[str, list[Bypass]] = {}
@@ -2424,8 +2471,9 @@ def cmd_check(args: argparse.Namespace) -> int:
     if split.new:
         label = "new bypass(es)" if baseline.exists else "bypass(es)"
         print(f"\nFAIL: {len(split.new)} {label} of declared things.", file=sys.stderr)
+    unattested = _report_attested(split, args, settings)
     _narrowed_fail(narrowed)
-    return 1 if split.new or narrowed else 0
+    return 1 if split.new or narrowed or unattested else 0
 
 
 def _boundary_rule(settings: Settings, name: str | None):
@@ -2715,7 +2763,7 @@ def cmd_baseline(args: argparse.Namespace) -> int:
         return 2
 
     try:
-        baseline = Baseline.load(settings.baseline)
+        baseline = _baseline(settings)
     except BaselineError:
         # `--record` replaces the file, so refusing to read the old one would
         # make the instruction it prints impossible to follow -- which is what
@@ -2728,6 +2776,14 @@ def cmd_baseline(args: argparse.Namespace) -> int:
               "a fresh one over it", file=sys.stderr)
         baseline = Baseline(path=settings.baseline)
     split = baseline.split(findings)
+    # An attested finding is not debt, so it is never recorded as some: the
+    # baseline and the attestations would otherwise both excuse it, and the
+    # record would outlive the attestation that made it unnecessary.
+    attested = {id(hit) for _, hit in split.attested}
+    findings = [(name, hit) for name, hit in findings if id(hit) not in attested]
+    if split.attested:
+        print(f"attested: {len(split.attested)} finding(s) declared correct, "
+              "never recorded here")
 
     if args.record:
         if not args.until:

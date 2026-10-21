@@ -11,6 +11,20 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 ## Unreleased
 
+**New**
+
+- **A finding that is correct as written can be attested, with the reason.** One finding at a
+  time, in a hand-written yapyon file beside the config, `.config/kinemata/attestations.yap`.
+  An entry names the finding with a baseline record's own keys and **must say why the text is
+  correct**. It never lapses; instead it **fails the run when it excuses nothing**, so it cannot
+  outlive the line it vouched for. Every gate that reads the baseline reads it, and
+  `baseline --record` never writes an attested finding as debt. Reported by yapyon 2026-10-17,
+  whose bytes-literal spec writes a hex value that `claims` reads as a commit; they had parked it
+  in their baseline, which calls correct text debt and expires. Across every tree measured, 1
+  pure-hex code span in 80 was data, so the rule stays and the instance is attested.
+- **`yapyon` is a runtime dependency**, `>=0.4,<0.5`: the format kinemata's own files are moving
+  to, starting with attestations. It has no dependencies of its own.
+
 **Fixed**
 
 - **A call passing a value is compared instead of shortened.** An argument that was not a plain

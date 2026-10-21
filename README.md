@@ -426,6 +426,38 @@ visible in the diff and routed to review — the same status as any other declar
 exemption. This is a catch with an escape hatch, and claiming otherwise would be
 claiming reach it does not have.
 
+### Text that is correct as written
+
+Some findings are not debt. The text is right, and the rule that flagged it is
+right almost everywhere else: a bytes-literal spec that writes the value
+`` `badf00d0` `` gets it read as a commit, because a pure-hex code span almost
+always is one (79 of the 80 measured were). A baseline record would call that
+line something to fix, and it would lapse.
+
+So a project **attests** it instead, one finding at a time, in a hand-written
+file beside its config, in [yapyon](https://github.com/doctorjei/yapyon):
+
+```yapyon
+# .config/kinemata/attestations.yap
+attestations:
+  - registry: "claims"
+    entry: "claim:commit"
+    antipattern: "badf00d0"
+    path: "docs/SPEC.md"
+    text: "`badf00d0`, the bytes `ba df 00 d0`; `bin'0101'` is `0x50`; `dna'GAC'` is"
+    correct: "badf00d0 is the bytes value of hex'badf00d' padded to a byte, not a commit"
+```
+
+The first five keys are a baseline record's own, so one moves across by adding
+the sixth. **`correct` is required and never blank**: it says why the text is
+right, which is what would have to change for it to be wrong. An attestation
+**never lapses** and instead **fails when it excuses nothing**, so one whose line
+was edited or deleted turns the run red until it is removed — it cannot outlive
+the text it vouched for. Every gate that reads the baseline reads these too, and
+prints how many findings they excused. `baseline --record` never writes an
+attested finding as debt. kinemata reads none of its own files as the project's:
+not the config, the baseline, the ratchets, or this one.
+
 ## Budgeting what a session actually loads
 
 `kinemata ids` bounds the registry's own projection, which is the smallest thing
@@ -579,7 +611,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **1486 tests**, and
+The companion guard is a number with an oracle. This suite is **1503 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 
