@@ -43,6 +43,10 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   made 7 new ones, re-recording made 18, and the gate could never go green. The config that was
   loaded, the baseline wherever `[project] baseline` puts it, and the ratchet directory are now
   out of every scan, absence rules included.
+- **`-r` no longer runs every probe.** A probe belongs to no registry, and every other scan
+  narrows to the one named, so `baseline -r NAME` counted every probe's mismatches among the
+  findings it would accept for `NAME`. A registry-narrowed run now leaves probes out, and
+  `probe -r NAME` is refused (exit 2) rather than running every probe while appearing narrowed.
 
 ## 0.8.0
 

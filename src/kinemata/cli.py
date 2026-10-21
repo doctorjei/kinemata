@@ -1224,7 +1224,16 @@ def _probe(args: argparse.Namespace, settings: Settings) -> list[Probed]:
 
     Shared for ``_shape``'s reason: the command that writes the exemption list
     has to run every check that feeds it.
+
+    **None under ``--registry``.** A probe belongs to no registry -- its scope is
+    ``probe:<name>`` and its corpus is the project's -- so every other scan here
+    narrows to the named registry and this one cannot. Run anyway, as it was
+    until 2026-10-21, ``baseline -r claims`` counted every probe's mismatches
+    among the findings it would accept for the documentation, and named
+    ``check`` as the gate failing on them.
     """
+    if args.registry:
+        return []
     return probe_survey(settings.probes)
 
 
@@ -1252,6 +1261,16 @@ def cmd_probe(args: argparse.Namespace) -> int:
             "error: no [[probe]] declared: nothing says what this project's "
             "code must accept and refuse. Declare a target, a case supplier "
             "and an outcome, or do not run this.",
+            file=sys.stderr,
+        )
+        return 2
+    # Refused rather than ignored: no probe belongs to a registry, so the filter
+    # could only be dropped in silence -- a run of every probe reading as a run
+    # of the one registry somebody asked about.
+    if args.registry:
+        print(
+            f"error: --registry {args.registry} narrows nothing here: a probe "
+            "belongs to no registry. Run `kinemata probe` without it.",
             file=sys.stderr,
         )
         return 2
