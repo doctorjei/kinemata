@@ -212,7 +212,7 @@ kinemata probe       # the gate, for what the project's own code accepts and
                      # supplies. Exits 1 on a case answered otherwise — or on a
                      # corpus carrying only one polarity, which a callable that
                      # refuses everything would satisfy. Refuses without a
-                     # [[probe]].
+                     # [[probe]], and under -r: a probe has no registry.
 kinemata boundary    # the AST gate for declared import layers and resolved call
                      # homes. Its optional ratchets are owned per rule, never by
                      # the project-wide baseline.
