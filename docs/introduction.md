@@ -2505,9 +2505,14 @@ down, and the two shapes at the end are the findings that matter most.
   *this shows code you will write* — CommonMark gives an info string no vocabulary for that, and
   inventing one is a convention every adopter would have to learn — or binding a call against
   the signature instead of comparing it, which loses the default-value check on every call-style
-  signature. Until then the shared ratchet accepts them, and `exclude` or `historical` narrows a
-  document out. **What would revive the declared mark:** a second tree whose example fences
-  outnumber its claims, so accepting them stops being the cheap answer.
+  signature. Until then each is **attested** — it is correct as written, which is what an
+  attestation says and a baseline record does not — and `exclude` or `historical` narrows a
+  document out. **Measured on the same tree after 0.8.0 shipped** (kanibako, 2026-10-14, with
+  `signatures` on): 9 findings, **3 real drift on 2 pages against 6 example or real-value
+  findings**, one of the six a markdown block in an untagged fence, which they re-tagged. Their
+  examples outnumber their real drift 2 to 1, but not their claims, so this is evidence and not
+  the condition below. **What would revive the declared mark:** a second tree whose example
+  fences outnumber its claims, so attesting them stops being the cheap answer.
   ⚑ **Also not compared, and named by the same adopter as the next misses: return annotations
   and dataclass fields.** A constructor call is never read — a class's parentheses hold bases —
   so a dataclass's fields have no claim to be checked against. **Python only**: the other side of
