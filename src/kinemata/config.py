@@ -62,7 +62,7 @@ from .adapters.substitutions import Substitutions
 from .adapters.values import ValueRegistry
 from .baseline import BASELINE_NAME
 from .boundary import BOUNDARY_KINDS, TYPE_CHECKING_POLICIES, Boundary, Ratchet, validate_name
-from .bypass import MODE_FILTERS, _is_home_file, git_ignored
+from .bypass import MODE_FILTERS, SKIP_DIRS, _is_home_file, git_ignored
 from .bypass import _walk as _files
 from .citations import DEFAULT_ACCOMPANY_MAX
 from .claims import (
@@ -1965,21 +1965,56 @@ def _check_scopes(
     project's -- because a fragment naming a file the registry never opens scopes
     it to nothing just as surely as one naming a file that does not exist, and a
     registry scoped to nothing reads exactly like one that passed.
+
+    **The tree is walked only for what a direct lookup cannot settle, and only
+    until every fragment has matched.** It was walked whole, once per scoped
+    registry, on every load: kanibako measured 0.33 s becoming over 2 m 40 s
+    with their home as a config's root (2026-10-14), and a 90,000-file scratch
+    tree took 3.2 s to load a config whose one fragment named a file at the top.
+    A fragment that matches nothing still walks everything, which is the run
+    that is about to be refused anyway.
     """
     for registry in registries:
         only = member(registry, "only")
         if not only:
             continue
-        reads = member(registry, "suffixes") or suffixes
-        files = [str(file.relative_to(root)) for file in _files(root, tuple(reads))]
-        for fragment in only:
-            if not any(matches(rel, fragment) for rel in files):
-                raise ConfigError(
-                    f"{path}: registry {registry.name!r} only {fragment!r} matches "
-                    f"no file it reads ({', '.join(reads)} under {root}), so the "
-                    "registry would check nothing. A fragment names whole path "
-                    "segments, never part of a name."
-                )
+        reads = tuple(member(registry, "suffixes") or suffixes)
+        unmatched = [
+            fragment for fragment in only if not _names_read_file(root, fragment, reads)
+        ]
+        if unmatched:
+            for file in _files(root, reads):
+                rel = str(file.relative_to(root))
+                unmatched = [fragment for fragment in unmatched if not matches(rel, fragment)]
+                if not unmatched:
+                    break
+        if unmatched:
+            raise ConfigError(
+                f"{path}: registry {registry.name!r} only {unmatched[0]!r} matches "
+                f"no file it reads ({', '.join(reads)} under {root}), so the "
+                "registry would check nothing. A fragment names whole path "
+                "segments, never part of a name."
+            )
+
+
+def _names_read_file(root: Path, fragment: str, reads: tuple[str, ...]) -> bool:
+    """Does ``fragment``, read as a path from ``root``, reach a file of ``reads``?
+
+    A fragment matching at the root is one :func:`matches` would accept, so
+    ``True`` settles it. ``False`` settles nothing -- an unanchored fragment may
+    match deeper -- and the caller walks. A segment the walk would never enter
+    (``SKIP_DIRS``, ``.``, ``..``) is left to the walk too, so a lookup cannot
+    accept a file no scan reads.
+    """
+    parts = [part for part in fragment.split("/") if part]
+    if not parts or any(part in SKIP_DIRS or part in {".", ".."} for part in parts):
+        return False
+    target = root.joinpath(*parts)
+    if target.is_file():
+        return target.suffix in reads
+    if target.is_dir():
+        return next(_files(root, reads, within=target), None) is not None
+    return False
 
 
 def _check_regions(

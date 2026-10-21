@@ -18,6 +18,11 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   both read as `f(a)` and **agreed** with `def f(a)`: an argument the code has no parameter for,
   passing. Reported by kanibako 2026-10-14. Such an argument now holds its place and matches no
   parameter name, which changes no verdict except those agreements.
+- **Loading a config with an `only` scope no longer walks the whole tree.** Every load walked the
+  root once per scoped registry to confirm each fragment matched a file, so a config rooted at a
+  large directory paid for a full walk before any command ran — kanibako measured 0.33 s becoming
+  over 2 m 40 s with their home as the root (2026-10-14). A fragment is looked up at its path
+  first, and the walk, when one is needed, stops once every fragment has matched.
 
 ## 0.8.0
 
