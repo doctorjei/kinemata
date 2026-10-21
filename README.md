@@ -460,9 +460,12 @@ attestations:
 The first five keys are a baseline record's own, so one moves across by adding
 the sixth. **`correct` is required and never blank**: it says why the text is
 right, which is what would have to change for it to be wrong. An attestation
-**never lapses** and instead **fails when it excuses nothing**, so one whose line
+**never lapses** and instead **fails once its text is gone**, so one whose line
 was edited or deleted turns the run red until it is removed — it cannot outlive
-the text it vouched for. Every gate that reads the baseline reads these too, and
+the text it vouched for. One whose line is unchanged but that excused nothing on
+a run is reported as **idle** and does not fail: a checkout with no git history
+cannot resolve a commit at all, and a run that could not check has not found
+anything wrong. Every gate that reads the baseline reads these too, and
 prints how many findings they excused. `baseline --record` never writes an
 attested finding as debt. kinemata reads none of its own files as the project's:
 not the config, the baseline, the ratchets, or this one.
@@ -620,7 +623,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **1518 tests**, and
+The companion guard is a number with an oracle. This suite is **1519 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 

@@ -55,8 +55,9 @@ CODE = {
 }
 
 
-def project(tmp_path, *, source="X = 1\n"):
-    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+def project(tmp_path, *, source="X = 1\n", git=True):
+    if git:
+        subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     (tmp_path / "SPEC.md").write_text(f"# Spec\n\n{LINE}\n")
     (tmp_path / "app.py").write_text(source)
     path = tmp_path / "kinemata.toml"
@@ -120,15 +121,28 @@ def test_the_attestations_file_is_not_read_as_a_document(tmp_path, capsys):
 # -- what makes it not the baseline ------------------------------------------------
 
 
-def test_an_attestation_that_excuses_nothing_fails(tmp_path, capsys):
+def test_an_attestation_whose_text_is_gone_fails(tmp_path, capsys):
     """The line was edited: the attestation vouches for text that is gone."""
     config = project(tmp_path)
     attest(tmp_path, COMMIT)
     (tmp_path / "SPEC.md").write_text("# Spec\n\nthe bytes `0xbadf00d0`.\n")
     status, out = run(capsys, "claims", "-c", config)
     assert status == 1
-    assert "1 attestation(s) in attestations.yap excuse nothing" in out
+    assert "1 attestation(s) in attestations.yap vouch for text that is gone" in out
     assert "SPEC.md: 'badf00d0'" in out
+
+
+def test_a_run_that_could_not_produce_the_finding_is_idle_not_failed(tmp_path, capsys):
+    """No ``.git``, as in an unpacked sdist: no commit claim resolves or fails.
+
+    The line is unchanged, so nothing about the attestation is wrong -- the run
+    could not check. Both of this repository's own attestations hit exactly this.
+    """
+    config = project(tmp_path, git=False)
+    attest(tmp_path, COMMIT)
+    status, out = run(capsys, "claims", "-c", config)
+    assert status == 0, out
+    assert "idle: 1 attestation(s)" in out
 
 
 def test_a_narrowed_run_does_not_judge_what_it_did_not_read(tmp_path, capsys):

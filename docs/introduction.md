@@ -2392,7 +2392,7 @@ down, and the two shapes at the end are the findings that matter most.
   one that was data a bytes-literal spec's value. **Data written as a literal is never read** — a
   quoted span, a :shown:`0x` prefix, any notation inside the backticks — so the case left is
   data shown bare, and the answer for it is an **attestation**, which says why the text is
-  correct and fails once it excuses nothing. **What would revive a rule instead:** a tree where
+  correct and fails once its text is gone. **What would revive a rule instead:** a tree where
   bare hex data in code spans is common enough that attesting each one stops being the cheap
   answer.
 - **accepted** · **`historical` is a path axis, but a changelog's currency varies by section.** A

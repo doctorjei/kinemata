@@ -220,10 +220,12 @@ class Split:
     #: as accepted: an accepted finding is debt with a date, and these are not
     #: debt. See :mod:`kinemata.attestations`.
     attested: tuple[tuple[str, Bypass], ...] = ()
-    #: Attestations this scan could judge that excused nothing -- the line was
-    #: edited, moved or fixed. **These fail**, unlike :attr:`stale`: a stale
-    #: baseline record is debt paid, while an attestation that matches nothing
-    #: is a claim of correctness about text that no longer exists.
+    #: Attestations this scan could judge that excused nothing. **Those whose
+    #: text is gone fail**, unlike :attr:`stale` -- a stale record is debt paid,
+    #: while an attestation for a line that no longer exists vouches for nothing
+    #: -- and those whose text is still there are idle. The split cannot tell
+    #: the two apart; it does not read files. See
+    #: :func:`kinemata.attestations.still_written`.
     unused: tuple[Attestation, ...] = ()
 
     @property

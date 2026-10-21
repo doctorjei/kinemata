@@ -27,8 +27,9 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 - **A finding that is correct as written can be attested, with the reason.** One finding at a
   time, in a hand-written yapyon file beside the config, `.config/kinemata/attestations.yap`.
   An entry names the finding with a baseline record's own keys and **must say why the text is
-  correct**. It never lapses; instead it **fails the run when it excuses nothing**, so it cannot
-  outlive the line it vouched for. Every gate that reads the baseline reads it, and
+  correct**. It never lapses; instead it **fails the run once its line is gone**, so it cannot
+  outlive the text it vouched for, while one whose line is unchanged but that a run could not
+  match (no git history to resolve a commit against, say) is reported as idle. Every gate that reads the baseline reads it, and
   `baseline --record` never writes an attested finding as debt. Reported by yapyon 2026-10-17,
   whose bytes-literal spec writes a hex value that `claims` reads as a commit; they had parked it
   in their baseline, which calls correct text debt and expires. Across every tree measured, 1

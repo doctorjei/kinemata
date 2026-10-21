@@ -47,6 +47,7 @@ from pathlib import Path
 from . import coverage as coverage_of
 from . import stamps
 from .adapters.bibliography import EXTERNAL, Bibliography, undeclared_key
+from .attestations import still_written
 from .baseline import Baseline, BaselineError, Split, record
 from .boundary import BoundaryError, load_artifact, save_artifact
 from .boundary import inventory as boundary_inventory
@@ -1542,18 +1543,22 @@ def _baseline(settings: Settings) -> Baseline:
 
 
 def _report_attested(split: Split, args: argparse.Namespace, settings: Settings) -> int:
-    """Say how many findings were attested correct; fail on attestations unused.
+    """Say how many findings were attested correct; fail on attestations whose
+    text is gone.
 
-    **The count is not suppressed by --quiet**, on the baseline's rule: a list
-    of exemptions nobody reads the size of is how one rots, and an attestation
-    is an exemption with a reason attached.
+    **The counts are not suppressed by --quiet**, on the baseline's rule: a
+    list of exemptions nobody reads the size of is how one rots, and an
+    attestation is an exemption with a reason attached.
 
-    **An unused attestation fails**, where a stale baseline record does not. A
-    stale record is debt paid; an attestation that excuses nothing vouches for
-    text that is no longer there, and left in place it would vouch for whatever
-    text arrives with that key next. Judged only on an unnarrowed run, for the
-    reason stale records are: under a path or ``--registry`` an attestation
-    outside the narrowing is absent, not unused.
+    **An attestation whose line is gone fails**, where a stale baseline record
+    does not. A stale record is debt paid; an attestation for text that no
+    longer exists vouches for nothing, and left in place it would vouch for
+    whatever arrives with that key next. **One whose line is still there is
+    idle, and does not fail**: the run could not produce the finding -- no
+    ``.git`` to resolve a commit against, say -- which is not the text being
+    wrong. Judged only on an unnarrowed run, for the reason stale records are:
+    under a path or ``--registry`` an attestation outside the narrowing is
+    absent, not unused.
 
     :return: how many attestations failed this run
     """
@@ -1564,12 +1569,22 @@ def _report_attested(split: Split, args: argparse.Namespace, settings: Settings)
               f"in {where}")
     if not split.unused or _narrowed(args):
         return 0
-    print(f"\nFAIL: {len(split.unused)} attestation(s) in {where} excuse "
-          "nothing -- the text they vouch for changed or is gone. Remove them, "
-          "or attest the new text:", file=sys.stderr)
-    for item in split.unused:
-        print(f"  {item}", file=sys.stderr)
-    return len(split.unused)
+    gone = [item for item in split.unused
+            if not still_written(item, settings.root)]
+    idle = [item for item in split.unused if item not in gone]
+    if idle:
+        print(f"idle: {len(idle)} attestation(s) in {where} excused nothing "
+              "this run, their text unchanged -- the run could not produce the "
+              "finding, or the rule no longer flags it:")
+        for item in idle:
+            print(f"  {item}")
+    if gone:
+        print(f"\nFAIL: {len(gone)} attestation(s) in {where} vouch for text "
+              "that is gone. Remove them, or attest the new text:",
+              file=sys.stderr)
+        for item in gone:
+            print(f"  {item}", file=sys.stderr)
+    return len(gone)
 
 
 def _report_stale(split: Split, *, quiet: bool = False) -> None:

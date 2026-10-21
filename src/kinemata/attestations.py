@@ -15,10 +15,18 @@ So an attestation differs from a baseline record on exactly two things:
 - it **states why the text is correct** -- the ``correct`` field, required and
   never blank, so an entry says what would have to change for it to be wrong,
   not merely that a finding was noisy;
-- it **never lapses**, and instead **fails when it excuses nothing**: an
-  attestation whose line was edited or deleted is reported and fails the run
-  until it is removed, so the file cannot outlive what it vouched for. The same
-  rule ``[[interpose]]`` applies to a marker that changed no verdict.
+- it **never lapses**, and instead **fails once its text is gone**: an
+  attestation whose line was edited or deleted fails the run until it is
+  removed, so the file cannot outlive what it vouched for -- the rule
+  ``[[interpose]]`` applies to a marker that changed no verdict.
+
+**Excusing nothing is not the same as its text being gone**, and only the
+second fails. A run can be unable to produce the finding at all: unpacked from
+an sdist there is no ``.git``, so no commit claim resolves or fails, and both of
+this repository's own attestations excused nothing while the lines they vouch
+for sat unchanged (2026-10-21). Failing there would turn a run that could not
+check into a run that found something wrong. Such an attestation is reported
+as **idle** instead; :func:`still_written` is the test.
 
 An entry names a finding with the baseline record's own keys, so a record can
 be moved across by adding ``correct``. It covers **every** finding with that
@@ -147,6 +155,20 @@ def _entry(path: Path, index: int, raw: object) -> Attestation:
         text=raw["text"],
         correct=raw[CORRECT],
     )
+
+
+def still_written(attestation: Attestation, root: Path) -> bool:
+    """Is the line this attestation vouches for still in its file?
+
+    Compared the way a finding is keyed -- whitespace collapsed -- so an
+    indentation change is the same line, and an edited word is not.
+    """
+    try:
+        source = (root / attestation.path).read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return False
+    wanted = normalize(attestation.text)
+    return any(normalize(line) == wanted for line in source.splitlines())
 
 
 def keys(attestations: Iterable[Attestation]) -> dict[tuple[str, ...], Attestation]:
