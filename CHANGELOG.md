@@ -60,6 +60,20 @@ carries the decision. A changelog repeating either becomes a second carrier and 
   findings it would accept for `NAME`. A registry-narrowed run now leaves probes out, and
   `probe -r NAME` is refused (exit 2) rather than running every probe while appearing narrowed.
 
+**Changed**
+
+What an existing config sees on upgrading:
+
+- **A baselined signature finding for a call passing a value comes back as new.** Its fingerprint
+  holds the rendered call, which now keeps the value — `f("x")` was recorded as `f()` — so the
+  old record is reported as no longer present and the finding as new. Re-record it, or attest it
+  if the fence is correct as written.
+- **`kinemata probe -r NAME` exits 2.** It ran every probe before; a CI step passing `-r` to it
+  needs the flag removed.
+- **Findings that were in kinemata's own files are gone**, so a baseline that accepted any lists
+  them as no longer present, and `kinemata baseline --prune` drops them.
+- **`pip install kinemata` installs `yapyon`.**
+
 ## 0.8.0
 
 **New**
