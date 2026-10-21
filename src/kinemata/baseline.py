@@ -46,7 +46,7 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -370,6 +370,46 @@ class Baseline:
             if lost:
                 found.append(Shrink(key, tuple(sorted(lost)), whole=False))
         return found
+
+    def outside(
+        self,
+        judged: Collection[str],
+        owned: Callable[[str], bool],
+        sources: Collection[str],
+    ) -> Baseline:
+        """Everything here a narrowed run does not own, exactly as it was.
+
+        ``judged`` are the record scopes the run judged, ``owned`` says which
+        coverage keys it locks and ``sources`` which population fingerprints
+        belong to it -- the run's own answers, as :meth:`split` and
+        :meth:`shrunk` already take them. What comes back is what a scoped
+        ``--record`` or ``--prune`` must carry over untouched, including the
+        file's date, signature and note.
+
+        **Asked for by an adopter** (kanibako, 2026-10-14): wanting their claim
+        records alone, they recorded every registry's locks too -- 78 KB -- and
+        stripped them by hand. A narrowed write was refused outright until
+        then, because rebuilding the whole file from one registry's scan
+        deletes everything else in it; carrying the rest is what lets the
+        narrowed run write at all.
+        """
+        return Baseline(
+            path=self.path,
+            accepted=tuple(item for item in self.accepted
+                           if item.registry not in judged),
+            until=self.until,
+            by=self.by,
+            note=self.note,
+            coverage={key: rows for key, rows in self.coverage.items()
+                      if not owned(key)},
+            populations={key: print_ for key, print_ in self.populations.items()
+                         if key not in sources},
+        )
+
+    @property
+    def empty(self) -> bool:
+        """Nothing accepted, locked or fingerprinted."""
+        return not (self.accepted or self.coverage or self.populations)
 
     def lapsed(self, today: date | None = None) -> bool:
         return self.until is not None and self.until < (today or date.today())

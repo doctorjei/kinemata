@@ -13,6 +13,17 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 **New**
 
+- **`baseline --record -r NAME` and `--prune -r NAME` write one registry's part of the baseline
+  and carry the rest.** Reported by kanibako 2026-10-14: they wanted five claim records, and
+  `--record` wrote coverage and population locks for every registry as well, 78 KB they stripped
+  by hand, because `-r claims --record` was refused. On a fresh baseline, `-r claims --record` now
+  writes the claim records and no other registry's locks; on an existing one it rewrites the
+  records and locks that registry's scans own and carries every other record, lock and
+  fingerprint over unchanged. **It changes nothing it did not scan, dates included:** the file's
+  `until`, `by` and `note` govern every record in it, so while anything else is carried they are
+  kept, and a narrowed write that would change them, or that would rewrite a lapsed or unreadable
+  file, is refused (exit 2). An oracle the narrowed run executes still stalls it. A path argument
+  still cannot narrow a write.
 - **A finding that is correct as written can be attested, with the reason.** One finding at a
   time, in a hand-written yapyon file beside the config, `.config/kinemata/attestations.yap`.
   An entry names the finding with a baseline record's own keys and **must say why the text is

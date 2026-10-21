@@ -371,6 +371,15 @@ that produced them, so no gate reports another's as fixed — it names them
 instead, and `kinemata baseline` runs every one of them, being the only command
 that writes the file.
 
+**`-r NAME` narrows a write to what that registry owns.** `kinemata baseline
+-r claims --record` rewrites the documentation's records and locks and carries
+every other record and lock over unchanged — asked for by an adopter who wanted
+only their claim records and got every registry's locks as well. One `--until`,
+`--by` and `--note` govern the whole file, so while anything else is carried a
+narrowed write keeps them: one that would change them is refused, and so is one
+over a lapsed or unreadable file. A path still cannot narrow a write, since it
+narrows every check at once and judges none of them completely.
+
 **The same file locks what each gate covers.** `--record` also writes, from the
 declaration, what every gate that reads the baseline covers: a parity view's rows
 and fields, a registry's entries, a closed registry, a shape rule's group, a probe's
@@ -611,7 +620,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **1505 tests**, and
+The companion guard is a number with an oracle. This suite is **1518 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 

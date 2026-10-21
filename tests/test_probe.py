@@ -626,6 +626,38 @@ def test_a_registry_narrowed_baseline_leaves_every_probe_out(project, capsys):
     assert "would accept 1 finding(s)" in capsys.readouterr().out
 
 
+def test_a_blocked_probe_does_not_stall_a_write_narrowed_to_a_registry(
+    project, capsys
+):
+    """A probe belongs to no registry, so a write narrowed to one neither
+    runs it nor touches its records -- and so cannot be stalled by it. The
+    full write still is."""
+    write(project, "kinemata.toml", '''
+        [[probe]]
+        name = "scopes"
+        target = "subject:nowhere"
+        cases = "corpus:both"
+        outcome = "raises"
+        refusal = "subject:Refused"
+
+        [[registry]]
+        name = "constants"
+        kind = "python-constants"
+        modules = ["consts.py"]
+    ''')
+    write(project, "consts.py", 'BOX_META_FILE = "box.yaml"\n')
+    write(project, "app.py", 'p = root / "box.yaml"\n')
+    config = str(project / "kinemata.toml")
+
+    assert main(["baseline", "--config", config, "--record",
+                 "--until", "2099-01-01"]) == 2
+    assert "cannot answer" in capsys.readouterr().err
+    assert main(["baseline", "--config", config, "-r", "constants", "--record",
+                 "--until", "2099-01-01"]) == 0
+    written = Baseline.load(project / BASELINE_NAME)
+    assert [item.registry for item in written.accepted] == ["constants"]
+
+
 def test_the_command_refuses_a_registry_filter(project, capsys):
     """Refused rather than ignored: dropping the filter in silence would read
     as a run of the one registry somebody asked about."""

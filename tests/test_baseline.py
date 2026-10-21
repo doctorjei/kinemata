@@ -351,20 +351,28 @@ def test_an_unreadable_baseline_stops_the_gate(project, capsys):
     assert "error" in capsys.readouterr().err
 
 
-def test_a_partial_scan_may_not_rewrite_the_baseline(project, capsys):
-    """A baseline describes the project, so a scan of one registry or one
-    directory cannot author it. Rewriting from a partial scan would drop every
-    record the scan could not produce -- the exemption list shrinks, `check`
-    goes red on untouched code, and re-recording looks like the fix."""
+def test_a_path_narrowed_scan_may_not_rewrite_the_baseline(project, capsys):
+    """A baseline describes the project, so a scan of one directory cannot
+    author it. Rewriting from a partial scan would drop every record the scan
+    could not produce -- the exemption list shrinks, `check` goes red on
+    untouched code, and re-recording looks like the fix.
+
+    A *registry* filter was refused the same way until 2026-10-21, when a
+    narrowed write learned to carry what it did not scan. A path cannot be
+    carried like that: it narrows every check at once, judging none of them
+    completely."""
     main(["baseline", "-c", cfg(project), "--record", "--until", "2099-01-01"])
     capsys.readouterr()
 
-    argv = ["baseline", "-c", cfg(project), "--record", "--until", "2099-01-01",
-            "-r", "constants"]
-    assert main(argv) == 2
+    assert main(["baseline", "-c", cfg(project), "--record", "--until",
+                 "2099-01-01", "src/consts.py"]) == 2
     assert "refusing to rewrite" in capsys.readouterr().err
 
     assert main(["baseline", "-c", cfg(project), "--prune", "src"]) == 2
+    assert "refusing to rewrite" in capsys.readouterr().err
+
+    assert main(["baseline", "-c", cfg(project), "--record", "--until",
+                 "2099-01-01", "-r", "constants", "src/consts.py"]) == 2
     assert "refusing to rewrite" in capsys.readouterr().err
 
     assert Baseline.load(project / ".kinemata-baseline.json").size == 1
@@ -587,3 +595,172 @@ def test_record_can_replace_a_baseline_it_cannot_read(project, capsys):
     assert main(["baseline", "-c", cfg(project), "--record",
                  "--until", "2099-06-01"]) == 0
     assert Baseline.load(path).until.isoformat() == "2099-06-01"
+
+
+# -- a write narrowed to one registry -----------------------------------------
+#
+# kanibako, 2026-10-14: wanting only their claim records, `--record` wrote every
+# registry's coverage locks too -- 78 KB -- and they stripped them by hand,
+# because `-r claims --record` was refused. A narrowed write now rewrites what
+# its registry owns and carries the rest, the file's date included.
+
+
+@pytest.fixture
+def mixed(tmp_path):
+    """Two registries, both locked by a full record, and documentation."""
+    write(tmp_path, "src/consts.py", 'BOX_META_FILE = "box.yaml"\n')
+    write(tmp_path, "src/other.py", 'COLOR = "teal"\n')
+    write(tmp_path, "src/app.py", 'p = root / "box.yaml"\n')
+    write(tmp_path, "docs/guide.md", "The loader is `src/loader.py`.\n")
+    write(tmp_path, "kinemata.toml", """
+        [project]
+        root = "."
+
+        [claims]
+        suffixes = [".md"]
+
+        [[registry]]
+        name = "constants"
+        kind = "python-constants"
+        modules = ["src/consts.py"]
+
+        [[registry]]
+        name = "palette"
+        kind = "python-constants"
+        modules = ["src/other.py"]
+        """)
+    return tmp_path
+
+
+def written(project):
+    return json.loads((project / ".kinemata-baseline.json").read_text())
+
+
+def baseline(project, *argv):
+    return main(["baseline", "-c", cfg(project), *argv])
+
+
+def test_a_narrowed_record_on_a_fresh_file_writes_that_registry_alone(mixed, capsys):
+    """The adopter's want, exactly: claim records and no other registry's locks."""
+    assert baseline(mixed, "-r", "claims", "--record", "--until", "2099-01-01") == 0
+    document = written(mixed)
+    assert {row["registry"] for row in document["findings"]} == {"claims"}
+    assert "coverage" not in document
+    assert "populations" not in document
+    assert document["until"] == "2099-01-01"
+
+
+def test_a_narrowed_record_carries_everything_else_unchanged(mixed, capsys):
+    """Out-of-scope records, locks and prints come through as they were, even
+    where the tree has moved under them: a new bypass in `constants` is not
+    this run's to accept."""
+    assert baseline(mixed, "--record", "--until", "2099-01-01",
+                    "--by", "Jei", "--note", "adoption") == 0
+    before = written(mixed)
+    write(mixed, "docs/more.md", "The parser is `src/parser.py`.\n")
+    write(mixed, "src/later.py", 'q = open("box.yaml")\n')
+    write(mixed, "src/consts.py", 'BOX_META_FILE = "box.yaml"\nLOG = "logs"\n')
+    capsys.readouterr()
+
+    assert baseline(mixed, "-r", "claims", "--record") == 0
+    assert "carried over unchanged" in capsys.readouterr().out
+    after = written(mixed)
+
+    def outside(document):
+        return [row for row in document["findings"] if row["registry"] != "claims"]
+
+    assert outside(after) == outside(before)
+    assert after["coverage"] == before["coverage"]
+    assert after["populations"] == before["populations"]
+    assert [after[k] for k in ("until", "by", "note")] == ["2099-01-01", "Jei", "adoption"]
+    claims = [row["path"] for row in after["findings"] if row["registry"] == "claims"]
+    assert sorted(claims) == ["docs/guide.md", "docs/more.md"]
+
+
+def test_a_narrowed_record_rewrites_its_own_lock(mixed, capsys):
+    """What the registry owns is rebuilt, records and lock alike; its
+    neighbor's lock and the documentation's records are not."""
+    assert baseline(mixed, "--record", "--until", "2099-01-01") == 0
+    before = written(mixed)
+    write(mixed, "src/consts.py", 'BOX_META_FILE = "box.yaml"\nLOG_DIR = "logs"\n')
+    write(mixed, "src/app.py", 'p = root / "box.yaml"\nq = root / "logs"\n')
+    write(mixed, "src/other.py", 'COLOR = "teal"\nSHADE = "navy"\n')
+    capsys.readouterr()
+
+    assert baseline(mixed, "-r", "constants", "--record") == 0
+    after = written(mixed)
+    assert after["coverage"]["check:constants:entries"] == ["BOX_META_FILE", "LOG_DIR"]
+    assert after["coverage"]["check:palette:entries"] == ["COLOR"]
+    assert after["populations"]["registry:palette"] == before["populations"]["registry:palette"]
+    assert [row for row in after["findings"] if row["registry"] == "claims"] == [
+        row for row in before["findings"] if row["registry"] == "claims"
+    ]
+    assert sorted(row["entry"] for row in after["findings"]
+                  if row["registry"] == "constants") == ["BOX_META_FILE", "LOG_DIR"]
+
+
+@pytest.mark.parametrize("flags", [
+    ("--until", "2100-01-01"),
+    ("--by", "Somebody Else"),
+    ("--note", "another reason"),
+])
+def test_a_narrowed_record_may_not_change_the_files_date(mixed, capsys, flags):
+    """The date, signature and note are the whole file's. Changing them from a
+    write that did not scan the rest would renew exemptions nobody looked at."""
+    assert baseline(mixed, "--record", "--until", "2099-01-01",
+                    "--by", "Jei", "--note", "adoption") == 0
+    path = mixed / ".kinemata-baseline.json"
+    bytes_before = path.read_bytes()
+    capsys.readouterr()
+
+    assert baseline(mixed, "-r", "claims", "--record", *flags) == 2
+    err = capsys.readouterr().err
+    assert f"refusing to change {flags[0]}" in err
+    assert "full `kinemata baseline --record`" in err
+    assert path.read_bytes() == bytes_before
+
+    # Restating the file's own values is not a change.
+    assert baseline(mixed, "-r", "claims", "--record", "--until", "2099-01-01",
+                    "--by", "Jei", "--note", "adoption") == 0
+
+
+def test_a_narrowed_record_refuses_a_lapsed_file(mixed, capsys):
+    """Carrying the date means carrying a lapsed one, and writing a fresh file
+    that is already lapsed would be a write that only looks like progress."""
+    assert baseline(mixed, "--record", "--until", "2000-01-01") == 0
+    path = mixed / ".kinemata-baseline.json"
+    bytes_before = path.read_bytes()
+    capsys.readouterr()
+
+    assert baseline(mixed, "-r", "claims", "--record") == 2
+    assert "lapsed on 2000-01-01" in capsys.readouterr().err
+    assert path.read_bytes() == bytes_before
+
+
+def test_a_narrowed_record_refuses_a_file_it_cannot_read(mixed, capsys):
+    """A full record writes a fresh file over an unreadable one; a narrowed
+    one would have to carry the rest of it, and cannot."""
+    path = mixed / ".kinemata-baseline.json"
+    path.write_text("{not json")
+    assert baseline(mixed, "-r", "claims", "--record", "--until", "2099-01-01") == 2
+    assert "cannot carry what it cannot read" in capsys.readouterr().err
+    assert path.read_text() == "{not json"
+
+
+def test_a_narrowed_prune_drops_only_its_own_stale_records(mixed, capsys):
+    assert baseline(mixed, "--record", "--until", "2099-01-01") == 0
+    write(mixed, "src/app.py", "p = root / meta_file\n")       # constants: gone
+    write(mixed, "src/loader.py", "")                            # claims: gone
+    capsys.readouterr()
+
+    assert baseline(mixed, "-r", "claims", "--prune") == 0
+    assert "Dropped 1 record(s)" in capsys.readouterr().out
+    assert [row["registry"] for row in written(mixed)["findings"]] == ["constants"]
+
+
+def test_a_narrowed_write_to_a_name_nothing_scans_is_refused(mixed, capsys):
+    """Refuse, don't no-op: a misspelled registry would otherwise report a
+    successful write that changed nothing."""
+    assert baseline(mixed, "-r", "constnats", "--record", "--until", "2099-01-01") == 2
+    assert "names nothing this run scans" in capsys.readouterr().err
+    assert not (mixed / ".kinemata-baseline.json").exists()

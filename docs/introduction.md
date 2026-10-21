@@ -822,7 +822,7 @@ does not want this.
 | `kinemata probe` | behavior gate, ratcheted — a declared corpus of inputs against what the project's code **accepts and refuses**. The one check that calls the project's own code; it reads no tree and takes no path, because the corpus comes from the project, and no `-r`, because a probe belongs to no registry — `baseline -r` runs none | a case the code answers otherwise that the baseline does not already accept, a probe that could not be evaluated, or **a corpus carrying only one polarity**. Refuses outright (exit 2) if no `[[probe]]` is declared, or under `-r` |
 | `kinemata boundary` | AST import-layer and resolved call-home gate; an optional ratchet belongs to the one named rule rather than to `baseline` | a policy violation not accepted by its valid sidecar, a blocked or vacuous scan, or an orphaned, expired, malformed, wrong-owner, or **changed-rule** sidecar. Calls whose receiver cannot be followed are **counted** (`unjudged:`) rather than failed — the writer still refuses on them. Refuses outright (exit 2) if no `[[boundary]]` is declared |
 | `kinemata context` | session-load gate | measured bytes exceed `budget` |
-| `kinemata baseline` | shows accepted findings; `--record --until`, `--prune` | — |
+| `kinemata baseline` | shows accepted findings; `--record --until`, `--prune`; `-r NAME` writes that registry's part alone | — |
 | `kinemata stamp` | mints a citation stamp, or decodes one; reads no config | the text given is not a stamp |
 | `kinemata cite` | resolves a reference key — forward to its source, `--where` to every `file:line` citing it, bare for every key with its count | the key is malformed, or no entry declares it |
 | `kinemata stale` | citations not confirmed within `stale_after`, scoped to kinds that cost a network request; a local claim is settled on every run, so a clock over it restates what the run already knows. A citation in a declared resource is clocked from its entry's date | never — refuses (exit 2) if `[citations] provenance` is not declared, because the citations carrying a stamp would then be an accident of who wrote them |
@@ -1172,6 +1172,28 @@ so no gate reports another's as fixed — it names them instead, because silence
 exemption list reads exactly like having accounted for all of it. `kinemata baseline` runs every
 one of those scans, being the only command that writes the file; a `--prune` covering some of
 them would delete the rest's records on the strength of never having looked.
+
+**`-r NAME` narrows a write to what that registry owns, and carries the rest.** `--record` and
+`--prune` under `-r` rewrite the records whose scopes that registry's scans judged, and the locks
+each gate counts as that registry's (`check:NAME:entries`, `undeclared:NAME`, `parity:NAME:…`,
+`shape:NAME:…`, and `claims:…` for `-r claims`), and carry every other record, lock and population
+fingerprint over unchanged. A probe belongs to no registry, so `-r` runs none and a blocked probe
+cannot stall a narrowed write; an oracle the narrowed run does execute still stalls it, as below.
+Asked for by kanibako (2026-10-14), whose full `--record` wrote 78 KB of other registries' locks
+when they wanted five claim records.
+
+| situation | narrowed `--record` |
+|---|---|
+| nothing outside the registry in the file, or no file | `--until` required; `--by`, `--note` taken from the flags |
+| anything outside it carried | the file's `until`, `by`, `note` kept; a flag that differs is refused (exit 2) |
+| the file has lapsed and anything is carried | refused (exit 2) — it would rewrite a lapsed file |
+| the file cannot be read | refused (exit 2) — a full `--record` writes a fresh one over it |
+| the name matches nothing the run scans | refused (exit 2) |
+
+The dates are the file's because the format carries one `until` for every record; changing them
+from a write that did not scan the rest would renew exemptions nobody looked at. **A path cannot
+narrow a write**: it narrows every check at once and judges none of them completely, so
+`--record` and `--prune` with a path argument are still refused.
 
 **The same file locks coverage.** `--record` also writes what each gate covers, read from the
 declaration, and a later run of that gate covering less **fails**. Covering more never does.

@@ -1174,6 +1174,26 @@ def test_a_blocked_oracle_refuses_to_record_too(tmp_path, capsys):
     ) == 2
 
 
+def test_a_blocked_oracle_stalls_a_write_narrowed_to_its_registry(tmp_path, capsys):
+    """Narrowing the write narrows what it carries, not the guard: the oracle
+    is the named registry's own, and its records are the ones rewritten."""
+    from kinemata.baseline import Baseline
+
+    declare(tmp_path, declared=("app.name", "app.legacy"))
+    main(["baseline", "-c", cfg(tmp_path), "--record", "--until", "2099-01-01"])
+    capsys.readouterr()
+
+    body = (tmp_path / "kinemata.toml").read_text().replace(
+        '"{python}", "-c"', '"definitely-not-a-command-here", "-c"'
+    )
+    (tmp_path / "kinemata.toml").write_text(body)
+
+    for verb in ("--record", "--prune"):
+        assert main(["baseline", "-c", cfg(tmp_path), "-r", "keyspace", verb]) == 2
+        assert "BLOCKED" in capsys.readouterr().err
+    assert Baseline.load(tmp_path / ".kinemata-baseline.json").size == 1
+
+
 def test_a_crashed_oracle_refuses_to_rewrite_the_baseline(tmp_path, capsys):
     """The same refusal, reached by the failure that used to walk past it.
 

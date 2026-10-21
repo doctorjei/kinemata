@@ -68,7 +68,7 @@ from .config import CONFIG_NAMES, ConfigError, Settings, find_config, load
 from .confirm import ConfirmError, apply, dating, plan, redate
 from .context import measure
 from .contract import BaseRegistry, Entry, Registry, deferred_to, member
-from .coverage import Coverage, Covered
+from .coverage import Coverage, Covered, registry_source
 from .exclusion import audit, excluded, relative_paths
 from .gates import WORKFLOW_DIR, enforced, uncovered
 from .literals import clusters
@@ -2383,7 +2383,9 @@ def _narrowed(args: argparse.Namespace) -> str | None:
     A baseline describes the project. Rewriting it from a scan of one registry
     or one directory would silently drop every record the scan could not have
     produced -- the exemption list would shrink, `check` would go red on code
-    nobody touched, and the fix would look like re-recording again.
+    nobody touched, and the fix would look like re-recording again. That is
+    why a path still refuses a write, and why one registry's write carries
+    the rest (:func:`_write_narrowed`) instead of rebuilding the file.
     """
     if args.registry:
         return f"--registry {args.registry}"
@@ -2646,6 +2648,154 @@ def cmd_boundary(args: argparse.Namespace) -> int:
     return 0
 
 
+def _record_until(args: argparse.Namespace) -> date:
+    """The date a ``--record`` names, required."""
+    if not args.until:
+        raise BaselineError(
+            "--record needs --until YYYY-MM-DD: the date this list stops "
+            "being accepted without somebody deciding again. A baseline is "
+            "an allowlist, and one that cannot lapse is a decision nobody "
+            "revisits."
+        )
+    try:
+        return date.fromisoformat(args.until)
+    except ValueError as exc:
+        raise BaselineError(
+            f"--until {args.until!r} is not a date. Write it as YYYY-MM-DD."
+        ) from exc
+
+
+def _locks_owned(args: argparse.Namespace) -> Callable[[str], bool]:
+    """The coverage keys a run narrowed to one registry locks.
+
+    Each gate's own answer, asked the way that gate asks it when narrowed --
+    ``check``, ``undeclared`` and ``shape`` by :func:`coverage_of.owned_by`,
+    ``parity`` by :func:`_parity_owns` -- plus ``claims``' when the registry is
+    the claims scope. Never a probe's: a probe belongs to no registry, and
+    :func:`_probe` runs none under ``--registry``.
+    """
+    name = args.registry
+    owners = [
+        coverage_of.owned_by("check", name),
+        coverage_of.owned_by("undeclared", name),
+        coverage_of.owned_by("shape", name),
+        _parity_owns(args),
+    ]
+    if name == CLAIMS_REGISTRY:
+        owners.append(coverage_of.owned_by("claims"))
+    return lambda key: any(owns(key) for owns in owners)
+
+
+def _write_narrowed(
+    args: argparse.Namespace,
+    settings: Settings,
+    baseline: Baseline,
+    findings: list[tuple[str, Bypass]],
+    covered: Coverage,
+    judged: set[str],
+) -> int:
+    """``--record`` or ``--prune`` for one registry, carrying the rest.
+
+    **Asked for by an adopter** (kanibako, 2026-10-14): wanting only their
+    claim records, ``--record`` wrote every registry's coverage locks as well,
+    78 KB of them, which they stripped by hand -- because ``-r claims
+    --record`` was refused, a rebuild from one registry's scan deleting
+    everything else in the file.
+
+    **It changes nothing it did not scan, the file's date included.** The
+    baseline carries one ``until``, ``by`` and ``note`` for every record in
+    it, so while anything outside the registry is carried they are inherited:
+    given flags must equal them, and a lapsed file is refused rather than
+    rewritten with its lapsed date. Only a file holding nothing else takes new
+    ones. Per-scope dates would lift this and are a format change; the user's
+    call on 2026-10-21 was this rule for now.
+    """
+    name = args.registry
+    owned = _locks_owned(args)
+    sources = {registry_source(name)}
+    if not judged and not any(owned(key) for key in covered):
+        print(
+            f"error: --registry {name} names nothing this run scans, so a "
+            "narrowed write would change nothing. Check the name against the "
+            "config.",
+            file=sys.stderr,
+        )
+        return 2
+    kept = baseline.outside(judged, owned, sources)
+    # Raises on a finding outside `judged`: counted as this registry's, it
+    # would be recorded under a scope the run never claimed to have judged.
+    split = baseline.split(findings, scope=judged)
+    rest = (f"{kept.size} accepted finding(s) and {len(kept.coverage)} "
+            f"lock(s) outside --registry {name}")
+    carried = "" if kept.empty else f" {rest} carried over unchanged."
+
+    if args.prune:
+        pruned = record(settings.baseline, split.accepted, until=baseline.until,
+                        by=baseline.by, note=baseline.note,
+                        coverage=baseline.coverage,
+                        populations=baseline.populations)
+        pruned.accepted = pruned.accepted + split.unscanned
+        dropped = baseline.size - pruned.size
+        pruned.save()
+        print(f"Dropped {dropped} record(s) no longer present; "
+              f"{pruned.size} accepted finding(s) remain.{carried}")
+        return 0
+
+    if kept.empty:
+        until, by, note = _record_until(args), args.by or "", args.note or ""
+    else:
+        if baseline.lapsed():
+            print(
+                f"error: refusing a write narrowed by --registry {name}: the "
+                f"baseline lapsed on {baseline.until}, and this write would "
+                "carry that date over to records it did not scan. Drive the "
+                "list down, or re-record all of it with a new --until.",
+                file=sys.stderr,
+            )
+            return 2
+        until, by, note = baseline.until, baseline.by, baseline.note
+        given = {
+            "--until": (args.until and _record_until(args), until),
+            "--by": (args.by, by),
+            "--note": (args.note, note),
+        }
+        changed = [flag for flag, (asked, held) in given.items()
+                   if asked is not None and asked != held]
+        if changed:
+            print(
+                f"error: refusing to change {', '.join(changed)} from a write "
+                f"narrowed by --registry {name}: the file's date, signature "
+                f"and note also govern the {rest}, which this run did not "
+                "scan. Leave them off to keep the file's own, or change them with a "
+                "full `kinemata baseline --record`.",
+                file=sys.stderr,
+            )
+            return 2
+    fresh = record(settings.baseline, split.new + split.accepted, until=until,
+                   by=by, note=note,
+                   coverage={key: rows for key, rows in covered.items()
+                             if owned(key)})
+    written = Baseline(
+        path=settings.baseline,
+        accepted=fresh.accepted + kept.accepted,
+        until=until, by=by, note=note,
+        coverage={**kept.coverage, **fresh.coverage},
+        populations={**kept.populations, **fresh.populations},
+    )
+    delta = written.size - baseline.size
+    existed = baseline.exists
+    written.save()
+    change = f" ({delta:+d} against the previous baseline)" if existed else ""
+    print(f"Recorded {written.size} accepted finding(s){change} in "
+          f"{settings.baseline}.{carried}")
+    if split.new:
+        named = ", ".join(sorted({_gate_for(scope) for scope, _ in split.new}))
+        print(f"{len(split.new)} finding(s) newly accepted. Every one is now "
+              f"exempt from {named} until it is fixed and the baseline "
+              "re-recorded.")
+    return 0
+
+
 def cmd_baseline(args: argparse.Namespace) -> int:
     """Show what is accepted; ``--record`` and ``--prune`` change it.
 
@@ -2657,6 +2807,8 @@ def cmd_baseline(args: argparse.Namespace) -> int:
     command that writes the file. ``check`` and ``claims`` each cover their own
     half and are scoped accordingly; a ``--prune`` that covered only one half
     would delete the other's records on the strength of never having looked.
+    Narrowed by ``-r``, it runs that registry's checks and writes their part
+    alone, carrying the rest (:func:`_write_narrowed`).
 
     ⚑ **And running a check is not the same as the check answering**, which is
     the other half of the same guarantee: a write is refused outright while any
@@ -2669,10 +2821,15 @@ def cmd_baseline(args: argparse.Namespace) -> int:
         return 2
 
     scope = _narrowed(args)
-    if scope and (args.record or args.prune):
+    # A path, never a registry. A scan of one registry judges every record and
+    # lock that registry owns, so the write below rewrites those and carries
+    # the rest; a scan of one directory judges no check completely -- a
+    # registry's findings elsewhere in the tree would read as fixed.
+    if args.path and (args.record or args.prune):
         print(
             f"error: refusing to rewrite the baseline from a scan limited by "
-            f"{scope}. Every record the scan could not produce would be dropped.",
+            f"a path argument ({args.path}). Every record the scan could not "
+            "produce would be dropped.",
             file=sys.stderr,
         )
         return 2
@@ -2680,11 +2837,15 @@ def cmd_baseline(args: argparse.Namespace) -> int:
     settings, reports, found = _run_review(args, registry_required=False)
     _report_unassociated(found)
     findings = _strong(reports)
+    # The record scopes this run judged, collected as each scan reports them
+    # to its own gate's `split`. A narrowed write rewrites these and nothing
+    # else, so they are the scans' answers rather than a list kept here.
+    judged: set[str] = {name for name, _ in reports}
 
     # **Every check that feeds the list, run by the one command that writes it.**
     # `--prune` rebuilds the file from what this scan produced, so a source it
     # did not run is a set of records silently deleted -- the same failure
-    # `_narrowed` refuses a registry filter for, and skipping the documentation
+    # a path is refused a write for, and skipping the documentation
     # scan here would be that failure with a runtime argument in front of it.
     # The cost is real and accepted: this now reaches the network and runs the
     # declared count oracles, exactly as `kinemata claims` does.
@@ -2701,6 +2862,7 @@ def cmd_baseline(args: argparse.Namespace) -> int:
         verified = _verify(args, settings)
         findings += verified.findings()
         stalled += verified.blocked
+        judged.add(CLAIMS_REGISTRY)
 
     # Catch A, for the same reason and with the same cost. Added 2026-09-13 when
     # the catch was ratcheted: a finding source the writing command does not run
@@ -2709,9 +2871,10 @@ def cmd_baseline(args: argparse.Namespace) -> int:
     # *closed* registry -- the gate nobody can open again without editing the
     # config.
     #
-    # `_strays` honors `--registry` like every other scan here, and `_narrowed`
-    # has already refused `--record`/`--prune` if one was given.
-    findings += _gating_strays(_strays(args, settings, _target(args, settings)))
+    # `_strays` honors `--registry` like every other scan here.
+    answered = _strays(args, settings, _target(args, settings))
+    findings += _gating_strays(answered)
+    judged.update(strays_scope(registry.name) for registry, _ in answered)
 
     # Parity, for the third time and the same reason. Its oracles are declared
     # commands, so this is the second place `baseline` spawns a subprocess --
@@ -2719,6 +2882,7 @@ def cmd_baseline(args: argparse.Namespace) -> int:
     # exemptions it is about to rewrite.
     for result in _parity(args, settings, _target(args, settings)):
         findings += result.findings()
+        judged.update(result.scopes())
         if result.blocked:
             stalled.append(f"{result.registry}: {result.blocked}")
 
@@ -2729,6 +2893,7 @@ def cmd_baseline(args: argparse.Namespace) -> int:
     shaped_all = _shape(args, settings)
     for shaped in shaped_all:
         findings += shaped.findings()
+        judged.update(shaped.scopes())
         stalled += [f"{shaped.registry}: {why}" for why in shaped.unjudged()]
 
     # Probe, for the fifth time and the same reason. It brings the third way a
@@ -2739,6 +2904,7 @@ def cmd_baseline(args: argparse.Namespace) -> int:
     probed_all = _probe(args, settings)
     for probed in probed_all:
         findings += probed.findings()
+        judged.update(probed.scopes())
         if probed.blocked or probed.vacuous:
             stalled.append(probed.unjudged())
 
@@ -2781,9 +2947,10 @@ def cmd_baseline(args: argparse.Namespace) -> int:
             print(f"  BLOCKED: {why}", file=sys.stderr)
         return 2
 
+    narrowed_write = bool(args.registry) and (args.record or args.prune)
     try:
         baseline = _baseline(settings)
-    except BaselineError:
+    except BaselineError as exc:
         # `--record` replaces the file, so refusing to read the old one would
         # make the instruction it prints impossible to follow -- which is what
         # happened the first time a dateless baseline met the date requirement.
@@ -2791,33 +2958,34 @@ def cmd_baseline(args: argparse.Namespace) -> int:
         # treated as an empty one while it is still exempting findings.
         if not args.record:
             raise
+        # Nor may a narrowed write replace it: it carries everything outside
+        # its registry over from this file, and cannot carry what it cannot read.
+        if narrowed_write:
+            raise BaselineError(
+                f"{exc}. A write narrowed by --registry {args.registry} carries "
+                "every other record over from this file and cannot carry what "
+                "it cannot read; a full `kinemata baseline --record` replaces it."
+            ) from exc
         print(f"warning: {settings.baseline.name} could not be read; recording "
               "a fresh one over it", file=sys.stderr)
-        baseline = Baseline(path=settings.baseline)
+        baseline = Baseline(path=settings.baseline, attestations=settings.attestations)
+
     split = baseline.split(findings)
     # An attested finding is not debt, so it is never recorded as some: the
     # baseline and the attestations would otherwise both excuse it, and the
-    # record would outlive the attestation that made it unnecessary.
+    # record would outlive the attestation that made it unnecessary. Before the
+    # narrowed write as well as the full one -- both record from `findings`.
     attested = {id(hit) for _, hit in split.attested}
     findings = [(name, hit) for name, hit in findings if id(hit) not in attested]
     if split.attested:
         print(f"attested: {len(split.attested)} finding(s) declared correct, "
               "never recorded here")
 
+    if narrowed_write:
+        return _write_narrowed(args, settings, baseline, findings, covered, judged)
+
     if args.record:
-        if not args.until:
-            raise BaselineError(
-                "--record needs --until YYYY-MM-DD: the date this list stops "
-                "being accepted without somebody deciding again. A baseline is "
-                "an allowlist, and one that cannot lapse is a decision nobody "
-                "revisits."
-            )
-        try:
-            until = date.fromisoformat(args.until)
-        except ValueError as exc:
-            raise BaselineError(
-                f"--until {args.until!r} is not a date. Write it as YYYY-MM-DD."
-            ) from exc
+        until = _record_until(args)
         fresh = record(settings.baseline, findings, until=until,
                        by=args.by or "", note=args.note or "",
                        coverage=covered)

@@ -180,6 +180,18 @@ def test_record_never_writes_an_attested_finding_as_debt(tmp_path, capsys):
     assert not any("vendor" in text for text in texts)
 
 
+def test_a_narrowed_record_never_writes_one_either(tmp_path, capsys):
+    """``-r`` writes through its own path, which returned before the filter once."""
+    config = project(tmp_path, source=CODE["text"] + "\nfrobnicate(1)\n")
+    attest(tmp_path, CODE)
+    assert main(["baseline", "-c", config, "-r", "words", "--record",
+                 "--until", "2099-01-01"]) == 0
+    recorded = json.loads((tmp_path / ".kinemata-baseline.json").read_text())
+    texts = [finding["text"] for finding in recorded["findings"]]
+    assert "frobnicate(1)" in texts
+    assert not any("vendor" in text for text in texts)
+
+
 def test_a_record_an_attestation_replaces_is_left_stale_for_prune(tmp_path, capsys):
     """yapyon's migration: the baseline record goes, the attestation stays."""
     config = project(tmp_path)
