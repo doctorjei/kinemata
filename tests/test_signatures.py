@@ -85,6 +85,18 @@ def test_a_parenthesis_inside_a_default_does_not_end_the_list():
     assert found.bare == ("keep", "last")
 
 
+def test_an_argument_that_is_not_a_name_keeps_its_place():
+    """Dropped, ``f(a, "x")`` read as ``f(a)`` and agreed with ``def f(a)``.
+
+    Each of these passed against a one-parameter declaration in 0.8.0.
+    """
+    index = index_source("def f(a):\n    pass\n")
+    for text in ('f(a, "x")', "f(a, self.name)", "f(a, lambda x: x)", "f(a, ...)"):
+        (found,) = fenced_signatures(fence(text))
+        assert str(found) == text
+        assert not index.accepts(found)
+
+
 def test_nothing_outside_a_fence_is_a_claim():
     """The premise: prose about an identifier is the guesser this declines."""
     assert shown("Call `greet(name)` or greet(name, times = 3) to say hi.\n") == []
@@ -192,7 +204,11 @@ def test_a_rendering_reads_back_as_the_same_signature():
     The rendering spelled a call ``call greet(...)`` until the wiring tried to
     read one back and every call in every tree came out as drift.
     """
-    for text in ("greet(name, times = 1)", "def lookup(key, strict, default = None)"):
+    for text in (
+        "greet(name, times = 1)",
+        "def lookup(key, strict, default = None)",
+        'greet(name, "a=b")',
+    ):
         (found,) = fenced_signatures(fence(text))
         again = read_signature(str(found))
         assert again is not None
@@ -265,6 +281,14 @@ def test_a_parameter_out_of_order_fails(tmp_path):
     write(tmp_path, "src/mod.py", "def pair(left, right):\n    pass\n")
     write(tmp_path, "doc.md", fence("pair(right, left)"))
     assert len(signature_findings(verify(tmp_path, signatures=True))) == 1
+
+
+def test_an_extra_value_argument_fails(tmp_path):
+    """The code has no parameter for it, so the call is wrong, whatever it passes."""
+    write(tmp_path, "src/mod.py", "def one(a):\n    pass\n")
+    write(tmp_path, "doc.md", fence('one(a, "extra")'))
+    (finding,) = signature_findings(verify(tmp_path, signatures=True))
+    assert "the code declares def one(a)" in finding.text
 
 
 def test_a_name_the_code_does_not_declare_fails(tmp_path):

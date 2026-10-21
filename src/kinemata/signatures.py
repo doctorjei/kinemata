@@ -170,12 +170,21 @@ def documented_params(raw: str) -> tuple[tuple[str, str], ...]:
     everything after it is **kept**, because the value is the claim. A
     signature that pins a stale default agrees with the code on every name
     and is still wrong.
+
+    **A part that is not a name is kept whole, never dropped.** A call's
+    argument may be a value -- ``f(a, "x")``, ``f(a, self.name)`` -- and
+    dropping it made both read as ``f(a)``, which then *agreed* with
+    ``def f(a)``: an argument the code has no parameter for, passing. Shipped
+    in 0.8.0 and reported by kanibako 2026-10-14 as a call that "reads as two
+    parameters". Kept as written, the part holds its position and can equal
+    no parameter name, so the only verdicts it changes are those agreements.
     """
     out: list[tuple[str, str]] = []
     for part in _split_top(raw):
         head, separator, value = part.partition("=")
         name = head.split(":", 1)[0].strip().lstrip("*")
-        if not name or not name.isidentifier():
+        if not name.isidentifier():
+            out.append((part, ""))
             continue
         out.append((name, value.strip() if separator else ""))
     return tuple(out)

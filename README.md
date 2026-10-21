@@ -579,7 +579,7 @@ removal, visible in a diff.
 by hand can at least declare that the instruction to run them still exists. That
 is a reminder about a reminder, and worth what it sounds like.
 
-The companion guard is a number with an oracle. This suite is **1474 tests**, and
+The companion guard is a number with an oracle. This suite is **1476 tests**, and
 `kinemata claims` settles that figure against `pytest --collect-only`, so a
 suite that silently shrinks fails the gate rather than passing faster.
 
@@ -655,8 +655,10 @@ red gate, which is the failure most of the mechanism here exists to prevent.
 reads every `def`, `class` and call inside a Python or untagged fence and checks
 it against what the project's own Python declares: parameter names, their order,
 and **default values** — a documented `= ""` where the code says `= UNSET`
-fails, which a check of names alone would pass. A signature wrapped across lines
-is one claim. Off by default, being the only kind that indexes the project's
+fails, which a check of names alone would pass. An argument that is not a name
+— a call passing `"x"` or `self.name` — holds its place and matches no
+parameter, so a call with more arguments than the code accepts fails rather than
+reading as a shorter one. A signature wrapped across lines is one claim. Off by default, being the only kind that indexes the project's
 code: a document showing somebody else's signatures would pay for a check
 nobody asked for. A run whose documents show no fenced signature, or that reads
 no Python to compare against, fails rather than passing on nothing.

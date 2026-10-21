@@ -11,7 +11,13 @@ carries the decision. A changelog repeating either becomes a second carrier and 
 
 ## Unreleased
 
-Nothing yet.
+**Fixed**
+
+- **A call passing a value is compared instead of shortened.** An argument that was not a plain
+  name — `f(a, "x")`, `f(a, self.name)` — was dropped from the call before it was compared, so
+  both read as `f(a)` and **agreed** with `def f(a)`: an argument the code has no parameter for,
+  passing. Reported by kanibako 2026-10-14. Such an argument now holds its place and matches no
+  parameter name, which changes no verdict except those agreements.
 
 ## 0.8.0
 
@@ -45,6 +51,8 @@ Nothing yet.
   finding names how the code declares it. Off by default; a run that reads **no Python** to
   compare against, or whose documents show **no fenced signature**, is blocked rather than
   green. On their tree as of 2026-10-13, 257 of the 259 signatures their LLM documentation pages show agree.
+  ⚑ **Not every call, in this release:** an argument that was not a plain name was dropped, so a
+  call passing one value too many agreed — see the next release's **Fixed**.
   `docs/introduction.md` [0TQK6YE-Pa0004] § Known limits carries what it does not compare —
   return annotations, dataclass fields — and the fences it reports that show code the reader
   writes.
